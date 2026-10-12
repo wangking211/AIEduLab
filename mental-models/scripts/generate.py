@@ -1,0 +1,588 @@
+# -*- coding: utf-8 -*-
+"""
+generate.py — 芒格思维模型：注入模板 + 范例 build_* + CLI。
+
+每个 build_* 返回一个 lesson dict（见 references/problem-schema.md），
+render_html() 把它序列化进 board.html 的 __LESSON_DATA__ 数据岛。
+
+交互设计原则：
+  - 滑块驱动的量全部用 **表达式字符串**（JS 端 evalExpr 实时求值），保证拖动即时反馈；
+  - 讲解文字里的数值全部由 sympy 在 **默认参数** 下精确算出，与画板读数同源一致；
+  - 每页至少一个"定值指示"或"状态灯"，暴露该模型的不变量/临界条件。
+
+用法：
+  python3 generate.py list
+  python3 generate.py bayes ./out/bayes.html
+  python3 generate.py all ./out
+"""
+
+import json
+import sys
+from fractions import Fraction
+from pathlib import Path
+
+SKILL_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(SKILL_DIR / "lib"))
+
+import sympy as sp                    # noqa: E402
+import models_kernel as K             # noqa: E402
+
+TEMPLATE = (SKILL_DIR / "template" / "board.html").read_text(encoding="utf-8")
+
+
+# ---------------- 数值 → JSON 安全 ----------------
+def _n(x):
+    """sympy/Fraction → float（供 JSON）。"""
+    if isinstance(x, (int, float)):
+        return float(x)
+    if isinstance(x, Fraction):
+        return float(x)
+    return float(sp.N(x))
+
+
+def _tex(x):
+    return K.tex(x)
+
+
+def _num_str(x):
+    """紧凑可读数字串：≥1000 取整并加千分位，中等值一位小数，小数用有效数字（避免科学计数法渗入正文）。"""
+    v = _n(x)
+    if abs(v) >= 1000:
+        return f"{round(v):,}"
+    if abs(v) >= 100:
+        return f"{v:,.1f}"
+    if abs(v - round(v)) < 1e-9:
+        return str(int(round(v)))
+    return f"{v:.4f}".rstrip("0").rstrip(".")
+
+
+def render_html(data, out):
+    """把 lesson dict 注入模板并写出。"""
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    out.write_text(TEMPLATE.replace("__LESSON_DATA__", payload), encoding="utf-8")
+    return out
+
+
+# =====================================================================
+# 1) 复利：时间是朋友还是敌人
+# =====================================================================
+def build_compound():
+    P0, r, t = 10000, 8, 30
+    c = K.compound(P0, r, t)
+    r72 = K.rule_of_72(r)
+    return {
+        "lesson": {
+            "title": "复利：时间是朋友还是敌人",
+            "subtitle": "爱因斯坦据传称之为“世界第八大奇迹”——它的威力不在收益率，而在指数",
+            "problem": (
+                "<p>把 <b>1 万元</b> 以年化 <b>8%</b> 投入，按年复利，30 年后是多少？</p>"
+                "<p class='mt-2'>直觉答案通常是「8% × 30 年 ≈ 2.4 倍」——"
+                "<span class='text-rose-600 font-semibold'>这是单利，也是绝大多数人算错的地方</span>。</p>"
+                "<p class='mt-2'>拖动下方滑块，看复利与单利的差距如何随时间拉开。</p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "compound", "caption": "复利 vs 单利",
+                      "xMax": "max(30, t+3)", "yMax": "F*1.18",
+                      "xRange": [0, "max(30, t+3)"], "yRange": [0, "F*1.18"]},
+            "view": {"xRange": [0, 34], "yRange": [0, 120000]},
+            "params": [
+                {"name": "r", "label": "年化收益率 r", "min": 1, "max": 20, "step": 0.5, "value": r, "unit": "%", "digits": 1},
+                {"name": "t", "label": "投资年数 t", "min": 1, "max": 50, "step": 1, "value": t, "unit": " 年", "digits": 0},
+                {"name": "P", "label": "本金 P", "min": 1000, "max": 100000, "step": 1000, "value": P0, "unit": " 元", "digits": 0},
+            ],
+            "scalars": [
+                {"name": "F", "expr": "P*(1+r/100)^t"},
+                {"name": "Fs", "expr": "P*(1+r/100*t)"},
+            ],
+            "readouts": [
+                {"id": "F", "label": "复利终值 F = P(1+r)^t", "type": "expr", "expr": "F", "money": True, "unit": "元", "highlight": True},
+                {"id": "Fs", "label": "单利终值 P(1+r·t)", "type": "expr", "expr": "Fs", "money": True, "unit": "元", "color": "#78716c"},
+                {"id": "gap", "label": "复利多出（馈赠）", "type": "expr", "expr": "F-Fs", "money": True, "unit": "元", "color": "#059669"},
+                {"id": "mult", "label": "本金倍数", "type": "expr", "expr": "F/P", "digits": 2, "unit": " 倍"},
+                {"id": "double", "label": "翻倍所需年数 ≈ 72/r", "type": "expr", "expr": "72/r", "digits": 1, "unit": " 年"},
+                {"id": "pos", "label": "复利 vs 单利", "type": "status", "expr": "F-Fs", "op": ">", "rhs": 0, "okText": "复利已跑赢单利", "badText": "与单利持平（t=1）"},
+            ],
+            "legend": [
+                {"color": "#b45309", "text": "复利 P(1+r)^t"},
+                {"color": "#78716c", "text": "单利 P(1+r·t)"},
+            ],
+        },
+        "steps": [
+            {"title": "先写复利公式", "content": (
+                "$$F = P\\left(1+\\frac{r}{n}\\right)^{nt}$$"
+                "<p>按年计息 $n=1$，代入 $P=10000$、$r=8\\%$、$t=30$：</p>"
+                "$$F = 10000\\times 1.08^{30} = " + _num_str(c["F"]) + "\\ \\text{元}$$"
+            )},
+            {"title": "对照单利，看差距", "content": (
+                "<p>单利 $F_s = P(1+rt) = 10000\\times(1+0.08\\times30) = "
+                + _num_str(c["F_simple"]) + "$ 元。</p>"
+                "$$F - F_s = " + _num_str(c["double_vs_simple"]) + "\\ \\text{元（复利馈赠）}$$"
+                "<p>复利是单利的 <b>" + f"{_n(c['F'])/_n(c['F_simple']):.2f}"
+                + "</b> 倍。差额全部来自「利息再生利息」——前 10 年几乎看不出差别，后 10 年拉开一半以上。</p>"
+            )},
+            {"title": "72 法则：为什么是 72", "content": (
+                "<p>翻倍年数 $t_{2} = \\dfrac{\\ln 2}{\\ln(1+r)}$，对小 $r$ 有 $\\ln(1+r)\\approx r$，"
+                "于是 $t_2\\approx \\dfrac{0.693}{r} = \\dfrac{69.3}{r\\%}$。取 72 是因为 72 有更多因数"
+                "（2,3,4,6,8,9,12…），便于口算。</p>"
+                "$$t_2 = \\frac{\\ln 2}{\\ln 1.08} = " + f"{_n(c['doubling_years']):.2f}" + "\\ \\text{年}$$"
+                "<p>而 72 法则给 $72/8 = " + _num_str(r72["approx"]) + "$ 年，误差仅 $"
+                + f"{abs(_n(r72['error_pct'])):.2f}" + "\\%$。所以 <b>8% 年化 ≈ 每 9 年翻一倍</b>；"
+                "30 年翻 3 次多，$1万\\to2万\\to4万\\to" + _num_str(c["F"]/10000) + "万$。</p>"
+            )},
+            {"title": "反向：负债的复利", "content": (
+                "<p>把 $r$ 变成负数是不可能的（滑块最低 1%），但把同一个公式套在信用卡欠款上："
+                "<b>年化 18% 的循环利息，4 年翻倍</b>（$72/18=4$）。</p>"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3'>芒格：<span class='text-stone-500'>"
+                "「第一，别让自己成为复利的受害者；第二，永远别停止成为复利的受益者。」</span>"
+                "——所以他的第一条规则是<b>先排除愚蠢</b>（反过来想）。</p>"
+            )},
+        ],
+    }
+
+
+# =====================================================================
+# 2) 贝叶斯基率：为什么阳性大多没事
+# =====================================================================
+def build_bayes():
+    prior, sens, spec, per = 0.01, 0.99, 0.95, 1000      # 内核口径：小数
+    prior_pct, sens_pct, spec_pct = 1, 99, 95            # 滑块口径：百分数
+    b = K.bayes(prior, sens, spec, per)
+    return {
+        "lesson": {
+            "title": "贝叶斯基率：为什么阳性大多是假的",
+            "subtitle": "基率忽视（base-rate neglect）是最高频的认知错误之一",
+            "problem": (
+                "<p>某病患病率 <b>1%</b>。一种试剂盒：<b>真有病的人 99% 会查出阳性</b>（灵敏度），"
+                "<b>没病的人 95% 会查出阴性</b>（特异度）。</p>"
+                "<p class='mt-2'>你测出阳性。请问：你<b>真的得病</b>的概率是多少？</p>"
+                "<p class='mt-2 text-rose-600 font-semibold'>绝大多数人答 99%，正确答案是 "
+                + f"{_n(b['posterior'])*100:.1f}" + "%。</p>"
+                "<p class='mt-2'>拖动滑块，特别是把<b>患病率</b>拉高拉低，看它如何主宰结果。</p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "bayes", "caption": "1000 人检测结果", "per": per},
+            "view": {"xRange": [0, 14], "yRange": [0, 11]},
+            "params": [
+                {"name": "prior", "label": "先验患病率", "min": 0.1, "max": 50, "step": 0.1, "value": prior_pct, "unit": "%", "digits": 1},
+                {"name": "sens", "label": "灵敏度（真阳率）", "min": 50, "max": 100, "step": 1, "value": sens_pct, "unit": "%", "digits": 0},
+                {"name": "spec", "label": "特异度（真阴率）", "min": 50, "max": 100, "step": 1, "value": spec_pct, "unit": "%", "digits": 0},
+            ],
+            "scalars": [
+                {"name": "pp", "expr": "prior/100"},
+                {"name": "ps", "expr": "sens/100"},
+                {"name": "pc", "expr": "spec/100"},
+                {"name": "sick", "expr": "pp*1000"},
+                {"name": "tp", "expr": "ps*pp*1000"},
+                {"name": "fp", "expr": "(1-pc)*(1-pp)*1000"},
+                {"name": "fn", "expr": "sick-tp"},
+                {"name": "tn", "expr": "1000-tp-fp-fn"},
+                {"name": "post", "expr": "tp/(tp+fp)"},
+            ],
+            "readouts": [
+                {"id": "post", "label": "P(真有病 | 阳性)", "type": "expr", "expr": "post*100", "digits": 1, "unit": "%", "highlight": True},
+                {"id": "fps", "label": "阳性中假阳占比", "type": "expr", "expr": "fp/(tp+fp)*100", "digits": 1, "unit": "%", "color": "#b45309"},
+                {"id": "lift", "label": "阳性把风险放大", "type": "expr", "expr": "post/pp", "digits": 1, "unit": " 倍"},
+                {"id": "fp", "label": "假阳性人数 / 1000", "type": "expr", "expr": "fp", "digits": 0, "unit": " 人", "color": "#b45309"},
+                {"id": "tp", "label": "真阳性人数 / 1000", "type": "expr", "expr": "tp", "digits": 0, "unit": " 人", "color": "#dc2626"},
+                {"id": "warn", "label": "阳性是否可信", "type": "status", "expr": "post", "op": ">", "rhs": 0.5, "okText": "可信（>50%）", "badText": "多数为假阳性"},
+            ],
+            "legend": [
+                {"color": "#ef4444", "text": "真阳性（有病且阳性）"},
+                {"color": "#f59e0b", "text": "假阳性（无病但阳性）"},
+                {"color": "#7f1d1d", "text": "假阴性（有病但漏诊）"},
+                {"color": "#57534e", "text": "真阴性"},
+            ],
+        },
+        "steps": [
+            {"title": "把人群铺开：1000 人的四格表", "content": (
+                "<p>先验患病率 1% → 1000 人中 <b>" + _num_str(b["sick"]) + "</b> 人真有病，"
+                "<b>" + _num_str(1000 - b["sick"]) + "</b> 人健康。</p>"
+                "<ul class='list-disc pl-5 space-y-1'>"
+                "<li>真阳性：$" + _tex(b["sick"]) + "\\times 99\\% = " + _tex(b["tp"]) + "$ 人</li>"
+                "<li>假阳性：$" + _num_str(1000 - b["sick"]) + "\\times(1-95\\%) = " + _tex(b["fp"]) + "$ 人</li>"
+                "</ul>"
+                "<p class='mt-2'><b>关键在于：假阳性（" + _num_str(b["fp"]) + " 人）比真阳性（"
+                + _num_str(b["tp"]) + " 人）多出 " + f"{_n(b['fp'])/_n(b['tp']):.1f}" + " 倍。</b>"
+                "因为健康的人基数太大——这就是<b>基率</b>的力量。</p>"
+            )},
+            {"title": "套贝叶斯公式", "content": (
+                "$$P(\\text{病}\\mid+) = \\frac{s\\,\\pi}{s\\,\\pi + (1-c)(1-\\pi)}$$"
+                "<p class='text-xs text-stone-500 mt-1'>其中 $s$=灵敏度，$c$=特异度，$\\pi$=先验患病率。</p>"
+                "$$= \\frac{0.99\\times0.01}{0.99\\times0.01 + 0.05\\times0.99} = "
+                + _tex(b["posterior"]) + " \\approx " + f"{_n(b['posterior'])*100:.1f}" + "\\%$$"
+                "<p>分母第二项 $P(+\\mid\\text{健康}) = 1-\\text{特异度}$ 就是假阳性的来源。"
+                "它乘的是 <b>0.99 这个巨大基数</b>。</p>"
+            )},
+            {"title": "似然比与证据强度", "content": (
+                "<p>把检测质量压成一个数：<b>似然比</b> $= \\dfrac{\\text{灵敏度}}{1-\\text{特异度}} = "
+                "\\dfrac{0.99}{0.05} = " + _tex(sp.Rational(99, 5)) + " \\approx 19.8$。</p>"
+                "<p>贝叶斯的另一种形式：<b>先验赔率 × 似然比 = 后验赔率</b>。</p>"
+                "$$\\frac{1}{99}\\times19.8 = " + _tex(b["odds_post"]) + " \\Longrightarrow P = "
+                + _tex(b["posterior"]) + "$$"
+                "<p>检测把风险放大了 <b>" + f"{_n(b['lift']):.1f}" + " 倍</b>"
+                "——从 1% 抬到 " + f"{_n(b['posterior'])*100:.1f}" + "%，"
+                "<span class='text-emerald-700 font-semibold'>这是有价值的证据，但远不是结论</span>。</p>"
+            )},
+            {"title": "什么时候阳性才可信", "content": (
+                "<p>拖动<b>患病率</b>滑块：要让 $P(\\text{病}\\mid+) > 50\\%$，"
+                "在灵敏度 99%、特异度 95% 下，患病率须超过约 <b>4.8%</b>。</p>"
+                "<p class='mt-2'>这解释了两件事：</p>"
+                "<ul class='list-disc pl-5 space-y-1'>"
+                "<li><b>筛查只用于高危人群</b>——先抬高先验，检测才有意义；</li>"
+                "<li><b>普查必然产生大量假阳性</b>——在低基率人群里，哪怕 99% 准确的检测也是灾难。</li>"
+                "</ul>"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3'>冤案的数学根源正在于此："
+                "把「现场出现过的罕见 DNA」当成 99.99% 有罪证据，"
+                "而忽略「这片区域里有多个无关者的 DNA」这个基率。</p>"
+            )},
+        ],
+    }
+
+
+# =====================================================================
+# 3) 期望值与凯利：长期赢的唯一仓位
+# =====================================================================
+def build_expected():
+    p, b, rounds = 60, 2, 40
+    e = K.expected_value([(sp.Rational(6, 10), 2), (sp.Rational(4, 10), -1)])
+    sb = K.survivor_bias(100, sp.Rational(9, 10), 10, 1)
+    return {
+        "lesson": {
+            "title": "期望值与凯利：为什么「全押」必输",
+            "subtitle": "算术期望决定你是否该参与，几何增长率决定你能走多远",
+            "problem": (
+                "<p>一个赌局：<b>60% 概率赢 2 倍，40% 概率输光本金</b>。你下注多少？</p>"
+                "<p class='mt-2'>每 1 单位的期望净收益是 "
+                "$$0.6\\times2 - 0.4\\times1 = " + _tex(e["ev"]) + " > 0$$"
+                "<span class='text-emerald-700 font-semibold'>期望为正，应该参与</span>。"
+                "但 <b>该下多大比例</b>？全押的话，长期复利增长率是负的。</p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "expected", "caption": "算术期望 vs 几何复利", "xMax": 40},
+            "view": {"xRange": [0, 12], "yRange": [-0.6, 6.4]},
+            "params": [
+                {"name": "p", "label": "胜率 p", "min": 30, "max": 90, "step": 1, "value": 60, "unit": "%", "digits": 0},
+                {"name": "b", "label": "净赔率 b（赢得 b 倍本金）", "min": 0.2, "max": 5, "step": 0.1, "value": 2, "unit": "", "digits": 1},
+            ],
+            "scalars": [
+                {"name": "pw", "expr": "p/100"},
+                {"name": "q", "expr": "1-p/100"},
+                {"name": "ev", "expr": "pw*b-q"},
+                {"name": "kelly", "expr": "(b*pw-q)/b"},
+                {"name": "kellyHalf", "expr": "kelly/2"},
+                {"name": "ev2x", "expr": "2*kelly*ev"},
+            ],
+            "readouts": [
+                {"id": "kelly", "label": "凯利最优仓位 f* = (bp−q)/b", "type": "expr", "expr": "kelly*100", "digits": 1, "unit": "%", "highlight": True},
+                {"id": "half", "label": "半凯利（芒格/巴菲特式）", "type": "expr", "expr": "kellyHalf*100", "digits": 1, "unit": "%", "color": "#0891b2"},
+                {"id": "ev", "label": "每 1 单位的期望净收益", "type": "expr", "expr": "ev", "digits": 3, "unit": "", "color": "#059669"},
+                {"id": "ev2", "label": "双倍凯利仓位的期望（更高！）", "type": "expr", "expr": "ev2x", "digits": 3, "unit": "", "color": "#dc2626"},
+                {"id": "ok", "label": "赌局是否值得参与", "type": "status", "expr": "ev", "op": ">", "rhs": 0, "okText": "期望为正，可参与", "badText": "期望为负，别碰"},
+                {"id": "risk", "label": "满凯利是否可承受", "type": "status", "expr": "kelly", "op": "<", "rhs": 0.5, "okText": "仓位<50%，尚可", "badText": "仓位过重，危险"},
+            ],
+            "legend": [
+                {"color": "#b45309", "text": "满凯利 f*"},
+                {"color": "#0891b2", "text": "半凯利 f*/2"},
+                {"color": "#dc2626", "text": "双倍凯利（复利衰减）"},
+            ],
+        },
+        "steps": [
+            {"title": "算术期望：该不该参与", "content": (
+                "$$E = p\\,b - q = 1.2 - 0.4 = 0.8 > 0$$"
+                "<p>每 1 单位期望净赚 <b>$" + _tex(e["ev"]) + "$</b>，<b>参与是对的</b>。"
+                "但注意：算术期望会<b>一路鼓励你加大仓位</b>——把每局下注额翻倍，期望净赚也翻倍到 $"
+                + _tex(e["ev"] * 2) + "$，这就是陷阱。</p>"
+            )},
+            {"title": "凯利公式：该下多大", "content": (
+                "$$f^* = \\frac{bp - q}{b} = \\frac{0.8}{2} = 40\\%$$"
+                "<p>凯利仓位是<b>长期资金增长率最大化</b>的解，不是最大化期望、也不是最大化胜率。"
+                "它的含义：<b>按这个比例下注，时间无限长时你一定赢，且赢的任何其他比例都更慢。</b></p>"
+            )},
+            {"title": "几何增长率：为什么全押必输", "content": (
+                "<p>设下注比例 $x$，一次下注的资金对数增长为</p>"
+                "$$g(x) = p\\ln(1+xb) + q\\ln(1-x)$$"
+                "$$g(1) = \\ln(1+\\infty\\cdot) \\to -\\infty \\quad(\\text{全押})$$"
+                "<p class='mt-2'>代入默认值：$g(1.0)=0.6\\ln3+0.4\\ln0 = -\\infty$，"
+                "$g(0.4)= " + f"{0.6*__import__('math').log(1+0.4*2)+0.4*__import__('math').log(0.6):.4f}" + " > 0$。</p>"
+                "<p class='mt-2'><b>全押 100% → 4 次后就大概率出局</b>（$0.6^4=13\\%$ 四连胜才保住）。"
+                "哪怕期望为正，只要有一格是「输光」，复利就永久终结。</p>"
+            )},
+            {"title": "为什么是半凯利", "content": (
+                "<p>凯利对参数估计的误差<b>极度敏感</b>：你把胜率高估 5%，最优仓位就要大幅下调。"
+                "而凯利平方根法则说——<b>仓位减半，长期增速只损失 25%</b>，风险却大幅下降。</p>"
+                "$$g(f^*/2) \\approx 0.75\\,g(f^*)$$"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3'>芒格与巴菲特从不用满凯利："
+                "他们连「确定的事」都只下重注而非全注。"
+                "<b>凯利是上限，不是目标</b>——因为你是人，而人对赔率的估计从不准。</p>"
+                "<p class='mt-2'>另外，幸存者偏差会让你看到一堆「全押成功」的故事："
+                "100 家公司里 10 家百倍回报被广泛报道，90 家破产无人书写。"
+                "只看幸存者，真实期望 $" + _tex(sb["true_ev"]) + "$ 会被高估为 $"
+                + _tex(sb["observed"]) + "$。</p>"
+            )},
+        ],
+    }
+
+
+# =====================================================================
+# 4) 安全边际：为什么要留冗余
+# =====================================================================
+def build_safety():
+    mu, sigma, price = 100, 15, 80
+    s = K.margin_of_safety(mu, price)
+    kp = K.knockthrough_prob(mu, sigma, price)
+    return {
+        "lesson": {
+            "title": "安全边际：估计必然出错，所以要留冗余",
+            "subtitle": "格雷厄姆的定价公式：价值 = 保守估计 × 安全边际",
+            "problem": (
+                "<p>你估算某资产内在价值约 <b>100</b>（估计不确定，标准差 15），"
+                "当前市价 <b>80</b>。</p>"
+                "<p class='mt-2'>安全边际 <b>$= (100-80)/100 = 20\\%$</b>。</p>"
+                "<p class='mt-2'>但真正的问题是：<b>如果你的估值本身就错了呢？</b>"
+                "拖动下方三个滑块，看「击穿概率」如何随估值不确定性 σ 变化。</p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "safety", "caption": "价值分布 vs 价格线",
+                      "xRange": ["mu-3.4*sigma", "mu+3.4*sigma"],
+                      "yRange": [0, "1.30/(sigma*sqrt(2*PI))"]},
+            "view": {"xRange": [49, 151], "yRange": [0, 0.055]},
+            "params": [
+                {"name": "mu", "label": "估值中枢 μ", "min": 60, "max": 140, "step": 1, "value": mu, "unit": "", "digits": 0},
+                {"name": "sigma", "label": "估值不确定性 σ", "min": 3, "max": 40, "step": 0.5, "value": sigma, "unit": "", "digits": 1},
+                {"name": "price", "label": "买入价", "min": 40, "max": 140, "step": 1, "value": price, "unit": "", "digits": 0},
+            ],
+            "scalars": [
+                {"name": "z", "expr": "(price-mu)/sigma"},
+                {"name": "prob", "expr": "0.5*(1+erf(z/sqrt(2)))"},
+                {"name": "mos", "expr": "(mu-price)/mu"},
+                {"name": "cv", "expr": "sigma/mu"},
+            ],
+            "readouts": [
+                {"id": "mos", "label": "安全边际 (μ−P)/μ", "type": "expr", "expr": "mos*100", "digits": 1, "unit": "%", "highlight": True},
+                {"id": "prob", "label": "击穿概率 P(真实价值 < 价格)", "type": "expr", "expr": "prob*100", "digits": 1, "unit": "%", "color": "#dc2626"},
+                {"id": "z", "label": "标准分 z = (P−μ)/σ", "type": "expr", "expr": "z", "digits": 2, "unit": ""},
+                {"id": "cv", "label": "相对不确定性 σ/μ", "type": "expr", "expr": "cv*100", "digits": 1, "unit": "%"},
+                {"id": "safe", "label": "是否留足边际", "type": "status", "expr": "prob", "op": "<", "rhs": 0.15, "okText": "击穿概率<15%，较安全", "badText": "击穿概率过高"},
+            ],
+            "legend": [
+                {"color": "#b45309", "text": "价值概率密度 N(μ,σ²)"},
+                {"color": "#dc2626", "text": "击穿区（价值跌破价格）"},
+                {"color": "#059669", "text": "安全边际区间"},
+            ],
+        },
+        "steps": [
+            {"title": "先算名义安全边际", "content": (
+                "$$\\text{MOS} = \\frac{\\mu - P}{\\mu} = \\frac{20}{100} = 20\\%$$"
+                "<p>格雷厄姆要求 <b>至少 1/3</b>（即折价 33% 以上）。20% 属于「勉强及格」。</p>"
+            )},
+            {"title": "承认估值会错：正态假设", "content": (
+                "<p>把估值当成随机变量：真实价值 $\\sim N(\\mu,\\sigma^2)$。"
+                "<b>击穿概率</b>就是左侧尾部面积，先算标准分：</p>"
+                "$$z = \\frac{P-\\mu}{\\sigma} = \\frac{80-100}{15} = " + f"{_n(kp['z']):.3f}" + "$$"
+                "$$P(V < P) = \\Phi(z) = \\Phi(" + f"{_n(kp['z']):.3f}" + ")$$"
+                "$$= " + f"{_n(kp['prob']):.4f}" + " \\approx " + f"{_n(kp['prob_pct']):.1f}" + "\\%$$"
+                "<p class='text-xs text-stone-500 mt-1'>其中 $\\Phi(z)=\\tfrac12\\left[1+\\operatorname{erf}\\!\\left(\\tfrac{z}{\\sqrt2}\\right)\\right]$"
+                " 是标准正态的累积分布函数。</p>"
+                "<p>20% 的名义边际下，仍有 <b>" + f"{_n(kp['prob_pct']):.1f}" + "%</b> 概率实际上买贵了。</p>"
+            )},
+            {"title": "不确定性才是真正的敌人", "content": (
+                "<p>把 σ 从 15 拖到 <b>30</b>（同样的 20% 边际）：击穿概率跳到 "
+                f"{_n(K.knockthrough_prob(100, 30, 80)['prob_pct']):.1f}" + "%。</p>"
+                "$$z = \\frac{P-\\mu}{\\sigma}$$"
+                "<p class='mt-2'>同一个边际下，<b>σ 越大 → |z| 越小 → 击穿概率越高</b>。"
+                "<p class='mt-2'><b>结论：安全边际不是一个固定百分比，而是 σ 的函数。</b>"
+                "越是看不懂的生意（σ 越大），需要留的边际越大——这就是为什么巴菲特只买"
+                "看得懂的生意（<b>能力圈</b>），并且在圈内也要留足边际。</p>"
+            )},
+            {"title": "把边际定量化", "content": (
+                "<p>想把击穿概率压到 5% 以下，价格须满足</p>"
+                "$$P \\le \\mu - 1.645\\,\\sigma = 100 - 24.68$$"
+                "$$= " + _num_str(100 - 1.645 * 15) + "\\ \\text{元}$$"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3'>这就是「反过来想」的量化版本："
+                "<b>先算出会亏多少概率的价格，再决定买不买</b>——"
+                "而不是先看好公司，再找理由说服自己价格合理。</p>"
+            )},
+        ],
+    }
+
+
+# =====================================================================
+# 5) 机会成本：看不见的成本
+# =====================================================================
+def build_opportunity():
+    chosen, alts = 80, [100, 60]
+    o = K.opportunity_cost(chosen, alts)
+    return {
+        "lesson": {
+            "title": "机会成本：选 A 的真实成本是放弃的 B",
+            "subtitle": "芒格：「如果我不能比对手更清楚地知道我会死在哪里，我就不去那个地方。」",
+            "problem": (
+                "<p>三份工作摆在面前：A 年薪 <b>80 万</b>（轻松）、"
+                "B 年薪 <b>100 万</b>（忙碌）、C 年薪 <b>60 万</b>（清闲）。</p>"
+                "<p class='mt-2'>你选了 A。它的<b>机会成本</b>是多少？</p>"
+                "<p class='mt-2'>不是 60 万，也不是 80 万——"
+                "<span class='text-rose-600 font-semibold'>是被你放弃的最优方案 100 万</span>。"
+                "拖动滑块调整 A 的报价，看它什么时候才「真的划算」。</p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {
+                "kind": "opportunity", "caption": "所选 vs 被放弃的最优",
+                "xRange": [0, "max(altB,altC,chosen)*1.35"], "yRange": [-0.9, 3.1],
+                "options": [
+                    {"label": "方案 A（所选）", "value": "chosen", "chosen": True},
+                    {"label": "方案 B（最优替代）", "value": "altB"},
+                    {"label": "方案 C", "value": "altC"},
+                ],
+                "best_alt": "max(altB,altC)",
+                "opp_cost_raw": "opp_cost",
+                "net_raw": "net",
+            },
+            "view": {"xRange": [0, 135], "yRange": [-0.9, 3.1]},
+            "params": [
+                {"name": "chosen", "label": "所选方案 A 的价值", "min": 40, "max": 130, "step": 1, "value": chosen, "unit": " 万", "digits": 0},
+            ],
+            "scalars": [
+                {"name": "altB", "expr": "100"},
+                {"name": "altC", "expr": "60"},
+                {"name": "opp_cost", "expr": "max(altB,altC)-chosen"},
+                {"name": "net", "expr": "chosen-max(altB,altC)"},
+            ],
+            "readouts": [
+                {"id": "best", "label": "机会成本 = 被放弃的最优方案", "type": "expr", "expr": "max(altB,altC)", "money": True, "unit": " 万", "highlight": True},
+                {"id": "net", "label": "相对最优替代的净收益", "type": "expr", "expr": "net", "money": True, "unit": " 万", "color": "#dc2626"},
+                {"id": "acct", "label": "若按账面看（不扣机会成本）", "type": "expr", "expr": "chosen", "money": True, "unit": " 万", "color": "#78716c"},
+                {"id": "ok", "label": "是否选中了最优", "type": "status", "expr": "net", "op": ">=", "rhs": 0, "okText": "是最优选择", "badText": "不是最优选择"},
+            ],
+            "legend": [],
+        },
+        "steps": [
+            {"title": "机会成本的定义", "content": (
+                "$$\\text{机会成本} = \\max(\\text{放弃项}) - \\text{所选项}$$"
+                "<p>选 A 放弃 {B, C}：被放弃的最优是 B 的 <b>100 万</b>，"
+                "所以 A 的机会成本 <b>$= 100-80 = 20$ 万</b>。</p>"
+                "<p class='mt-2'><span class='text-rose-600 font-semibold'>常见错误</span>："
+                "拿「C 只有 60 万」自我安慰——机会成本永远对照<b>最好的那个</b>，不是最差的。</p>"
+            )},
+            {"title": "机会成本把「划算」变成可算", "content": (
+                "<p>账面收入 80 万，扣掉机会成本 20 万，"
+                "<b>真实净收益是 −20 万</b>。你其实每天在为「没去 B」付费。</p>"
+                "<p class='mt-2'>拖动滑块：A 必须涨到 <b>100 万以上</b>，真实净收益才转正。"
+                "在此之前，选 A 在数学上就是亏的——无论你多喜欢 A 的清闲。</p>"
+            )},
+            {"title": "它如何反过来约束选择", "content": (
+                "<p>机会成本不只是「事后算账」，更是<b>事前排序</b>：</p>"
+                "<ul class='list-disc pl-5 space-y-1'>"
+                "<li><b>比较的是「最优替代」，不是「绝对水平」</b>——所以越优秀的人机会成本越高，越不该随便做事；</li>"
+                "<li><b>时间与注意力的机会成本尤其高</b>——你读这本书的机会成本是读另一本更好的书；</li>"
+                "<li><b>决策前先问「我放弃了什么」</b>，而不是「我能得到什么」。</li>"
+                "</ul>"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3'>这与「反过来想」同源："
+                "把「不做什么」摆上台面，往往比「做什么」更重要。"
+                "巴菲特的能力圈原则本质上就是：<b>机会成本太高时，宁可空仓</b>。</p>"
+            )},
+        ],
+    }
+
+
+REGISTRY = {
+    "compound": build_compound,
+    "bayes": build_bayes,
+    "expected": build_expected,
+    "safety": build_safety,
+    "opportunity": build_opportunity,
+}
+
+ORDER = ["compound", "bayes", "expected", "safety", "opportunity"]
+
+META = {
+    "compound": ("复利", "时间是朋友还是敌人", "指数增长 · 72 法则 · 负债的另一面"),
+    "bayes": ("贝叶斯基率", "为什么阳性大多是假的", "基率忽视 · 似然比 · 冤案的数学"),
+    "expected": ("期望值与凯利", "为什么全押必输", "算术期望 · 几何增长 · 半凯利"),
+    "safety": ("安全边际", "估计必然出错，所以要留冗余", "正态分布 · 击穿概率 · 能力圈"),
+    "opportunity": ("机会成本", "选 A 的真实成本是放弃的 B", "最优替代 · 真实净收益"),
+}
+
+
+def build_index(out):
+    """生成首页索引（模型格栅）。"""
+    cards = []
+    for key in ORDER:
+        name, one, tags = META[key]
+        cards.append(
+            f'<a href="{key}.html" class="block bg-white rounded-xl border border-stone-200 p-5 '
+            f'hover:border-amber-500 hover:shadow-lg transition-all">'
+            f'<div class="text-xs font-bold text-amber-600 mb-1">{name}</div>'
+            f'<div class="text-base font-bold text-stone-900 leading-snug mb-2">{one}</div>'
+            f'<div class="text-xs text-stone-500 leading-relaxed">{tags}</div></a>'
+        )
+    html = f"""<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>查理·芒格思维模型 · 量化演示</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>body{{font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;}}</style>
+</head>
+<body class="bg-stone-100 text-stone-900">
+<div class="max-w-4xl mx-auto px-6 py-12">
+    <div class="text-xs uppercase tracking-widest text-amber-600 font-bold mb-2">Charlie Munger · Latticework of Mental Models</div>
+    <h1 class="text-3xl font-bold mb-3">思维模型：可量化的那部分</h1>
+    <p class="text-stone-600 leading-relaxed max-w-2xl">
+        芒格说：「你必须知道重要学科的重要理论，并经常使用它们——要全部都用上，而不是只用几个。」
+        下面 5 个模型是其中<b>能算清楚</b>的部分：拖动滑块，看数字如何改变你的判断。
+        每页含分步解析与定值/状态指示，所有数值由 sympy 精确计算。
+    </p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
+        {''.join(cards)}
+    </div>
+    <div class="mt-8 text-xs text-stone-500 leading-relaxed border-t border-stone-200 pt-5">
+        <p>配套文档：<code>docs/思维模型.md</code> —— 全景清单、每个模型的一句话本质、案例、常见误用与决策前检查清单。</p>
+        <p class="mt-2">来源：本页为教学演示，模型与数值用于说明认知偏差的数学结构，不构成投资建议。</p>
+    </div>
+</div>
+</body></html>"""
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(html, encoding="utf-8")
+    return out
+
+
+def main(argv):
+    if not argv or argv[0] in ("list", "-l"):
+        print("可用模型：")
+        for key in ORDER:
+            name, one, _ = META[key]
+            print(f"  {key:12s} {name} —— {one}")
+        print("\n用法: python3 generate.py <key|all> [输出目录]")
+        return 0
+    if argv[0] == "all":
+        out_dir = Path(argv[1]) if len(argv) > 1 else Path.cwd() / "output"
+        for key in ORDER:
+            p = render_html(REGISTRY[key](), out_dir / f"{key}.html")
+            print(f"written: {p}")
+        p = build_index(out_dir / "index.html")
+        print(f"written: {p}")
+        return 0
+    key = argv[0]
+    if key not in REGISTRY:
+        print(f"未知模型 {key}；可用：{', '.join(REGISTRY)}")
+        return 1
+    out = Path(argv[1]) if len(argv) > 1 else Path.cwd() / f"{key}.html"
+    render_html(REGISTRY[key](), out)
+    print(f"written: {out}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

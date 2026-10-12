@@ -1,0 +1,27 @@
+{
+  "kind": "edu-viz-patch",
+  "version": 1,
+  "book": "数学思想：从计数到无穷",
+  "chapter": "ch01",
+  "patches": [
+    {
+      "figure": "fig-crisis",
+      "note": "给每次扩张补上「代价」——这是全章的核心洞见，原图只讲了能得到什么，没讲要放弃什么",
+      "ops": [
+        { "path": "layers", "op": "append",
+          "value": { "geom": "text", "x": 3.51, "y": 2.40, "text": "代价：失去顺序直觉",
+                     "align": "center", "size": 9.5, "color": "#7d756a", "dy": 0, "weight": "normal" } },
+        { "path": "layers", "op": "append",
+          "value": { "geom": "text", "x": 5.97, "y": 2.40, "text": "代价：没有「下一个数」",
+                     "align": "center", "size": 9.5, "color": "#7d756a", "dy": 0, "weight": "normal" } },
+        { "path": "layers", "op": "append",
+          "value": { "geom": "text", "x": 8.43, "y": 2.40, "text": "代价：失去可数性",
+                     "align": "center", "size": 9.5, "color": "#7d756a", "dy": 0, "weight": "normal" } },
+        { "path": "layers", "op": "append",
+          "value": { "geom": "text", "x": 10.89, "y": 2.40, "text": "代价：失去大小顺序",
+                     "align": "center", "size": 9.5, "color": "#7d756a", "dy": 0, "weight": "normal" } },
+        { "path": "layers/0/text", "value": "五个数系，五次扩张——每次都要付一笔代价" }
+      ]
+    }
+  ]
+}

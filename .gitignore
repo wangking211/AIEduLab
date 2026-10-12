@@ -1,0 +1,42 @@
+# ============================================================
+# AIEduLab —— 只推源码
+# 构建产物、运行时数据、缓存一律不进版本库
+# ============================================================
+
+# ---- 构建产物（每个技能/书籍的 output/）----
+output/
+dist/
+build/
+*.html.bak
+
+# ---- 运行时数据（bridge.py 的问答与补丁日志）----
+_live/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ---- Node ----
+node_modules/
+.npm/
+
+# ---- 编辑器 / 系统 ----
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+*.tmp
+~$*
+
+# ---- 环境与密钥 ----
+.env
+.env.*
+*.pem
+*.key

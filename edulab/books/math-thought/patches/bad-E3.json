@@ -1,0 +1,10 @@
+{
+  "kind": "edu-viz-patch",
+  "version": 1,
+  "_note": "故意缺字段：text 图元没有 x/y → 应被 E3 拒绝，exit=1",
+  "patches": [
+    { "figure": "fig-crisis", "ops": [
+      { "path": "/layers", "op": "append", "value": { "geom": "text", "text": "我忘了坐标" } }
+    ] }
+  ]
+}

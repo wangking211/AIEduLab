@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>斜抛运动·时间演化仿真</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+    <style>
+        body { background-color: #f8fafc; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .katex { font-size: 1.02em; }
+        input[type=range].timeline { accent-color: #6366f1; }
+        .sol-step { transition: border-color .2s, background-color .2s, box-shadow .2s; cursor: pointer; }
+        .sol-step.active { border-color: #818cf8; background: #eef2ff; box-shadow: 0 0 0 1px #818cf8 inset; }
+        .spd-btn.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+    </style>
+</head>
+<body class="min-h-screen lg:h-screen text-slate-800 lg:overflow-hidden">
+
+<div class="flex flex-col lg:flex-row gap-3 p-3 min-h-screen lg:h-screen lg:overflow-hidden">
+
+    <!-- ===== 左栏：题目 + 参数控制台 ===== -->
+    <aside class="w-full lg:w-[330px] flex-shrink-0 flex flex-col gap-3 lg:overflow-hidden">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-300 p-5 flex-shrink-0">
+            <h2 class="text-lg font-bold mb-3 text-slate-900">斜抛运动与弹跳衰减</h2>
+            <div class="text-slate-600 leading-relaxed text-sm space-y-2">
+                <p>【物理·必修二】在水平地面 $O$ 点，以初速度 $v_0 = 20\ \text{m/s}$、与水平方向成 $53^\circ$ 角斜向上抛出一个小球（$g = 10\ \text{m/s}^2$，$\sin 53^\circ = 0.8$，$\cos 53^\circ = 0.6$，不计空气阻力）。求：</p>
+                <p class="pl-3">(1) 小球上升的最大高度 $H$；<br>(2) 从抛出到落地的时间 $T$；<br>(3) 水平射程 $X$。</p>
+                <p class="text-xs text-slate-400">拓展探究：小球落地后反弹，反弹瞬间竖直速度变为落地时的 $e$ 倍（恢复系数），水平速度不变。观察弹跳如何衰减。</p>
+            </div>
+            <div id="param-hint" class="hidden mt-3 text-xs bg-amber-50 border border-amber-200 text-amber-700 rounded-lg px-3 py-2">
+                当前为探究参数，与题面不同。<button id="btn-restore" class="underline font-semibold hover:text-amber-900">恢复题目参数</button>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-300 p-5 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+            <h3 class="text-base font-bold text-slate-900 flex items-center gap-2 mb-4">
+                <span class="w-2.5 h-2.5 bg-blue-500 rounded-full"></span>参数控制台
+            </h3>
+            <div class="space-y-4">
+                <div>
+                    <div class="flex justify-between items-center mb-1.5">
+                        <label class="text-sm font-semibold text-slate-600">初速度 v₀</label>
+                        <span id="v0-val" class="bg-blue-50 text-blue-600 px-2.5 py-0.5 rounded-md text-xs font-mono font-bold border border-blue-100">20 m/s</span>
+                    </div>
+                    <input type="range" id="sl-v0" min="5" max="30" step="1" value="20" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                </div>
+                <div>
+                    <div class="flex justify-between items-center mb-1.5">
+                        <label class="text-sm font-semibold text-slate-600">抛射角 θ</label>
+                        <span id="ang-val" class="bg-violet-50 text-violet-600 px-2.5 py-0.5 rounded-md text-xs font-mono font-bold border border-violet-100">53°</span>
+                    </div>
+                    <input type="range" id="sl-ang" min="15" max="75" step="1" value="53" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-violet-600">
+                    <div class="text-[11px] text-slate-400 mt-1">37° / 53° 按近似三角值 0.6 / 0.8 计算</div>
+                </div>
+                <div>
+                    <div class="flex justify-between items-center mb-1.5">
+                        <label class="text-sm font-semibold text-slate-600">恢复系数 e（反弹）</label>
+                        <span id="e-val" class="bg-emerald-50 text-emerald-600 px-2.5 py-0.5 rounded-md text-xs font-mono font-bold border border-emerald-100">0.50</span>
+                    </div>
+                    <input type="range" id="sl-e" min="0" max="0.75" step="0.05" value="0.5" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600">
+                </div>
+                <div class="flex gap-4 text-xs text-slate-600">
+                    <label class="flex items-center gap-1.5 cursor-pointer select-none"><input type="checkbox" id="tg-vec" checked class="accent-indigo-600 w-3.5 h-3.5">速度矢量</label>
+                    <label class="flex items-center gap-1.5 cursor-pointer select-none"><input type="checkbox" id="tg-trail" checked class="accent-indigo-600 w-3.5 h-3.5">轨迹残影</label>
+                </div>
+            </div>
+
+            <!-- 实时读数 -->
+            <div class="mt-5 bg-slate-50 border border-slate-200/60 rounded-xl p-4 text-xs md:text-[13px] font-mono text-slate-700 space-y-1.5">
+                <div class="flex justify-between"><span class="text-slate-400">t</span><span id="ro-t">0.00 s</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">位置 (x, y)</span><span id="ro-xy">(0.0, 0.0) m</span></div>
+                <div class="flex justify-between"><span class="text-sky-600">vₓ 水平速度</span><span id="ro-vx">12.0 m/s</span></div>
+                <div class="flex justify-between"><span class="text-emerald-600">v_y 竖直速度</span><span id="ro-vy">16.0 m/s</span></div>
+                <div class="flex justify-between"><span class="text-orange-500">|v| 速度大小</span><span id="ro-v">20.0 m/s</span></div>
+                <div class="flex justify-between border-t border-slate-200 pt-1.5"><span class="text-slate-400">运动阶段</span><span id="ro-phase" class="font-bold text-indigo-600">上升段</span></div>
+            </div>
+
+            <!-- 能量监视 -->
+            <div class="mt-5">
+                <div class="flex justify-between items-baseline text-xs text-slate-500 mb-1.5">
+                    <span class="font-semibold text-slate-600">能量监视（取 m = 1 kg）</span>
+                    <span class="font-mono" id="ro-e0">E₀ = 200 J</span>
+                </div>
+                <div class="h-5 rounded-full bg-slate-200 overflow-hidden flex border border-slate-300/60">
+                    <div id="bar-ke" class="bg-rose-400 h-full transition-none" style="width:100%"></div>
+                    <div id="bar-pe" class="bg-sky-400 h-full transition-none" style="width:0%"></div>
+                </div>
+                <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] mt-1.5 font-mono text-slate-600">
+                    <span><i class="inline-block w-2 h-2 bg-rose-400 rounded-sm"></i> 动能 <span id="ro-ke">200</span> J</span>
+                    <span><i class="inline-block w-2 h-2 bg-sky-400 rounded-sm"></i> 势能 <span id="ro-pe">0</span> J</span>
+                    <span><i class="inline-block w-2 h-2 bg-slate-300 rounded-sm"></i> 碰撞损失 <span id="ro-lost">0</span> J</span>
+                </div>
+                <div class="text-[11px] text-slate-400 mt-1">空中飞行时动能+势能守恒；每次反弹损失部分竖直动能。</div>
+            </div>
+
+            <!-- 理论值 -->
+            <div class="mt-5 border-t border-slate-100 pt-4">
+                <div class="text-xs font-semibold text-slate-600 mb-2">理论值（随参数实时更新）</div>
+                <div class="text-[13px] font-mono text-slate-700 space-y-1">
+                    <div class="flex justify-between"><span>最大高度 H</span><span id="th-H" class="text-amber-600 font-bold">12.8 m</span></div>
+                    <div class="flex justify-between"><span>首次落地 T</span><span id="th-T" class="text-indigo-600 font-bold">3.2 s</span></div>
+                    <div class="flex justify-between"><span>水平射程 X</span><span id="th-X" class="text-rose-600 font-bold">38.4 m</span></div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ===== 中栏：分步解析 ===== -->
+    <section class="w-full lg:w-[350px] flex-shrink-0 lg:overflow-y-auto bg-white rounded-2xl shadow-sm border border-slate-300 p-5">
+        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2 mb-1">
+            <span class="w-2.5 h-2.5 bg-indigo-500 rounded-full"></span>详细解析
+        </h3>
+        <div class="text-[11px] text-slate-400 mb-4">解析步骤随动画阶段自动高亮；点击任一步骤，时间轴跳到对应时刻。</div>
+        <div id="solution-body" class="space-y-3"></div>
+    </section>
+
+    <!-- ===== 右栏：时间演化仿真 ===== -->
+    <main class="w-full lg:flex-1 min-w-0 bg-white rounded-2xl shadow-sm border border-slate-300 p-5 flex flex-col lg:overflow-hidden">
+        <div class="flex justify-between items-center mb-3 flex-shrink-0">
+            <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                时间演化仿真
+            </h3>
+            <span class="text-[11px] text-slate-400 hidden md:inline">空格 播放/暂停 · ←/→ 逐帧</span>
+        </div>
+
+        <div class="relative flex-grow min-h-[320px] lg:min-h-0 bg-slate-900 rounded-xl overflow-hidden shadow-inner">
+            <canvas id="sim-canvas" class="absolute inset-0 w-full h-full"></canvas>
+        </div>
+
+        <!-- 时间轴控制条 -->
+        <div class="flex items-center gap-2 mt-3 flex-wrap flex-shrink-0">
+            <button id="btn-reset" title="重置" class="w-9 h-9 rounded-lg border border-slate-300 bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-600 font-bold">⟲</button>
+            <button id="btn-back" title="上一帧" class="w-9 h-9 rounded-lg border border-slate-300 bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-600 text-xs font-bold">⏴‖</button>
+            <button id="btn-play" class="h-9 px-4 rounded-lg bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 min-w-[92px]">▶ 播放</button>
+            <button id="btn-fwd" title="下一帧" class="w-9 h-9 rounded-lg border border-slate-300 bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-600 text-xs font-bold">‖⏵</button>
+            <div class="flex rounded-lg overflow-hidden border border-slate-300 text-xs font-mono">
+                <button class="spd-btn px-2.5 py-2 bg-slate-50 text-slate-600 hover:bg-indigo-50" data-spd="0.25">¼×</button>
+                <button class="spd-btn px-2.5 py-2 bg-slate-50 text-slate-600 hover:bg-indigo-50 border-l border-slate-300" data-spd="0.5">½×</button>
+                <button class="spd-btn active px-2.5 py-2 bg-slate-50 text-slate-600 hover:bg-indigo-50 border-l border-slate-300" data-spd="1">1×</button>
+                <button class="spd-btn px-2.5 py-2 bg-slate-50 text-slate-600 hover:bg-indigo-50 border-l border-slate-300" data-spd="2">2×</button>
+            </div>
+            <input type="range" id="scrub" class="timeline flex-1 min-w-[160px] h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer" min="0" max="6" step="0.01" value="0">
+            <span id="t-label" class="font-mono text-xs text-slate-500 whitespace-nowrap">0.00 / 6.00 s</span>
+        </div>
+
+        <!-- y-t / vy-t 曲线同步图 -->
+        <div class="relative h-24 mt-3 bg-slate-900 rounded-xl overflow-hidden flex-shrink-0">
+            <canvas id="chart-canvas" class="absolute inset-0 w-full h-full"></canvas>
+        </div>
+    </main>
+</div>
+
+<script>
+'use strict';
+/* ================= 物理模型（解析解，可任意 scrub） ================= */
+const DEFAULTS = { v0: 20, ang: 53, e: 0.5 };
+const G = 10, MASS = 1;
+const S = { v0: 20, ang: 53, e: 0.5, t: 0, playing: false, speed: 1, ended: false,
+            showVec: true, showTrail: true, scrubbing: false };
+let D = null;          // 派生量
+let PATH = [];         // 预采样轨迹 [{t,x,y,vy}]
+
+// 37°/53° 用课本近似三角值，保证仿真读数与题目答案精确同源
+function sincos(deg) {
+    if (deg === 37) return [0.6, 0.8];
+    if (deg === 53) return [0.8, 0.6];
+    const r = deg * Math.PI / 180;
+    return [Math.sin(r), Math.cos(r)];
+}
+
+function derive() {
+    const [sn, cs] = sincos(S.ang);
+    const vx0 = S.v0 * cs, vy0 = S.v0 * sn;
+    const T0 = 2 * vy0 / G, H = vy0 * vy0 / (2 * G), X = vx0 * T0;
+    const segs = [];
+    let t0 = 0, vy = vy0;
+    for (let k = 0; k < 8; k++) {
+        segs.push({ t0, dur: 2 * vy / G, vy, k });
+        t0 += 2 * vy / G;
+        vy *= S.e;
+        if (vy * vy / (2 * G) < 0.15) break;   // 弹跳高度小于 15cm 结束仿真
+    }
+    return { vx0, vy0, T0, H, X, tup: T0 / 2, segs, tMax: t0,
+             xTotal: vx0 * t0, E0: 0.5 * MASS * S.v0 * S.v0 };
+}
+
+function ballState(t) {
+    t = Math.max(0, Math.min(t, D.tMax));
+    let seg = D.segs[D.segs.length - 1];
+    for (const s of D.segs) { if (t <= s.t0 + s.dur + 1e-9) { seg = s; break; } }
+    const tau = Math.max(0, Math.min(t - seg.t0, seg.dur));
+    return {
+        x: D.vx0 * t,
+        y: Math.max(0, seg.vy * tau - 0.5 * G * tau * tau),
+        vx: D.vx0,
+        vy: seg.vy - G * tau,
+        seg
+    };
+}
+
+function samplePath() {
+    PATH = [];
+    const n = Math.max(2, Math.ceil(D.tMax / 0.016));
+    for (let i = 0; i <= n; i++) {
+        const t = D.tMax * i / n, b = ballState(t);
+        PATH.push({ t, x: b.x, y: b.y, vy: b.vy });
+    }
+}
+
+/* ================= 工具 ================= */
+const $ = id => document.getElementById(id);
+const fmt = (v, d = 2) => (Math.round(v * 10 ** d) / 10 ** d).toFixed(d).replace(/\.?0+$/, '');
+const isDefault = () => S.v0 === DEFAULTS.v0 && S.ang === DEFAULTS.ang && S.e === DEFAULTS.e;
+
+/* ================= 分步解析（数值与仿真同源） ================= */
+function buildSolution() {
+    const d = D, deg = S.ang;
+    const trig = (deg === 37 || deg === 53)
+        ? `（取 $\\sin ${deg}^\\circ=${fmt(sincos(deg)[0])},\\ \\cos ${deg}^\\circ=${fmt(sincos(deg)[1])}$）` : '';
+    const steps = [
+        ['分解初速度',
+         `斜抛 = 水平匀速 + 竖直上抛${trig}
+          $$v_{x0}=v_0\\cos${deg}^\\circ=${fmt(d.vx0)}\\ \\text{m/s}$$
+          $$v_{y0}=v_0\\sin${deg}^\\circ=${fmt(d.vy0)}\\ \\text{m/s}$$
+          水平方向不受力，$v_x$ 恒定；竖直方向只受重力。`],
+        ['上升阶段：匀减速',
+         `竖直方向 $v_y = v_{y0} - gt$，速度矢量逐渐"放平"。到最高点时 $v_y = 0$：
+          $$t_{up} = \\frac{v_{y0}}{g} = ${fmt(d.tup)}\\ \\text{s}$$`],
+        ['(1) 最大高度',
+         `$$H = \\frac{v_{y0}^2}{2g} = \\frac{${fmt(d.vy0)}^2}{2\\times ${G}} = \\mathbf{${fmt(d.H)}\\ \\text{m}}$$
+          注意最高点速度不为零——仍有水平速度 $v_x = ${fmt(d.vx0)}$ m/s。`],
+        ['(2) 下降与落地',
+         `上升与下降对称，飞行总时间
+          $$T = 2t_{up} = \\mathbf{${fmt(d.T0)}\\ \\text{s}}$$
+          落地时 $v_y = -${fmt(d.vy0)}$ m/s，速度大小回到 ${fmt(S.v0)} m/s（能量守恒）。`],
+        ['(3) 水平射程',
+         `水平方向匀速直线运动：
+          $$X = v_{x0}\\,T = ${fmt(d.vx0)} \\times ${fmt(d.T0)} = \\mathbf{${fmt(d.X)}\\ \\text{m}}$$`],
+        ['拓展：弹跳衰减',
+         S.e > 0.01
+         ? `反弹后 $v_y' = e\\,v_y$（$e=${fmt(S.e)}$），故第 $n$ 次弹跳：高度 $H_n = e^{2n}H$，滞空 $T_n = e^{n}T$。
+            无穷次弹跳总时间收敛（几何级数）：
+            $$T_{total} = \\frac{T}{1-e} = ${fmt(d.T0 / (1 - S.e))}\\ \\text{s}$$
+            每次碰撞损失竖直动能的 $1-e^2 = ${fmt((1 - S.e * S.e) * 100, 0)}\\%$，看能量条逐级下降。`
+         : `当前 $e = 0$：完全非弹性碰撞，落地即停，无弹跳。拖动恢复系数滑块观察弹跳。`]
+    ];
+    $('solution-body').innerHTML = steps.map(([title, body], i) => `
+        <div class="sol-step rounded-xl border border-slate-200 p-3.5" data-step="${i}">
+            <div class="flex items-center gap-2 mb-1">
+                <span class="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 text-[11px] font-bold flex items-center justify-center flex-shrink-0">${i + 1}</span>
+                <span class="font-bold text-sm text-slate-800">${title}</span>
+            </div>
+            <div class="text-[13px] text-slate-600 leading-relaxed">${body}</div>
+        </div>`).join('') + `
+        <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-3.5 text-sm">
+            <div class="font-bold text-emerald-700 mb-1">✓ 答案</div>
+            <div class="font-mono text-[13px] text-emerald-800">H = ${fmt(D.H)} m　T = ${fmt(D.T0)} s　X = ${fmt(D.X)} m</div>
+        </div>`;
+    renderKatex($('solution-body'));
+    document.querySelectorAll('.sol-step').forEach(el =>
+        el.addEventListener('click', () => { S.t = stepJumpTime(+el.dataset.step); S.ended = false; }));
+}
+
+function renderKatex(el) {
+    if (window.renderMathInElement) renderMathInElement(el, {
+        delimiters: [{ left: '$$', right: '$$', display: true }, { left: '$', right: '$', display: false }],
+        throwOnError: false
+    });
+}
+
+// 各步骤对应的时间区间与"点击跳转"代表时刻
+function stepRange(i) {
+    const u = D.tup;
+    return [[0, .25 * u], [.25 * u, .9 * u], [.9 * u, 1.1 * u],
+            [1.1 * u, 1.95 * u], [1.95 * u, 2.1 * u], [2.1 * u, Infinity]][i];
+}
+function stepJumpTime(i) {
+    const u = D.tup;
+    const t = [0.01, 0.5 * u, u, 1.5 * u, D.T0,
+               D.segs[1] ? D.T0 + D.segs[1].dur / 2 : D.T0][i];
+    return Math.min(t, D.tMax);
+}
+let curStep = -1;
+function updateStepHighlight() {
+    let idx = 5;
+    for (let i = 0; i < 6; i++) { const [a, b] = stepRange(i); if (S.t >= a && S.t < b) { idx = i; break; } }
+    if (S.e <= 0.01 && idx === 5) idx = 4;
+    if (idx === curStep) return;
+    curStep = idx;
+    document.querySelectorAll('.sol-step').forEach(el =>
+        el.classList.toggle('active', +el.dataset.step === idx));
+}
+
+/* ================= 主画布 ================= */
+const cv = $('sim-canvas'), ctx = cv.getContext('2d');
+const cc = $('chart-canvas'), cctx = cc.getContext('2d');
+
+function fitCanvas(c) {
+    const dpr = window.devicePixelRatio || 1, r = c.getBoundingClientRect();
+    if (c.width !== Math.round(r.width * dpr) || c.height !== Math.round(r.height * dpr)) {
+        c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr);
+    }
+    return [r.width, r.height, dpr];
+}
+
+function drawScene() {
+    const [W, Hc, dpr] = fitCanvas(cv);
+    ctx.save(); ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, Hc);
+    ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, W, Hc);
+
+    const ML = 46, MR = 18, MT = 16, MB = 36;
+    const worldW = Math.max(D.xTotal * 1.05, 8), worldH = Math.max(D.H * 1.18, 3);
+    const sc = Math.min((W - ML - MR) / worldW, (Hc - MT - MB) / worldH);  // 等比例：x/y 同尺
+    const PX = x => ML + x * sc, PY = y => Hc - MB - y * sc;
+
+    // 网格
+    const gs = [1, 2, 5, 10, 20, 50].find(g => g * sc >= 44) || 50;
+    ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+    ctx.fillStyle = '#64748b'; ctx.font = '10px ui-monospace,monospace';
+    for (let x = 0; x <= worldW + 1e-6; x += gs) {
+        ctx.beginPath(); ctx.moveTo(PX(x), MT); ctx.lineTo(PX(x), PY(0)); ctx.stroke();
+        ctx.textAlign = 'center'; ctx.fillText(x + '', PX(x), PY(0) + 14);
+    }
+    for (let y = gs; y <= worldH + 1e-6; y += gs) {
+        ctx.beginPath(); ctx.moveTo(ML, PY(y)); ctx.lineTo(PX(worldW), PY(y)); ctx.stroke();
+        ctx.textAlign = 'right'; ctx.fillText(y + '', ML - 6, PY(y) + 3);
+    }
+    ctx.textAlign = 'left';
+    ctx.fillText('单位: m', W - 52, Hc - 8);
+
+    // 地面
+    ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(ML - 8, PY(0)); ctx.lineTo(W - 8, PY(0)); ctx.stroke();
+    ctx.strokeStyle = '#475569'; ctx.lineWidth = 1;
+    for (let px = ML; px < W - 10; px += 12) {
+        ctx.beginPath(); ctx.moveTo(px, PY(0)); ctx.lineTo(px - 6, PY(0) + 7); ctx.stroke();
+    }
+
+    // 完整理论轨迹（暗色虚线，供 scrub 预判）
+    ctx.strokeStyle = '#334155'; ctx.setLineDash([4, 5]); ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    PATH.forEach((p, i) => i ? ctx.lineTo(PX(p.x), PY(p.y)) : ctx.moveTo(PX(p.x), PY(p.y)));
+    ctx.stroke(); ctx.setLineDash([]);
+
+    // 理论标注：最高点 H 与首次落点 X
+    const xup = D.vx0 * D.tup;
+    ctx.strokeStyle = '#f59e0b88'; ctx.setLineDash([3, 4]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PX(xup), PY(D.H)); ctx.lineTo(PX(xup), PY(0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ML, PY(D.H)); ctx.lineTo(PX(xup), PY(D.H)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 11px ui-monospace,monospace';
+    ctx.fillText(`H = ${fmt(D.H)} m`, PX(xup) + 6, PY(D.H) - 6);
+    ctx.fillStyle = '#fb7185';
+    ctx.beginPath(); ctx.moveTo(PX(D.X), PY(0)); ctx.lineTo(PX(D.X) - 5, PY(0) + 9); ctx.lineTo(PX(D.X) + 5, PY(0) + 9); ctx.closePath(); ctx.fill();
+    ctx.fillText(`X = ${fmt(D.X)} m`, Math.min(PX(D.X) + 6, W - 86), PY(0) - 8);
+
+    const b = ballState(S.t);
+
+    // 已走过的轨迹 + 残影
+    if (S.showTrail) {
+        ctx.strokeStyle = '#818cf8'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        let started = false;
+        for (const p of PATH) {
+            if (p.t > S.t) break;
+            started ? ctx.lineTo(PX(p.x), PY(p.y)) : ctx.moveTo(PX(p.x), PY(p.y));
+            started = true;
+        }
+        if (started) { ctx.lineTo(PX(b.x), PY(b.y)); ctx.stroke(); }
+        for (let dt = 0.15; dt <= 1.05; dt += 0.15) {   // 最近 1 秒的残影球
+            const tg = S.t - dt;
+            if (tg < 0) break;
+            const g2 = ballState(tg);
+            ctx.fillStyle = `rgba(129,140,248,${0.38 * (1 - dt / 1.2)})`;
+            ctx.beginPath(); ctx.arc(PX(g2.x), PY(g2.y), 5, 0, 7); ctx.fill();
+        }
+    }
+
+    // 小球
+    const bx = PX(b.x), by = PY(b.y) - 7;   // 球心抬起半径，贴地不穿地
+    const grad = ctx.createRadialGradient(bx - 2, by - 2, 1, bx, by, 8);
+    grad.addColorStop(0, '#fdba74'); grad.addColorStop(1, '#ea580c');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(bx, by, 7, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#fff7ed55'; ctx.lineWidth = 1; ctx.stroke();
+
+    // 速度矢量（像素尺度固定，与轨迹比例无关）
+    if (S.showVec) {
+        const vs = 3.0;
+        const tipx = bx + b.vx * vs, tipy = by - b.vy * vs;
+        ctx.setLineDash([3, 3]); ctx.strokeStyle = '#47556999'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(bx + b.vx * vs, by); ctx.lineTo(tipx, tipy); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(bx, by - b.vy * vs); ctx.lineTo(tipx, tipy); ctx.stroke();
+        ctx.setLineDash([]);
+        arrow(bx, by, bx + b.vx * vs, by, '#38bdf8', 2, 'vx');
+        if (Math.abs(b.vy) > 0.3) arrow(bx, by, bx, by - b.vy * vs, '#34d399', 2, 'vy');
+        arrow(bx, by, tipx, tipy, '#fb923c', 2.5, 'v');
+    }
+
+    // HUD：时间 + 阶段
+    ctx.font = 'bold 13px ui-monospace,monospace';
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillText(`t = ${S.t.toFixed(2)} s`, ML + 8, MT + 14);
+    ctx.fillStyle = '#a5b4fc';
+    ctx.fillText(phaseText(b), ML + 8, MT + 32);
+    if (S.ended) { ctx.fillStyle = '#fbbf24'; ctx.fillText('仿真结束 · 按 ⟲ 或 ▶ 重播', ML + 8, MT + 50); }
+
+    // 图例
+    ctx.font = '11px ui-monospace,monospace'; ctx.textAlign = 'right';
+    const legend = [['— v 合速度', '#fb923c'], ['— vₓ 水平', '#38bdf8'], ['— v_y 竖直', '#34d399']];
+    legend.forEach(([txt, col], i) => { ctx.fillStyle = col; ctx.fillText(txt, W - 14, MT + 14 + i * 16); });
+    ctx.textAlign = 'left';
+    ctx.restore();
+
+    function arrow(x1, y1, x2, y2, color, lw, label) {
+        const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy);
+        if (L < 5) return;
+        ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = lw;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        const a = Math.atan2(dy, dx), hs = Math.min(9, L * .45);
+        ctx.beginPath(); ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - hs * Math.cos(a - .42), y2 - hs * Math.sin(a - .42));
+        ctx.lineTo(x2 - hs * Math.cos(a + .42), y2 - hs * Math.sin(a + .42));
+        ctx.closePath(); ctx.fill();
+        ctx.font = 'bold 10px ui-monospace,monospace';
+        ctx.fillText(label, x2 + 5 * Math.cos(a) + 3, y2 + 5 * Math.sin(a) - 3);
+    }
+}
+
+function phaseText(b) {
+    if (S.t >= D.tMax - 1e-6) return '静止';
+    if (b.seg.k === 0) {
+        if (Math.abs(S.t - D.tup) < 0.04) return '最高点 (v_y = 0)';
+        return S.t < D.tup ? '上升段 · 匀减速' : '下降段 · 匀加速';
+    }
+    return `第 ${b.seg.k} 次反弹后`;
+}
+
+/* ================= y-t / vy-t 同步曲线 ================= */
+function drawChart() {
+    const [W, Hc, dpr] = fitCanvas(cc);
+    cctx.save(); cctx.scale(dpr, dpr);
+    cctx.fillStyle = '#0f172a'; cctx.fillRect(0, 0, W, Hc);
+    const ML = 34, MR = 8, MT = 8, MB = 14;
+    const TX = t => ML + t / D.tMax * (W - ML - MR);
+    const yMax = D.H * 1.1, vMax = D.vy0 * 1.15;
+    const YY = y => Hc - MB - y / yMax * (Hc - MT - MB);              // y(t): 0..yMax
+    const VY = v => MT + (1 - (v + vMax) / (2 * vMax)) * (Hc - MT - MB); // vy(t): ±vMax
+
+    cctx.strokeStyle = '#1e293b'; cctx.lineWidth = 1;
+    cctx.beginPath(); cctx.moveTo(ML, VY(0)); cctx.lineTo(W - MR, VY(0)); cctx.stroke(); // vy 零线
+    cctx.beginPath(); cctx.moveTo(ML, MT); cctx.lineTo(ML, Hc - MB); cctx.stroke();
+
+    const curve = (get, map, color) => {
+        cctx.strokeStyle = color; cctx.lineWidth = 1.6; cctx.beginPath();
+        PATH.forEach((p, i) => i ? cctx.lineTo(TX(p.t), map(get(p))) : cctx.moveTo(TX(p.t), map(get(p))));
+        cctx.stroke();
+    };
+    curve(p => p.y, YY, '#38bdf8');
+    curve(p => p.vy, VY, '#34d399');
+
+    // 当前时刻游标
+    const b = ballState(S.t), tx = TX(S.t);
+    cctx.strokeStyle = '#818cf8'; cctx.lineWidth = 1.4;
+    cctx.beginPath(); cctx.moveTo(tx, MT); cctx.lineTo(tx, Hc - MB); cctx.stroke();
+    cctx.fillStyle = '#38bdf8'; cctx.beginPath(); cctx.arc(tx, YY(b.y), 3.5, 0, 7); cctx.fill();
+    cctx.fillStyle = '#34d399'; cctx.beginPath(); cctx.arc(tx, VY(b.vy), 3.5, 0, 7); cctx.fill();
+
+    cctx.font = 'bold 10px ui-monospace,monospace';
+    cctx.fillStyle = '#38bdf8'; cctx.fillText('y–t 高度', ML + 6, MT + 10);
+    cctx.fillStyle = '#34d399'; cctx.fillText('v_y–t 竖直速度', ML + 66, MT + 10);
+    cctx.fillStyle = '#64748b'; cctx.fillText('t →', W - 26, Hc - 4);
+    cctx.restore();
+}
+
+/* ================= UI 同步 ================= */
+function syncUI() {
+    const b = ballState(S.t);
+    $('ro-t').textContent = S.t.toFixed(2) + ' s';
+    $('ro-xy').textContent = `(${b.x.toFixed(1)}, ${b.y.toFixed(1)}) m`;
+    $('ro-vx').textContent = b.vx.toFixed(1) + ' m/s';
+    $('ro-vy').textContent = b.vy.toFixed(1) + ' m/s';
+    $('ro-v').textContent = Math.hypot(b.vx, b.vy).toFixed(1) + ' m/s';
+    $('ro-phase').textContent = phaseText(b);
+
+    const ke = 0.5 * MASS * (b.vx * b.vx + b.vy * b.vy);
+    const pe = MASS * G * b.y;
+    const lost = Math.max(0, D.E0 - ke - pe);
+    $('bar-ke').style.width = (ke / D.E0 * 100) + '%';
+    $('bar-pe').style.width = (pe / D.E0 * 100) + '%';
+    $('ro-ke').textContent = fmt(ke, 1); $('ro-pe').textContent = fmt(pe, 1);
+    $('ro-lost').textContent = fmt(lost, 1);
+    $('ro-e0').textContent = `E₀ = ${fmt(D.E0)} J`;
+
+    if (!S.scrubbing) $('scrub').value = S.t;
+    $('t-label').textContent = `${S.t.toFixed(2)} / ${D.tMax.toFixed(2)} s`;
+    updateStepHighlight();
+}
+
+function setPlaying(p) {
+    S.playing = p;
+    $('btn-play').innerHTML = p ? '❚❚ 暂停' : (S.ended ? '↻ 重播' : '▶ 播放');
+}
+
+function applyParams(rebuildSol = true) {
+    D = derive();
+    samplePath();
+    S.t = Math.min(S.t, D.tMax);
+    S.ended = S.t >= D.tMax - 1e-9;
+    $('scrub').max = D.tMax;
+    $('th-H').textContent = fmt(D.H) + ' m';
+    $('th-T').textContent = fmt(D.T0) + ' s';
+    $('th-X').textContent = fmt(D.X) + ' m';
+    $('v0-val').textContent = S.v0 + ' m/s';
+    $('ang-val').textContent = S.ang + '°';
+    $('e-val').textContent = S.e.toFixed(2);
+    $('param-hint').classList.toggle('hidden', isDefault());
+    curStep = -1;
+    if (rebuildSol) buildSolution();
+}
+let solTimer = null;
+const debouncedSolution = () => { clearTimeout(solTimer); solTimer = setTimeout(buildSolution, 150); };
+
+/* ================= 事件 ================= */
+$('sl-v0').addEventListener('input', e => { S.v0 = +e.target.value; applyParams(false); debouncedSolution(); });
+$('sl-ang').addEventListener('input', e => { S.ang = +e.target.value; applyParams(false); debouncedSolution(); });
+$('sl-e').addEventListener('input', e => { S.e = +e.target.value; applyParams(false); debouncedSolution(); });
+$('tg-vec').addEventListener('change', e => S.showVec = e.target.checked);
+$('tg-trail').addEventListener('change', e => S.showTrail = e.target.checked);
+$('btn-restore').addEventListener('click', () => {
+    S.v0 = DEFAULTS.v0; S.ang = DEFAULTS.ang; S.e = DEFAULTS.e;
+    $('sl-v0').value = S.v0; $('sl-ang').value = S.ang; $('sl-e').value = S.e;
+    S.t = 0; S.ended = false; applyParams();
+});
+
+$('btn-play').addEventListener('click', () => {
+    if (S.ended) { S.t = 0; S.ended = false; }
+    setPlaying(!S.playing);
+});
+$('btn-reset').addEventListener('click', () => { S.t = 0; S.ended = false; setPlaying(false); });
+const frameStep = dir => { setPlaying(false); S.ended = false; S.t = Math.max(0, Math.min(D.tMax, S.t + dir / 60)); };
+$('btn-back').addEventListener('click', () => frameStep(-1));
+$('btn-fwd').addEventListener('click', () => frameStep(1));
+document.querySelectorAll('.spd-btn').forEach(btn => btn.addEventListener('click', () => {
+    S.speed = +btn.dataset.spd;
+    document.querySelectorAll('.spd-btn').forEach(b => b.classList.toggle('active', b === btn));
+}));
+const scrub = $('scrub');
+scrub.addEventListener('pointerdown', () => S.scrubbing = true);
+window.addEventListener('pointerup', () => S.scrubbing = false);
+scrub.addEventListener('input', () => { S.t = +scrub.value; S.ended = S.t >= D.tMax - 1e-9; });
+window.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' && e.target.type !== 'range') return;
+    if (e.code === 'Space') { e.preventDefault(); $('btn-play').click(); }
+    else if (e.code === 'ArrowLeft') { e.preventDefault(); frameStep(-1); }
+    else if (e.code === 'ArrowRight') { e.preventDefault(); frameStep(1); }
+});
+
+/* ================= 主循环 ================= */
+let last = performance.now();
+function loop(now) {
+    const dt = Math.min((now - last) / 1000, 0.05);
+    last = now;
+    if (S.playing) {
+        S.t += dt * S.speed;
+        if (S.t >= D.tMax) { S.t = D.tMax; S.ended = true; setPlaying(false); }
+    }
+    syncUI(); drawScene(); drawChart();
+    requestAnimationFrame(loop);
+}
+
+applyParams();
+renderKatex(document.querySelector('aside'));
+requestAnimationFrame(loop);
+setTimeout(() => setPlaying(true), 600);   // 载入后自动播放一遍
+</script>
+</body>
+</html>

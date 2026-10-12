@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "skills": {
+    "edu-analytic-geometry": {
+      "source": "./edulab",
+      "sourceType": "local",
+      "computedHash": "e82a66361f8cdc09850105ed9aa9c071ac1484d18f5fd1dd7fff5ca0c2e20bd0"
+    },
+    "edu-biology": {
+      "source": "./edulab",
+      "sourceType": "local",
+      "computedHash": "9aa5223cab4ee4ec8c2085f19f938de5b625f28805da0d86304f13ab01bec757"
+    },
+    "edu-chem-reaction": {
+      "source": "./edulab",
+      "sourceType": "local",
+      "computedHash": "4d192ee0effe122755d5e507762deaaa78b49bd4cff9bdec2235f5407e04ff2a"
+    },
+    "edu-chem-video": {
+      "source": "./edulab",
+      "sourceType": "local",
+      "computedHash": "296f5396499ec16e8ce9e76914721c07d184d5ce8ef10b00fcac64fc59455cc9"
+    },
+    "edu-function-derivative": {
+      "source": "./edulab",
+      "sourceType": "local",
+      "computedHash": "fa3c19643c2b18a574fd35b7535c4a335cb7f9742e878a0f0364e7680fff21ec"
+    },
+    "edu-math-sequences": {
+      "source": "./edulab",
+      "sourceType": "local",
+      "computedHash": "e3b20ad801f61f661d5fb00de36d5a91e6ae128460dab083257688315ca2aaa7"
+    },
+    "edu-math-video": {
+      "source": "./edulab",
+      "sourceType": "local",
+      "computedHash": "8642aac76ef23ffb056a77634bd2b4d0903e9e50b76520875d3b0f2bd552d448"
+    },
+    "edu-physics-junior": {
+      "source": "./edulab",
+      "sourceType": "local",
+      "computedHash": "7e56f2529d6e239eac0e6b4358a016139f8415be2bf54e22a2ae64db195c9166"
+    },
+    "edu-physics-senior": {
+      "source": "./edulab",
+      "sourceType": "local",
+      "computedHash": "4c62283c29b2384877fafb0312d299a78c806caa348dc66dcf846ab391d77403"
+    },
+    "edu-physics-video": {
+      "source": "./edulab",
+      "sourceType": "local",
+      "computedHash": "4b75156cf22f7d4525ec97bbdeddefc7c316e8b7c580f1d04582eb4777f03395"
+    },
+    "edu-plane-geometry": {
+      "source": "./edulab",
+      "sourceType": "local",
+      "computedHash": "8bcc1adf3f69723ac229731b76188e9cb2a6e05a16c239a0d369e716dd42ab3f"
+    },
+    "edu-solid-geometry": {
+      "source": "./edulab",
+      "sourceType": "local",
+      "computedHash": "a421795dd882482cc17e0f2cb9b81887ba014761f23636d9b5f49822d3dfafb6"
+    }
+  }
+}

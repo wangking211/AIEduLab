@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>芒格思维模型 · 量化演示</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+<style>
+    body { font-family: "PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
+    .katex { font-size: 1.0em; }
+    /* display 公式可能超过中栏宽度：允许横向滚动而不是被裁掉 */
+    .katex-display { overflow-x: auto; overflow-y: hidden; padding: 2px 0 6px; margin: .55em 0; }
+    .katex-display::-webkit-scrollbar { height: 5px; }
+    .katex-display::-webkit-scrollbar-thumb { background:#d6d3d1; border-radius:3px; }
+    canvas { display:block; }
+    input[type=range] { -webkit-appearance:none; appearance:none; height:5px; border-radius:3px; background:#cbd5e1; outline:none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:#b45309; cursor:pointer; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.25); }
+    .scroll-thin::-webkit-scrollbar { width:6px; }
+    .scroll-thin::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
+    .chip { display:inline-flex; align-items:center; gap:.35rem; padding:.15rem .5rem; border-radius:.4rem; font-size:.7rem; font-weight:600; }
+</style>
+</head>
+<body class="bg-stone-100 text-stone-900">
+<div class="flex h-screen overflow-hidden">
+    <!-- 左：题面 + 动态控制台 -->
+    <aside class="w-[27%] min-w-[300px] max-w-[400px] bg-white border-r border-stone-200 flex flex-col">
+        <div class="px-5 py-4 border-b border-stone-200">
+            <div class="text-[11px] uppercase tracking-wider text-amber-600 font-bold mb-1" id="eyebrow">思维模型 · 量化演示</div>
+            <h1 id="prob-title" class="text-lg font-bold text-stone-900 leading-snug"></h1>
+            <div id="prob-sub" class="text-xs text-stone-500 mt-1"></div>
+        </div>
+        <div class="flex-1 overflow-y-auto scroll-thin px-5 py-4 text-sm leading-relaxed" id="prob-body"></div>
+        <div class="border-t border-stone-200 px-5 py-4 bg-stone-50">
+            <div class="flex items-center justify-between mb-3">
+                <div class="text-[11px] uppercase tracking-wider text-amber-700 font-bold" id="console-title">动态控制台</div>
+                <button id="reset-btn" class="text-[11px] text-stone-500 hover:text-amber-700 border border-stone-300 rounded px-2 py-0.5">复位</button>
+            </div>
+            <div id="params" class="space-y-3"></div>
+            <div id="readouts" class="mt-4 space-y-2 text-sm"></div>
+            <div id="constant-block" class="hidden mt-4 border-t border-stone-200 pt-3 flex items-center justify-between">
+                <span class="text-[11px] text-stone-500">定值指示</span>
+                <span id="constant-val" class="font-bold text-emerald-700 text-right"></span>
+            </div>
+        </div>
+    </aside>
+    <!-- 中：分步解析 -->
+    <main class="flex-1 bg-white overflow-y-auto scroll-thin px-6 py-5">
+        <div class="text-[11px] uppercase tracking-wider text-amber-600 font-bold mb-3">分步解析</div>
+        <div id="solution-body" class="space-y-5"></div>
+    </main>
+    <!-- 右：模型画板 -->
+    <section class="w-[32%] min-w-[340px] bg-stone-900 flex flex-col">
+        <div class="px-4 py-3 border-b border-stone-800 flex items-center justify-between">
+            <div class="text-[11px] uppercase tracking-wider text-amber-400 font-bold">模型画板</div>
+            <div id="scene-caption" class="text-xs text-stone-400"></div>
+        </div>
+        <div class="flex-1 relative"><canvas id="board-canvas" class="absolute inset-0"></canvas></div>
+        <div id="legend" class="px-4 py-3 border-t border-stone-800 text-[11px] text-stone-300 flex flex-wrap gap-x-5 gap-y-1"></div>
+    </section>
+</div>
+
+<script type="application/json" id="lesson-data">__LESSON_DATA__</script>
+<script>
+"use strict";
+const DATA = JSON.parse(document.getElementById('lesson-data').textContent);
+const BOARD = DATA.board || {};
+
+// ===================== 数学环境（安全表达式求值） =====================
+// 表达式由 generate.py 生成（可信本地内容）：@param 名 + 白名单函数。
+// erf 用 Abramowitz & Stegun 7.1.26 有理逼近（仅用于交互显示；
+// 讲解文字里的精确值由 sympy 提供，两者差别在 1.5e-7 以内）。
+function _erf(x){
+    const s = x < 0 ? -1 : 1; x = Math.abs(x);
+    const t = 1/(1+0.3275911*x);
+    const y = 1 - (((((1.061405429*t - 1.453152027)*t) + 1.421413741)*t - 0.284496736)*t + 0.254829592)*t*Math.exp(-x*x);
+    return s*y;
+}
+const MATHENV = {sqrt:Math.sqrt, abs:Math.abs, min:Math.min, max:Math.max, pow:Math.pow,
+    sign:Math.sign, floor:Math.floor, ceil:Math.ceil, round:Math.round, PI:Math.PI, E:Math.E,
+    log:Math.log, log2:Math.log2, log10:Math.log10, exp:Math.exp, erf:_erf};
+const _exprCache = {};
+function evalExpr(expr, env){
+    if (typeof expr !== 'string') return expr;
+    const scope = Object.assign({}, MATHENV, env);
+    const names = Object.keys(scope);
+    const key = expr + '|' + names.join(',');
+    let fn = _exprCache[key];
+    if (!fn){ try { fn = Function(...names, '"use strict";return ('+expr.replace(/\^/g,'**')+');'); }
+              catch(e){ fn = () => NaN; } _exprCache[key] = fn; }
+    try { const v = fn(...names.map(n=>scope[n])); return (typeof v==='number') ? v : NaN; }
+    catch(e){ return NaN; }
+}
+const resolveVal = (v, env) => (typeof v === 'string') ? evalExpr(v, env) : v;
+function fmt(x, d=2){
+    if (x === null || x === undefined || !isFinite(x)) return '—';
+    let s = x.toFixed(d);
+    if (s === '-' + (0).toFixed(d)) s = (0).toFixed(d);
+    return s;
+}
+const fmtMoney = x => (!isFinite(x) ? '—' : Math.round(x).toLocaleString('zh-CN'));
+
+// ===================== 画布与世界坐标 =====================
+const canvas = document.getElementById('board-canvas');
+const ctx = canvas.getContext('2d');
+let cssW = 0, cssH = 0, scX = 1, scY = 1, offX = 0, offY = 0;
+const view = BOARD.view || {xRange:[0,10], yRange:[0,6]};
+// x/y 用独立比例尺：年 vs 元 这类不同量纲的两轴若共用比例会被压成一条线
+const SX = x => offX + x*scX;
+const SY = y => offY - y*scY;
+const rMin = () => Math.min(scX, scY);   // 画等宽圆点/方块时取小者
+
+function resizeCanvas(){
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+    canvas.style.width = rect.width+'px'; canvas.style.height = rect.height+'px';
+    ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr,dpr);
+    cssW = rect.width; cssH = rect.height;
+    computeTransform();
+    render();
+}
+function computeTransform(){
+    const spanX = view.xRange[1]-view.xRange[0], spanY = view.yRange[1]-view.yRange[0];
+    const mL=58, mR=14, mB=34, mT=14;               // 左边距给 y 轴刻度与轴名
+    scX = (cssW-mL-mR)/spanX;
+    scY = (cssH-mB-mT)/spanY;
+    offX = mL - view.xRange[0]*scX;                 // 让 xr[0] 对齐到左边距
+    offY = (cssH-mB) + view.yRange[0]*scY;          // 让 yr[0] 对齐到下边距
+}
+
+// ===================== 绘制基元 =====================
+const P = {              // 调色板（暖石色系）
+    compound:'#d97706', simple:'#78716c', good:'#059669', bad:'#dc2626',
+    curve:'#b45309', curve2:'#0891b2', grid:'#44403c', axis:'#a8a29e',
+    sick:'#dc2626', well:'#a8a29e', tp:'#ef4444', fp:'#f59e0b',
+    fill:'rgba(180,83,9,.15)', fill2:'rgba(8,145,178,.13)', tail:'rgba(220,38,38,.28)',
+    text:'#e7e5e4', dim:'#a8a29e', box:'#1c1917'
+};
+function label(x,y,text,color=P.text,align='center',size=12,weight='bold'){
+    ctx.font=weight+' '+size+'px system-ui'; ctx.textAlign=align; ctx.textBaseline='middle';
+    ctx.fillStyle=color; ctx.fillText(text, SX(x), SY(y));
+}
+function dashLine(x1,y1,x2,y2,color=P.axis,lw=1.2){
+    ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(SX(x1),SY(y1)); ctx.lineTo(SX(x2),SY(y2)); ctx.stroke();
+    ctx.setLineDash([]);
+}
+function solidLine(x1,y1,x2,y2,color,lw=2){
+    ctx.strokeStyle=color; ctx.lineWidth=lw;
+    ctx.beginPath(); ctx.moveTo(SX(x1),SY(y1)); ctx.lineTo(SX(x2),SY(y2)); ctx.stroke();
+}
+function axes(xr, yr, xlab, ylab, xticks, yticks){
+    const ax=SX(xr[0]), ay=SY(yr[0]);
+    ctx.strokeStyle=P.axis; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(SX(xr[1]),ay); ctx.stroke();   // x 轴
+    ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(ax,SY(yr[1])); ctx.stroke();   // y 轴
+    // 轴名与刻度一律用像素偏移，避免不同量纲下标签被裁出画布
+    ctx.font='bold 11px system-ui'; ctx.fillStyle=P.dim;
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText(xlab, (ax+SX(xr[1]))/2, ay+24);
+    if (ylab){
+        ctx.save(); ctx.translate(ax-32, (ay+SY(yr[1]))/2); ctx.rotate(-Math.PI/2);
+        ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillText(ylab, 0, 0); ctx.restore();
+    }
+    ctx.font='normal 10px system-ui'; ctx.fillStyle=P.dim;
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    (xticks||[]).forEach(t=>{ ctx.fillText(String(t), SX(t), ay+7); });
+    ctx.textAlign='right'; ctx.textBaseline='middle';
+    (yticks||[]).forEach(t=>{ ctx.fillText(String(t), ax-6, SY(t)); });
+}
+function plot(fn, xr, n, color, lw=2.6, fillTo=null){
+    ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.lineJoin='round';
+    ctx.beginPath();
+    for (let i=0;i<=n;i++){
+        const x = xr[0] + (xr[1]-xr[0])*i/n, y = fn(x);
+        if (!isFinite(y)) continue;
+        i ? ctx.lineTo(SX(x),SY(y)) : ctx.moveTo(SX(x),SY(y));
+    }
+    ctx.stroke();
+    if (fillTo !== null){
+        ctx.lineTo(SX(xr[1]),SY(fillTo)); ctx.lineTo(SX(xr[0]),SY(fillTo)); ctx.closePath();
+        ctx.fillStyle = (color===P.curve) ? P.fill : P.fill2; ctx.fill();
+    }
+}
+
+// ===================== 场景状态 =====================
+let PARAMS = {};                 // 各滑块当前值
+function buildEnv(){
+    const env = Object.assign({}, PARAMS);
+    (BOARD.scalars||[]).forEach(s=>{ env[s.name] = evalExpr(s.expr, env); });
+    return env;
+}
+// 场景 = 环境（全部标量）+ scene 里声明的字段（值可为表达式，按 env 求值）
+// 数组里的对象字段（payoff/options）同样逐项求值，使画板能直接用表达式。
+function buildScene(){
+    const env = buildEnv();
+    const S = Object.assign({}, env);
+    const sc = BOARD.scene || {};
+    for (const k in sc){
+        const v = sc[k];
+        if (k === 'kind' || k === 'caption'){ S[k] = v; continue; }   // 非表达式，原样透传
+        if (typeof v === 'string'){ const v2 = evalExpr(v, env); S[k] = isFinite(v2) ? v2 : v; }
+        else if (Array.isArray(v)) S[k] = v.map(z => (typeof z === 'string') ? evalExpr(z, env) : z);
+        else S[k] = v;
+    }
+    // 视图范围可由场景表达式驱动（如复利页按当前 r 决定 y 轴上界）
+    if (S.xRange && S.xRange.every(isFinite)) view.xRange = S.xRange;
+    if (S.yRange && S.yRange.every(isFinite)) view.yRange = S.yRange;
+    return S;
+}
+
+// ---- 1) 复利曲线：复利 vs 单利，阴影为两者的差（"复利的馈赠"） ----
+function drawCompound(S){
+    const R = S.r/100;                          // 滑块给的是百分数，公式要小数
+    const xr=[0, S.xMax], yr=[0, S.yMax];
+    axes(xr, yr, '年', '资金', niceTicks(0, S.xMax, 6), niceTicks(0, S.yMax, 5));
+    // 单利填充（复利 − 单利 = 馈赠）
+    plot(x=>S.P*(1+R*x), xr, 200, P.simple, 2, 0);
+    plot(x=>S.P*Math.pow(1+R, x), xr, 200, P.curve, 3, 0);
+    // 当前年份游标
+    const xc = S.t, yc = S.P*Math.pow(1+R, xc), ys = S.P*(1+R*xc);
+    dashLine(xc, 0, xc, Math.max(yc, ys), P.dim);
+    const dot=(x,y,c,r=5)=>{ ctx.fillStyle=c; ctx.beginPath(); ctx.arc(SX(x),SY(y),r,0,7); ctx.fill(); };
+    dot(xc, yc, P.curve); dot(xc, ys, P.simple);
+    // 差额括注（像素级偏移；游标靠近右边缘时把括注翻到左侧）
+    const gapPx = Math.abs(SY(ys)-SY(yc));
+    if (gapPx > 16){
+        const flip = SX(xc) > cssW - 130;
+        const gx = SX(xc) + (flip ? -14 : 14);
+        ctx.strokeStyle=P.good; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.moveTo(gx, SY(yc)); ctx.lineTo(gx, SY(ys)); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(gx-4, SY(yc)); ctx.lineTo(gx+4, SY(yc));
+        ctx.moveTo(gx-4, SY(ys)); ctx.lineTo(gx+4, SY(ys)); ctx.stroke();
+        ctx.font='bold 11px system-ui'; ctx.fillStyle=P.good;
+        ctx.textAlign = flip ? 'right' : 'left'; ctx.textBaseline='middle';
+        ctx.fillText('复利馈赠 '+fmtMoney(yc-ys), gx + (flip ? -7 : 7), (SY(yc)+SY(ys))/2);
+    }
+    // 端点数值：靠右时把复利终值标签也翻到左侧
+    const nearR = SX(xc) > cssW - 90;
+    ctx.font='bold 12px system-ui'; ctx.textBaseline='middle';
+    ctx.textAlign = nearR ? 'right' : 'center';
+    ctx.fillStyle=P.curve; ctx.fillText(fmtMoney(yc), SX(xc)+(nearR?-9:0), SY(yc));
+    ctx.textAlign = nearR ? 'right' : 'center';
+    ctx.font='bold 11px system-ui'; ctx.fillStyle=P.simple; ctx.fillText(fmtMoney(ys), SX(xc)+(nearR?-9:0), SY(ys));
+    label(xr[1]*0.55, S.P*0.12, '本金 '+fmtMoney(S.P), P.dim, 'center', 11, 'normal');
+}
+
+// ---- 2) 贝叶斯人群网格：1000 人四色点阵 ----
+function drawBayes(S){
+    const cols=40, rows=Math.ceil(S.per/cols), cell=0.30, gap=0.055;
+    const gw=cols*cell, gh=rows*cell;
+    const x0=(view.xRange[0]+view.xRange[1])/2-gw/2, y0=(view.yRange[1]-view.yRange[0])/2+gh/2-cell;
+    // 顺序：真阳 → 假阳 → 假阴 → 真阴（先画阳性的，视觉上聚在左上）
+    const groups=[['tp',S.tp,P.tp],['fp',S.fp,P.fp],['fn',S.fn,'#7f1d1d'],['tn',S.tn,'#57534e']];
+    let idx=0;
+    for (const [k,n,c] of groups){
+        for (let i=0;i<Math.round(n);i++,idx++){
+            const cx=x0+(idx%cols)*cell+cell/2, cy=y0-Math.floor(idx/cols)*cell-cell/2;
+            ctx.fillStyle=c;
+            ctx.beginPath(); ctx.arc(SX(cx),SY(cy),(cell-gap)*rMin()/2,0,7); ctx.fill();
+        }
+    }
+    // 阳性大括号（前 tp+fp 个）——阳性中真正有病的比例
+    const posCount=Math.round(S.tp)+Math.round(S.fp);
+    if (posCount>0){
+        const lastRow=Math.floor((posCount-1)/cols);
+        ctx.strokeStyle=P.fp; ctx.lineWidth=2.5;
+        ctx.strokeRect(SX(x0)-4, SY(y0+cell)+2, gw*scX+8, (lastRow+1)*cell*scY-4);
+        label(x0+gw/2, y0+cell*1.05+ (lastRow*cell), '阳性 '+posCount+' 人 → 有病 '+Math.round(S.tp)+' 人', P.fp, 'center', 12);
+    }
+    label(x0+gw/2, y0+gh*0.02+rows*cell*0.0, '', P.dim);
+    label((view.xRange[0]+view.xRange[1])/2, view.yRange[0]+0.35,
+          `每 ${Math.round(S.per)} 人：真阳 ${Math.round(S.tp)} · 假阳 ${Math.round(S.fp)} · 假阴 ${Math.round(S.fn)} · 真阴 ${Math.round(S.tn)}`,
+          P.text, 'center', 11.5);
+}
+
+// ---- 3) 期望值 / 凯利：算术期望对比条 + 几何复利曲线 ----
+// 像素级子面板：给定像素矩形与数据范围，返回 px/py 与画轴函数
+function panel(rx, ry, rw, rh, xr, yr){
+    const padL=52, padB=30, padT=14, padR=10;
+    const ix=rx+padL, iy=ry+padT, iw=rw-padL-padR, ih=rh-padB-padT;
+    const sx=v=>ix+(v-xr[0])/(xr[1]-xr[0])*iw;
+    const sy=v=>iy+ih-(v-yr[0])/(yr[1]-yr[0])*ih;
+    return {
+        sx, sy, ix, iy, iw, ih, xr, yr,
+        axis(xlab, ylab, xticks, yticks){
+            ctx.strokeStyle=P.axis; ctx.lineWidth=1.2;
+            ctx.beginPath(); ctx.moveTo(ix, iy+ih); ctx.lineTo(ix+iw, iy+ih); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(ix, iy); ctx.lineTo(ix, iy+ih); ctx.stroke();
+            ctx.font='normal 10px system-ui'; ctx.fillStyle=P.dim;
+            ctx.textAlign='center'; ctx.textBaseline='top';
+            (xticks||[]).forEach(t=>ctx.fillText(String(t), sx(t), iy+ih+4));
+            ctx.textAlign='right'; ctx.textBaseline='middle';
+            (yticks||[]).forEach(t=>ctx.fillText(String(t), ix-5, sy(t)));
+            if (xlab){ ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillStyle=P.dim;
+                       ctx.font='bold 10.5px system-ui'; ctx.fillText(xlab, ix+iw/2, iy+ih+28); }
+            if (ylab){ ctx.save(); ctx.translate(ix-40, iy+ih/2); ctx.rotate(-Math.PI/2);
+                       ctx.textAlign='center'; ctx.textBaseline='bottom';
+                       ctx.font='bold 10.5px system-ui'; ctx.fillStyle=P.dim; ctx.fillText(ylab,0,0); ctx.restore(); }
+        },
+        line(pts, color, lw=2.4, dash=false){
+            ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.setLineDash(dash?[5,4]:[]);
+            ctx.beginPath();
+            pts.forEach((p,i)=> i? ctx.lineTo(sx(p[0]),sy(p[1])) : ctx.moveTo(sx(p[0]),sy(p[1])));
+            ctx.stroke(); ctx.setLineDash([]);
+        },
+        bar(x, y0, y1, w, color){
+            ctx.fillStyle=color;
+            ctx.fillRect(sx(x)-w/2, Math.min(sy(y0),sy(y1)), w, Math.abs(sy(y0)-sy(y1)));
+        },
+        txt(x, y, text, color, align='center', size=11, weight='bold', dy=0){
+            ctx.font=weight+' '+size+'px system-ui'; ctx.textAlign=align; ctx.textBaseline='middle';
+            ctx.fillStyle=color; ctx.fillText(text, sx(x), sy(y)+dy);
+        },
+        ptxt(px, py, text, color, align='center', size=10, weight='normal'){
+            ctx.font=weight+' '+size+'px system-ui'; ctx.textAlign=align; ctx.textBaseline='middle';
+            ctx.fillStyle=color; ctx.fillText(text, px, py);
+        }
+    };
+}
+// ---- 3) 期望值 / 凯利：上=算术期望条形，下=几何复利曲线 ----
+// 画布是竖长条（约 340×590），左右分栏每栏只剩 ~90px，故改为上下堆叠、各自用满宽度。
+function drawExpected(S){
+    const H=cssH, W=cssW;
+    const split=Math.round(H*0.36);                 // 上 36% 给条形，下 64% 给曲线
+    // 凯利 ≤ 0 时不该下注，条形区改对照「不下注 vs 全押」，避免出现误导性的正值条
+    const kellyOK = isFinite(S.kelly) && S.kelly > 0;
+    const evs = kellyOK
+        ? [{label:'不下注', ev:0}, {label:'凯利 f*', ev:S.kelly*S.ev, hl:true}, {label:'双倍 f*', ev:2*S.kelly*S.ev}]
+        : [{label:'不下注', ev:0, hl:true}, {label:'全押', ev:S.ev}];
+    const n=evs.length;
+    const maxAbs=Math.max(0.05, ...evs.map(o=>Math.abs(o.ev)));
+    const L=panel(0, 14, W, split-14, [0.4, n+0.6], [-maxAbs*1.5, maxAbs*1.5]);
+    L.axis('', '期望净收益', [], niceTicks(-maxAbs, maxAbs, 4));
+    L.line([[0.4,0],[n+0.6,0]], P.axis, 1.2);       // 零基准线
+    L.ptxt(L.ix+L.iw/2, L.iy-2, '① 算术期望：每 1 单位的期望净收益', P.dim, 'center', 10.5);
+    const bw=Math.min(58, L.iw/(n+0.6)*0.46);
+    evs.forEach((o,i)=>{
+        const x=1.0+i;
+        const c=o.hl?P.curve:(o.ev>=0?P.good:P.bad);
+        L.bar(x, 0, o.ev, bw, c);
+        L.txt(x, o.ev+(o.ev>=0?maxAbs*0.18:-maxAbs*0.22), (o.ev>=0?'+':'')+fmt(o.ev,3), c, 'center', 10.5);
+        L.ptxt(L.sx(x), L.iy+L.ih+22, o.label, o.hl?P.curve:P.dim, 'center', 11, o.hl?'bold':'normal');
+    });
+
+    // 下：几何复利资金曲线（长期真实结果）
+    const yrs=S.xMax||40;
+    const growth = x => (x>=1||x<=-1) ? 0 : Math.exp(S.pw*Math.log(1+x*S.b) + S.q*Math.log(1-x));
+    const curves=[{x:S.kelly, c:P.curve, t:'满凯利', w:2.8},
+                  {x:S.kellyHalf, c:P.curve2, t:'半凯利', w:2.2},
+                  {x:2*S.kelly, c:P.bad, t:'双倍凯利', w:2.2}].filter(cv=>cv.x>0 && cv.x<1);
+    const endOf = x => Math.pow(Math.max(growth(x),1e-12), yrs);
+    const ends = curves.map(cv=>endOf(cv.x));
+    const hiY = Math.max(2, ...ends), loY = Math.min(1, ...ends)*0.85;
+    const R=panel(0, split+14, W, H-split-20, [0, yrs], [loY, hiY]);
+    R.ptxt(R.ix+R.iw/2, R.iy-2, '② 几何复利：'+yrs+' 次下注后的资金倍数', P.dim, 'center', 10.5);
+    R.axis('下注次数', '资金（倍）', niceTicks(0, yrs, 5), niceTicks(loY, hiY, 4));
+    R.line([[0,1],[yrs,1]], P.dim, 1.1, true);       // 不下注的基准线
+    R.ptxt(R.ix+4, R.sy(1)-9, '不下注 = 1.0 倍', P.dim, 'left', 10);
+    if (!curves.length){
+        // 凯利 ≤ 0：没有任何正仓位值得下，给出结论而非空白
+        R.ptxt(R.ix+R.iw/2, R.iy+R.ih*0.5, 'f* ≤ 0 —— 这个赌局期望为负', P.bad, 'center', 12, 'bold');
+        R.ptxt(R.ix+R.iw/2, R.iy+R.ih*0.5+18, '任何仓位长期都亏，唯一正确动作是不参与', P.text, 'center', 11, 'normal');
+        return;
+    }
+    curves.forEach(cv=>{
+        const g=growth(cv.x), pts=[];
+        for(let k=0;k<=yrs;k++) pts.push([k, Math.max(Math.pow(g,k), loY)]);
+        R.line(pts, cv.c, cv.w);
+        const endV=Math.max(endOf(cv.x), loY);
+        R.ptxt(R.ix+R.iw-4, R.sy(endV)-9, cv.t+' '+fmt(endOf(cv.x),1)+'倍', cv.c, 'right', 10.5, 'bold');
+    });
+    // 双倍凯利：算术期望更高，几何复利更差 —— 放在两图之间，正好对照
+    if (S.kelly>0 && S.kelly<0.5){
+        const dFull=endOf(S.kelly), dDouble=endOf(2*S.kelly);
+        if (isFinite(dFull)&&isFinite(dDouble)&&dDouble<dFull){
+            ctx.font='bold 10.5px system-ui'; ctx.fillStyle=P.bad;
+            ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.fillText('↑ 期望更高，长期却更差', L.ix+L.iw*0.5, split+9);
+        }
+    }
+}
+
+// ---- 4) 安全边际：正态价值分布 + 价格线 + 击穿尾部 ----
+function drawSafety(S){
+    const mu=S.mu, sg=S.sigma, pr=S.price;
+    const xr=[mu-3.4*sg, mu+3.4*sg];
+    const peak=1/(sg*Math.sqrt(2*Math.PI));
+    const yr=[0, peak*1.30];
+    axes(xr, yr, '真实内在价值', '概率密度', niceTicks(xr[0], xr[1], 6), []);
+    const pdf = x => Math.exp(-((x-mu)**2)/(2*sg*sg))/(sg*Math.sqrt(2*Math.PI));
+    // 击穿尾部（价值 < 价格）填充
+    ctx.save();
+    ctx.beginPath(); ctx.rect(SX(xr[0]), SY(yr[1]), (SX(pr)-SX(xr[0])), SY(yr[0])-SY(yr[1])); ctx.clip();
+    plot(pdf, xr, 240, P.bad, 2.2, 0);
+    ctx.restore();
+    plot(pdf, xr, 240, P.curve, 2.8, 0);
+    // 价格线 + 标签（贴顶部，避免被裁）
+    solidLine(pr, 0, pr, pdf(pr)*1.10, P.bad, 2.4);
+    ctx.font='bold 12px system-ui'; ctx.fillStyle=P.bad;
+    ctx.textAlign = (SX(pr) > cssW-80) ? 'right' : 'center'; ctx.textBaseline='top';
+    ctx.fillText('买入价 '+fmt(pr,0), SX(pr)+((SX(pr)>cssW-80)?-6:0), SY(yr[1])+4);
+    // 均值线（标签放在曲线内侧，避免与 x 轴刻度重叠）
+    dashLine(mu, 0, mu, peak*1.05, P.dim);
+    ctx.font='bold 11px system-ui'; ctx.fillStyle=P.dim; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText('估价 '+fmt(mu,0), SX(mu)+5, SY(peak*1.02));
+    // 安全边际双向箭头
+    if (mu>pr){
+        const my=peak*0.36, y1=SY(my);
+        ctx.strokeStyle=P.good; ctx.lineWidth=2.4;
+        ctx.beginPath(); ctx.moveTo(SX(pr), y1); ctx.lineTo(SX(mu), y1); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(SX(pr)+5, y1-4); ctx.lineTo(SX(pr), y1); ctx.lineTo(SX(pr)+5, y1+4); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(SX(mu)-5, y1-4); ctx.lineTo(SX(mu), y1); ctx.lineTo(SX(mu)-5, y1+4); ctx.stroke();
+        ctx.font='bold 12px system-ui'; ctx.fillStyle=P.good; ctx.textAlign='center'; ctx.textBaseline='bottom';
+        ctx.fillText('安全边际 '+fmt(S.mos*100,1)+'%', (SX(pr)+SX(mu))/2, y1-6);
+    }
+    // 击穿区标签：放在价格线左侧尾部上方
+    ctx.font='bold 11.5px system-ui'; ctx.fillStyle=P.bad; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillText('击穿区', (SX(xr[0])+SX(Math.min(pr,mu)))/2, SY(peak*0.20));
+}
+
+// ---- 5) 机会成本：所选 vs 被放弃的替代（条形对比） ----
+function drawOpportunity(S){
+    const opts = (S.options||[]).map(o => {
+        const v = resolveVal(o.value, S);
+        return {label:o.label, value: isFinite(v)? v : 0, chosen: !!o.chosen};
+    });
+    if (!opts.length) return;
+    const vals=opts.map(o=>o.value);
+    const hi=view.xRange[1];                        // 与变换一致，轴线才能画满
+    const n=opts.length, rowH=0.86;
+    const yr=[-0.35, n*rowH];
+    axes([0, hi], yr, '价值（万）', '', niceTicks(0, hi, 5), []);
+    const barH = rowH*0.46*scY;
+    opts.forEach((o,i)=>{
+        const yRow=(n-1-i)*rowH+0.30;               // 从上到下：价值从高到低排布
+        const yPix=SY(yRow);
+        const isBest = Math.abs(o.value-Math.max(...vals))<1e-9;
+        const c = o.chosen ? P.curve : (isBest ? '#78716c' : '#57534e');
+        ctx.fillStyle=c;
+        ctx.fillRect(SX(0), yPix-barH/2, Math.max(o.value*scX,1), barH);
+        // 数值标签：紧跟条形末端，靠右时翻到条内
+        const endX = SX(0)+Math.max(o.value*scX,1);
+        const inside = endX > cssW-150;
+        ctx.font=(o.chosen?'bold ':'')+'12px system-ui'; ctx.textBaseline='middle';
+        ctx.textAlign = inside ? 'right' : 'left';
+        ctx.fillStyle = inside ? '#1c1917' : (o.chosen?P.curve:P.text);
+        ctx.fillText(o.label+'  '+fmtMoney(o.value)+' 万', endX + (inside?-8:7), yPix);
+        // 角色注记
+        ctx.font='11px system-ui'; ctx.textAlign='left';
+        ctx.fillStyle = o.chosen ? P.curve : '#a8a29e';
+        ctx.fillText(o.chosen ? '← 你的选择' : (isBest ? '← 最优替代（被你放弃）' : ''), SX(0)+6, yPix-barH/2-11);
+    });
+    // 机会成本：所选值 → 最优替代值之间的缺口
+    const bestAlt = Math.max(...vals.filter((v,i)=>!opts[i].chosen), -Infinity);
+    const oc = resolveVal(S.opp_cost_raw, S);
+    if (isFinite(oc) && oc>0 && isFinite(bestAlt)){
+        const yChosenPix = SY((n-1-opts.findIndex(o=>o.chosen))*rowH+0.30);
+        const x1=SX(Math.min(S.chosen,bestAlt)), x2=SX(Math.max(S.chosen,bestAlt));
+        ctx.strokeStyle=P.bad; ctx.lineWidth=2.4;
+        ctx.beginPath(); ctx.moveTo(x1, yChosenPix+barH/2+9); ctx.lineTo(x2, yChosenPix+barH/2+9); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x1+4, yChosenPix+barH/2+5); ctx.lineTo(x1, yChosenPix+barH/2+9); ctx.lineTo(x1+4, yChosenPix+barH/2+13); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x2-4, yChosenPix+barH/2+5); ctx.lineTo(x2, yChosenPix+barH/2+9); ctx.lineTo(x2-4, yChosenPix+barH/2+13); ctx.stroke();
+        ctx.font='bold 12px system-ui'; ctx.fillStyle=P.bad; ctx.textAlign='center'; ctx.textBaseline='top';
+        ctx.fillText('机会成本 '+fmtMoney(oc)+' 万', (x1+x2)/2, yChosenPix+barH/2+15);
+    }
+    // 结论放在图顶部（底部已留给坐标轴名）
+    const net = resolveVal(S.net_raw, S);
+    const ok = isFinite(net) && net>=0;
+    ctx.font='bold 12.5px system-ui'; ctx.fillStyle = ok?P.good:P.bad;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(ok ? '✓ 选中的是最优方案 → 机会成本为 0'
+                    : '✗ 扣掉机会成本后的真实净收益：'+fmt(net,0)+' 万',
+                 (SX(0)+SX(hi))/2, SY(yr[1])-30);
+}
+const rangeTicks=(a,b,n,round=false)=>{
+    const out=[]; for(let i=0;i<=n;i++){ const v=a+(b-a)*i/n; out.push(round? Math.round(v/10)*10 : Math.round(v*10)/10); }
+    return out;
+};
+// 取 1/2/5×10^k 的"漂亮"刻度，避免出现 23748、5.5 这类读不出来的数
+function niceTicks(a, b, n=5){
+    const span = b-a;
+    if (!(span>0) || !isFinite(span)) return [];
+    const raw = span/n;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const norm = raw/mag;
+    // 在 1/2/5/10 中取最接近者，使刻度个数贴近 n
+    const cand = [1,2,5,10];
+    let best = cand[0];
+    for (const c of cand) if (Math.abs(c-norm) < Math.abs(best-norm)) best = c;
+    const step = best*mag;
+    const out=[];
+    for (let v=Math.ceil(a/step)*step; v<=b+step*1e-9; v+=step) out.push(Math.round(v/step)*step);
+    return out.map(v => Math.abs(v)>=10000 ? +(v/10000)+'万' : +v.toFixed(6));
+}
+
+// ===================== 渲染主入口 =====================
+function render(){
+    ctx.clearRect(0,0,cssW,cssH);
+    const S = buildScene();
+    computeTransform();                 // 视图可能被场景表达式改写
+    switch(S.kind){
+        case 'compound': drawCompound(S); break;
+        case 'bayes': drawBayes(S); break;
+        case 'expected': drawExpected(S); break;
+        case 'safety': drawSafety(S); break;
+        case 'opportunity': drawOpportunity(S); break;
+    }
+    updateReadouts(S);
+}
+
+// ===================== 读数 =====================
+function updateReadouts(env){
+    (BOARD.readouts||[]).forEach(r=>{
+        const el=document.getElementById('ro-'+r.id);
+        if(!el) return;
+        try{
+            if (r.type==='expr'){
+                const v=evalExpr(r.expr, env);
+                el.textContent=(r.money? fmtMoney(v) : fmt(v, r.digits!=null?r.digits:2))+(r.unit?' '+r.unit:'');
+            } else if (r.type==='status'){
+                const v=evalExpr(r.expr, env), rhs=(r.rhs!=null?r.rhs:0), op=r.op||'>';
+                const ok = op==='<'? v<rhs-1e-9 : op==='>'? v>rhs+1e-9 : op==='=='? Math.abs(v-rhs)<1e-6 : v>rhs-1e-9;
+                el.textContent = ok?(r.okText||'满足'):(r.badText||'不满足');
+                el.style.color = ok?'#059669':'#dc2626';
+            } else if (r.type==='text'){
+                el.textContent=String(resolveVal(r.value, env));
+            }
+        }catch(e){ el.textContent='—'; }
+    });
+    if (BOARD.constant){
+        document.getElementById('constant-val').textContent=BOARD.constant.label||'';
+    }
+}
+
+// ===================== 控制台构建 =====================
+function renderKatex(el){ if (typeof renderMathInElement!=='undefined') renderMathInElement(el,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],throwOnError:false}); }
+function buildConsole(){
+    document.getElementById('prob-title').textContent=(DATA.lesson&&DATA.lesson.title)||'';
+    document.getElementById('prob-sub').textContent=(DATA.lesson&&DATA.lesson.subtitle)||'';
+    document.getElementById('prob-body').innerHTML=(DATA.lesson&&DATA.lesson.problem)||'';
+    document.getElementById('scene-caption').textContent=(BOARD.scene&&BOARD.scene.caption)||'';
+    const pw=document.getElementById('params');
+    pw.innerHTML=(BOARD.params||[]).map(p=>`
+        <div>
+            <div class="flex justify-between text-xs text-stone-600 mb-1">
+                <span>${p.label||p.name}</span>
+                <span id="pv-${p.name}" class="font-mono font-bold text-amber-700"></span>
+            </div>
+            <input type="range" id="ps-${p.name}" min="${p.min}" max="${p.max}" step="${p.step||0.01}" value="${p.value}" class="w-full">
+            <div class="flex justify-between text-[10px] text-stone-400 mt-0.5"><span>${p.min}${p.unit||''}</span><span>${p.max}${p.unit||''}</span></div>
+        </div>`).join('');
+    (BOARD.params||[]).forEach(p=>{
+        PARAMS[p.name]=p.value;
+        const s=document.getElementById('ps-'+p.name);
+        s.addEventListener('input', ()=>{ PARAMS[p.name]=parseFloat(s.value); syncParamVals(); render(); });
+    });
+    syncParamVals();
+    document.getElementById('readouts').innerHTML=(BOARD.readouts||[]).map(r=>{
+        if (r.highlight) return `<div class="flex justify-between items-center pt-1"><span class="text-stone-800 font-semibold">${r.label}</span><span id="ro-${r.id}" class="text-base font-bold bg-amber-50 text-amber-800 px-3 py-1 rounded-lg border border-amber-200">—</span></div>`;
+        return `<div class="flex justify-between border-b border-dashed border-stone-200 pb-1"><span>${r.label}</span><span id="ro-${r.id}" class="font-bold" style="color:${r.color||'#1c1917'}">—</span></div>`;
+    }).join('');
+    if (BOARD.constant) document.getElementById('constant-block').classList.remove('hidden');
+    document.getElementById('legend').innerHTML=(BOARD.legend||[]).map(it=>
+        `<span class="flex items-center gap-1.5"><span class="w-3 h-3 inline-block rounded" style="background:${it.color}"></span>${it.text}</span>`).join('');
+    document.getElementById('solution-body').innerHTML=(DATA.steps||[]).map((st,i)=>{
+        const no=String(i+1).padStart(2,'0');
+        return `<div class="${i>0?'border-t border-stone-100 pt-5':''}">
+            <div class="flex items-start gap-4 mb-3">
+                <span class="w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-bold font-mono text-sm flex-shrink-0">${no}</span>
+                <h3 class="text-base font-bold text-stone-900 pt-0.5">${st.title||''}</h3>
+            </div>
+            <div class="text-stone-700 leading-relaxed text-sm space-y-2">${st.content||''}</div>
+        </div>`;
+    }).join('');
+    document.getElementById('reset-btn').addEventListener('click', ()=>{
+        (BOARD.params||[]).forEach(p=>{ PARAMS[p.name]=p.value; document.getElementById('ps-'+p.name).value=p.value; });
+        syncParamVals(); render();
+    });
+    renderKatex(document.body);
+}
+function syncParamVals(){
+    (BOARD.params||[]).forEach(p=>{
+        const el=document.getElementById('pv-'+p.name);
+        if(el) el.textContent=fmt(PARAMS[p.name], p.digits!=null?p.digits:2)+(p.unit||'');
+    });
+}
+
+buildConsole();
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+</script>
+</body>
+</html>

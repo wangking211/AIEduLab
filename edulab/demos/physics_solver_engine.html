@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物理解题·过程仿真引擎</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+    <style>
+        body { background-color: #f8fafc; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .katex { font-size: 1.02em; }
+        input[type=range].timeline { accent-color: #6366f1; }
+        .sol-step { transition: border-color .2s, background-color .2s; cursor: pointer; }
+        .sol-step.active { border-color: #818cf8; background: #eef2ff; box-shadow: 0 0 0 1px #818cf8 inset; }
+        .spd-btn.active, .prob-tab.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+        .phase-tick { position: absolute; top: 50%; transform: translate(-50%,-50%);
+            width: 7px; height: 7px; background: #f59e0b; border: 1.5px solid #fff;
+            border-radius: 9999px; pointer-events: none; box-shadow: 0 0 3px rgba(0,0,0,.3); }
+    </style>
+</head>
+<body class="min-h-screen lg:h-screen text-slate-800 lg:overflow-hidden">
+
+<div class="flex flex-col lg:flex-row gap-3 p-3 min-h-screen lg:h-screen lg:overflow-hidden">
+
+    <!-- ===== 左栏：题目 + 控制台 ===== -->
+    <aside class="w-full lg:w-[330px] flex-shrink-0 flex flex-col gap-3 lg:overflow-hidden">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-300 p-5 flex-shrink-0">
+            <div class="flex items-center justify-between mb-1">
+                <h2 class="text-lg font-bold text-slate-900">物理·过程仿真解题</h2>
+            </div>
+            <div class="text-[11px] text-slate-400 mb-3">同一数据驱动引擎 · 三种题型热切换</div>
+            <div class="flex gap-1.5 mb-4">
+                <button class="prob-tab active flex-1 text-xs font-semibold px-2 py-1.5 rounded-lg border border-slate-300 text-slate-600" data-p="belt">传送带</button>
+                <button class="prob-tab flex-1 text-xs font-semibold px-2 py-1.5 rounded-lg border border-slate-300 text-slate-600" data-p="chase">追及相遇</button>
+                <button class="prob-tab flex-1 text-xs font-semibold px-2 py-1.5 rounded-lg border border-slate-300 text-slate-600" data-p="incline">斜面往返</button>
+            </div>
+            <div id="prob-body" class="text-slate-600 leading-relaxed text-sm space-y-2"></div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-300 p-5 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+            <h3 class="text-base font-bold text-slate-900 flex items-center gap-2 mb-4">
+                <span class="w-2.5 h-2.5 bg-blue-500 rounded-full"></span>参数控制台
+            </h3>
+            <div id="params" class="space-y-4"></div>
+
+            <div id="readouts" class="mt-5 bg-slate-50 border border-slate-200/60 rounded-xl p-4 text-xs md:text-[13px] font-mono text-slate-700 space-y-1.5"></div>
+
+            <div id="force-block" class="mt-5 hidden">
+                <div class="text-xs font-semibold text-slate-600 mb-2">受力表（m = 1 kg，实时）</div>
+                <div id="force-table" class="text-[12px] font-mono text-slate-700 space-y-1"></div>
+            </div>
+
+            <div id="energy-block" class="mt-5 hidden">
+                <div class="flex justify-between items-baseline text-xs text-slate-500 mb-1.5">
+                    <span class="font-semibold text-slate-600">能量守恒监视</span>
+                    <span class="font-mono" id="e0-label"></span>
+                </div>
+                <div class="h-5 rounded-full bg-slate-200 overflow-hidden flex border border-slate-300/60">
+                    <div id="bar-ke" class="bg-rose-400 h-full" style="width:100%"></div>
+                    <div id="bar-pe" class="bg-sky-400 h-full" style="width:0%"></div>
+                    <div id="bar-q" class="bg-amber-400 h-full" style="width:0%"></div>
+                </div>
+                <div class="flex flex-wrap gap-x-3 text-[11px] mt-1.5 font-mono text-slate-600">
+                    <span><i class="inline-block w-2 h-2 bg-rose-400 rounded-sm"></i> 动能 <span id="v-ke"></span></span>
+                    <span><i class="inline-block w-2 h-2 bg-sky-400 rounded-sm"></i> 势能 <span id="v-pe"></span></span>
+                    <span><i class="inline-block w-2 h-2 bg-amber-400 rounded-sm"></i> 摩擦生热 <span id="v-q"></span></span>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ===== 中栏：分步解析 ===== -->
+    <section class="w-full lg:w-[350px] flex-shrink-0 lg:overflow-y-auto bg-white rounded-2xl shadow-sm border border-slate-300 p-5">
+        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2 mb-1">
+            <span class="w-2.5 h-2.5 bg-indigo-500 rounded-full"></span>详细解析
+        </h3>
+        <div class="text-[11px] text-slate-400 mb-4">步骤随运动阶段自动高亮；点击步骤跳到对应时刻。</div>
+        <div id="solution-body" class="space-y-3"></div>
+    </section>
+
+    <!-- ===== 右栏：仿真 ===== -->
+    <main class="w-full lg:flex-1 min-w-0 bg-white rounded-2xl shadow-sm border border-slate-300 p-5 flex flex-col lg:overflow-hidden">
+        <div class="flex justify-between items-center mb-3 flex-shrink-0">
+            <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                运动过程仿真
+            </h3>
+            <span class="text-[11px] text-slate-400 hidden md:inline">空格 播放/暂停 · ←/→ 逐帧 · ◆ 阶段分界</span>
+        </div>
+
+        <div class="relative flex-grow min-h-[300px] lg:min-h-0 bg-slate-900 rounded-xl overflow-hidden shadow-inner">
+            <canvas id="sim-canvas" class="absolute inset-0 w-full h-full"></canvas>
+        </div>
+
+        <div class="flex items-center gap-2 mt-3 flex-wrap flex-shrink-0">
+            <button id="btn-reset" class="w-9 h-9 rounded-lg border border-slate-300 bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-600 font-bold">⟲</button>
+            <button id="btn-back" class="w-9 h-9 rounded-lg border border-slate-300 bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-600 text-xs font-bold">⏴‖</button>
+            <button id="btn-play" class="h-9 px-4 rounded-lg bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 min-w-[92px]">▶ 播放</button>
+            <button id="btn-fwd" class="w-9 h-9 rounded-lg border border-slate-300 bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-600 text-xs font-bold">‖⏵</button>
+            <div class="flex rounded-lg overflow-hidden border border-slate-300 text-xs font-mono">
+                <button class="spd-btn px-2.5 py-2 bg-slate-50 text-slate-600" data-spd="0.5">½×</button>
+                <button class="spd-btn active px-2.5 py-2 bg-slate-50 text-slate-600 border-l border-slate-300" data-spd="1">1×</button>
+                <button class="spd-btn px-2.5 py-2 bg-slate-50 text-slate-600 border-l border-slate-300" data-spd="2">2×</button>
+                <button class="spd-btn px-2.5 py-2 bg-slate-50 text-slate-600 border-l border-slate-300" data-spd="4">4×</button>
+            </div>
+            <div class="relative flex-1 min-w-[160px] h-9 flex items-center">
+                <input type="range" id="scrub" class="timeline w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer" min="0" max="4" step="0.01" value="0">
+                <div id="phase-ticks" class="absolute inset-0 pointer-events-none"></div>
+            </div>
+            <span id="t-label" class="font-mono text-xs text-slate-500 whitespace-nowrap">0.00 / 4.00 s</span>
+        </div>
+
+        <div class="flex gap-3 mt-3 flex-shrink-0 h-32">
+            <div class="relative flex-1 bg-slate-900 rounded-xl overflow-hidden"><canvas id="chart-v" class="absolute inset-0 w-full h-full"></canvas></div>
+            <div class="relative flex-1 bg-slate-900 rounded-xl overflow-hidden"><canvas id="chart-x" class="absolute inset-0 w-full h-full"></canvas></div>
+        </div>
+    </main>
+</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const fmt = (v, d = 2) => (Math.round(v * 10 ** d) / 10 ** d).toFixed(d).replace(/\.?0+$/, '');
+const G = 10;
+function sincos(deg) {
+    if (deg === 37) return [0.6, 0.8];
+    if (deg === 53) return [0.8, 0.6];
+    const r = deg * Math.PI / 180; return [Math.sin(r), Math.cos(r)];
+}
+
+/* ================================================================
+   题目规格（PROBLEM SPECS）—— 引擎的唯一输入。
+   每题提供：statement / params / build(p) → model
+   model = { tMax, phases, state(t), scene, charts, steps, answers,
+             readouts(t), forces?(t), energy?(t) }
+   未来 skill 由 sympy 推导分段解析解后生成同构 spec。
+================================================================ */
+const PROBLEMS = {
+
+/* ---------- 1. 传送带 ---------- */
+belt: {
+    title: '传送带上的物块',
+    statement: p => `水平传送带以 $v = ${fmt(p.vB)}\\ \\text{m/s}$ 匀速运行。把一物块（$m=1$ kg）<b>轻放</b>在传送带左端，物块与带面间动摩擦因数 $\\mu = ${fmt(p.mu)}$（$g=10\\ \\text{m/s}^2$，传送带足够长）。求：<br>(1) 物块刚放上时的加速度；(2) 达到共速所需时间 $t_1$；(3) 传送带上的划痕（相对滑动）长度 $\\Delta s$。`,
+    params: [
+        { key:'vB', label:'皮带速度 v', min:1, max:6, step:0.5, def:4, unit:'m/s' },
+        { key:'mu', label:'动摩擦因数 μ', min:0.1, max:0.6, step:0.05, def:0.2, unit:'' },
+    ],
+    build(p) {
+        const a = p.mu * G, t1 = p.vB / a, x1 = p.vB * p.vB / (2 * a), ds = x1;
+        const L = Math.max(x1 + p.vB * 1.6, 9);
+        const tMax = t1 + Math.max((L * 0.94 - x1) / p.vB, 1);
+        const st = t => t < t1 ? { x: .5*a*t*t, v: a*t, ph: 0 } : { x: x1 + p.vB*(t-t1), v: p.vB, ph: 1 };
+        return {
+            tMax, phases: [{t0:0,t1,label:'滑动摩擦·匀加速'},{t0:t1,t1:tMax,label:'共速·匀速'}],
+            state: st,
+            scene: { kind:'belt', L, beltX: t => p.vB*t, scratch: t => Math.min(t,t1) * p.vB - st(Math.min(t,t1)).x },
+            charts: {
+                v: [{label:'物块', color:'#818cf8', fn:t=>st(t).v}, {label:'皮带', color:'#f59e0b', fn:()=>p.vB}],
+                x: [{label:'物块', color:'#818cf8', fn:t=>st(t).x}, {label:'皮带', color:'#f59e0b', fn:t=>p.vB*t}],
+                vShadeBetween: [0, 1, 0, t1],
+            },
+            forces: t => st(t).ph === 0
+                ? [{lab:'mg', ang:270, mag:G, col:'#94a3b8'}, {lab:'N', ang:90, mag:G, col:'#38bdf8'}, {lab:'f (向前)', ang:0, mag:p.mu*G, col:'#f472b6'}]
+                : [{lab:'mg', ang:270, mag:G, col:'#94a3b8'}, {lab:'N', ang:90, mag:G, col:'#38bdf8'}],
+            readouts: t => { const s = st(t); return [
+                ['t', fmt(t)+' s'], ['物块 x', fmt(s.x)+' m'], ['物块 v', fmt(s.v)+' m/s'],
+                ['皮带位移', fmt(p.vB*t)+' m'], ['相对滑动 Δs', fmt(Math.min(t,t1)*p.vB - st(Math.min(t,t1)).x)+' m'],
+                ['阶段', s.ph? '共速匀速' : '滑动摩擦加速']]; },
+            steps: [
+                ['受力分析（刚放上）', `物块速度 $0 <$ 皮带速度 → 物块相对皮带<b>向后</b>滑动，滑动摩擦力<b>向前</b>：
+                  $$a = \\mu g = ${fmt(p.mu)} \\times 10 = \\mathbf{${fmt(a)}\\ \\text{m/s}^2}$$`, [0, .4*t1]],
+                ['(2) 共速时间', `匀加速追上皮带速度：
+                  $$t_1 = \\frac{v}{\\mu g} = \\mathbf{${fmt(t1)}\\ \\text{s}}$$
+                  此间物块位移 $x_1 = \\frac{v^2}{2\\mu g} = ${fmt(x1)}$ m，皮带位移 $v t_1 = ${fmt(p.vB*t1)}$ m。`, [.4*t1, t1]],
+                ['共速之后', `水平带上共速后无相对滑动趋势 → 摩擦力变为 <b>0</b>，物块随带匀速。<br>（若是倾斜带，此处需重新判断静摩擦！）`, [t1, t1+(tMax-t1)*.5]],
+                ['(3) 划痕长度', `划痕 = 相对位移 = 皮带位移 − 物块位移：
+                  $$\\Delta s = v t_1 - \\frac{v^2}{2\\mu g} = \\frac{v^2}{2\\mu g} = \\mathbf{${fmt(ds)}\\ \\text{m}}$$
+                  v–t 图中两线夹的三角形面积（左下图阴影）正是 $\\Delta s$。`, [t1+(tMax-t1)*.5, Infinity]],
+            ],
+            answers: `a = ${fmt(a)} m/s²　t₁ = ${fmt(t1)} s　Δs = ${fmt(ds)} m`,
+        };
+    },
+},
+
+/* ---------- 2. 追及相遇 ---------- */
+chase: {
+    title: '匀速追匀加速·追及相遇',
+    statement: p => `甲、乙两车同时同地同向出发：甲以 $v = ${fmt(p.v1)}\\ \\text{m/s}$ 匀速行驶，乙由静止以 $a = ${fmt(p.a)}\\ \\text{m/s}^2$ 匀加速追赶。求：<br>(1) 两车间距最大的时刻与最大间距；(2) 乙追上甲的时间与位置。`,
+    params: [
+        { key:'v1', label:'甲车速度 v', min:6, max:20, step:1, def:12, unit:'m/s' },
+        { key:'a', label:'乙车加速度 a', min:1, max:4, step:0.25, def:2, unit:'m/s²' },
+    ],
+    build(p) {
+        const tS = p.v1/p.a, gapMax = p.v1*p.v1/(2*p.a);
+        const tM = 2*p.v1/p.a, xM = p.v1*tM;
+        const tMax = tM*1.04;
+        const xA = t=>p.v1*t, xB = t=>.5*p.a*t*t;
+        return {
+            tMax, phases: [{t0:0,t1:tS,label:'甲快·差距拉大'},{t0:tS,t1:tM,label:'乙快·差距缩小'},{t0:tM,t1:tMax,label:'追上!'}],
+            state: t => ({ x: xA(t), v: p.v1, ph: t<tS?0:(t<tM?1:2) }),
+            scene: { kind:'chase', L: xM*1.08, cars: [
+                { lab:'甲', col:'#fb923c', x:xA, v:()=>p.v1 },
+                { lab:'乙', col:'#38bdf8', x:xB, v:t=>p.a*t } ],
+                meetX: xM, gapMaxT: tS },
+            charts: {
+                v: [{label:'甲', color:'#fb923c', fn:()=>p.v1}, {label:'乙', color:'#38bdf8', fn:t=>p.a*t}],
+                x: [{label:'甲', color:'#fb923c', fn:xA}, {label:'乙', color:'#38bdf8', fn:xB}],
+                vShadeBetween: [0, 1, 0, tS],
+            },
+            readouts: t => [['t', fmt(t)+' s'], ['x甲', fmt(xA(t),1)+' m'], ['x乙', fmt(xB(t),1)+' m'],
+                ['间距 Δx', fmt(Math.max(xA(t)-xB(t),0),1)+' m'], ['v甲', fmt(p.v1)+' m/s'], ['v乙', fmt(p.a*t,1)+' m/s']],
+            steps: [
+                ['分析追及过程', `同时同地出发。开始时 $v_甲 > v_乙$，间距<b>拉大</b>；乙速度超过甲后，间距<b>缩小</b>。分界点正是<b>速度相等</b>时。`, [0, .55*tS]],
+                ['(1) 最大间距', `令 $v_乙 = at^* = v$，得 $t^* = \\dfrac{v}{a} = ${fmt(tS)}$ s。
+                  $$\\Delta x_{max} = v t^* - \\tfrac12 a t^{*2} = \\frac{v^2}{2a} = \\mathbf{${fmt(gapMax)}\\ \\text{m}}$$`, [.55*tS, 1.15*tS]],
+                ['(2) 相遇条件', `位移相等：$v t = \\tfrac12 a t^2$
+                  $$t_{遇} = \\frac{2v}{a} = \\mathbf{${fmt(tM)}\\ \\text{s}}\\qquad x = v\\,t_{遇} = \\mathbf{${fmt(xM)}\\ \\text{m}}$$
+                  恰为等速时刻的 <b>2 倍</b>（v–t 图对称性）。`, [1.15*tS, .99*tM]],
+                ['图象法验证', `v–t 图上，两线交点前的阴影面积 = 最大间距 ${fmt(gapMax)} m；交点后乙多走的面积把它填平时即相遇。`, [.99*tM, Infinity]],
+            ],
+            answers: `t* = ${fmt(tS)} s，Δx_max = ${fmt(gapMax)} m　·　t遇 = ${fmt(tM)} s，x = ${fmt(xM)} m`,
+        };
+    },
+},
+
+/* ---------- 3. 斜面冲上滑回 ---------- */
+incline: {
+    title: '斜面上冲·能否返回',
+    statement: p => `物块（$m=1$ kg）以 $v_0 = ${fmt(p.v0)}\\ \\text{m/s}$ 从底端冲上倾角 $\\theta = ${p.th}^\\circ$ 的斜面，动摩擦因数 $\\mu = ${fmt(p.mu)}$（$g=10\\ \\text{m/s}^2$）。求：<br>(1) 上滑加速度与最远距离 $d$；(2) 判断能否滑回，若能，求回到底端的速度。`,
+    params: [
+        { key:'v0', label:'初速度 v₀', min:4, max:12, step:1, def:8, unit:'m/s' },
+        { key:'th', label:'倾角 θ', min:20, max:50, step:1, def:37, unit:'°' },
+        { key:'mu', label:'动摩擦因数 μ', min:0, max:0.5, step:0.05, def:0.25, unit:'' },
+    ],
+    build(p) {
+        const [sn, cs] = sincos(p.th);
+        const a1 = G*(sn + p.mu*cs), tUp = p.v0/a1, d = p.v0*p.v0/(2*a1);
+        const stays = p.mu >= sn/cs - 1e-9;
+        const a2 = G*(sn - p.mu*cs), tDown = stays? 0 : Math.sqrt(2*d/a2);
+        const vRet = stays? 0 : a2*tDown;
+        const tMax = stays? tUp + 1.4 : tUp + tDown;
+        const st = t => {
+            if (t < tUp) return { s: p.v0*t - .5*a1*t*t, v: p.v0 - a1*t, ph: 0 };
+            if (stays)   return { s: d, v: 0, ph: 1 };
+            const tau = Math.min(t - tUp, tDown);
+            return { s: Math.max(d - .5*a2*tau*tau, 0), v: -a2*tau, ph: 1 };
+        };
+        const phases = stays
+            ? [{t0:0,t1:tUp,label:'上滑·匀减速'},{t0:tUp,t1:tMax,label:'静止在最高点'}]
+            : [{t0:0,t1:tUp,label:'上滑·匀减速 a₁'},{t0:tUp,t1:tMax,label:'下滑·匀加速 a₂'}];
+        return {
+            tMax, phases, state: st,
+            scene: { kind:'incline', th: p.th, D: Math.max(d*1.25, 5), d },
+            charts: {
+                v: [{label:'沿斜面 v（上正）', color:'#818cf8', fn:t=>st(t).v}],
+                x: [{label:'沿斜面位移 s', color:'#818cf8', fn:t=>st(t).s}],
+            },
+            forces: t => { const ph = st(t).ph;
+                const base = [{lab:'mg', ang:270, mag:G, col:'#94a3b8'}, {lab:'N', ang:90+p.th, mag:G*cs, col:'#38bdf8'}];
+                if (ph===0) base.push({lab:'f (沿面向下)', ang:180+p.th, mag:p.mu*G*cs, col:'#f472b6'});
+                else if (!stays) base.push({lab:'f (沿面向上)', ang:p.th, mag:p.mu*G*cs, col:'#f472b6'});
+                else base.push({lab:'f 静摩擦', ang:p.th, mag:G*sn, col:'#f472b6'});
+                return base; },
+            energy: t => { const s = st(t);
+                const path = t < tUp ? s.s : d + (d - s.s);
+                return { E0: .5*p.v0*p.v0, ke: .5*s.v*s.v, pe: G*s.s*sn, q: p.mu*G*cs*path }; },
+            readouts: t => { const s = st(t); return [
+                ['t', fmt(t)+' s'], ['沿斜面 s', fmt(s.s)+' m'], ['v (沿面·上正)', fmt(s.v)+' m/s'],
+                ['阶段', s.ph? (stays?'静止':'下滑') : '上滑']]; },
+            steps: (() => {
+                const arr = [
+                ['上滑受力与 a₁', `上滑时摩擦力沿斜面<b>向下</b>（与 $mg\\sin\\theta$ 同向）：
+                  $$a_1 = g(\\sin\\theta + \\mu\\cos\\theta) = \\mathbf{${fmt(a1)}\\ \\text{m/s}^2}$$`, [0, .55*tUp]],
+                ['(1) 最远距离', `$$t_{up} = \\frac{v_0}{a_1} = ${fmt(tUp)}\\ \\text{s}\\qquad d = \\frac{v_0^2}{2a_1} = \\mathbf{${fmt(d)}\\ \\text{m}}$$`, [.55*tUp, .98*tUp]],
+                ['(2) 能否滑回？', `最高点比较重力分量与最大静摩擦：$\\tan\\theta ${stays?'\\le':'>'} \\mu$（$${fmt(sn/cs)}$ ${stays?'≤':'>'} $${fmt(p.mu)}$）→ <b>${stays?'静止在最高点，不能滑回':'能滑回'}</b>。`, [.98*tUp, stays? Infinity : tUp + .3*tDown]],
+                ];
+                if (!stays) arr.push(
+                ['下滑：加速度变小', `下滑时摩擦力反转<b>向上</b>：
+                  $$a_2 = g(\\sin\\theta - \\mu\\cos\\theta) = \\mathbf{${fmt(a2)}\\ \\text{m/s}^2} < a_1$$
+                  回底端 $v = \\sqrt{2a_2 d} = \\mathbf{${fmt(vRet)}\\ \\text{m/s}} < v_0$，下滑更慢、用时更长（v–t 图斜率不对称）。`, [tUp + .3*tDown, tUp + .85*tDown]],
+                ['能量去向', `损失动能全部转为摩擦热：
+                  $$Q = \\mu m g\\cos\\theta \\cdot 2d = ${fmt(p.mu*G*cs*2*d)}\\ \\text{J} = \\tfrac12 v_0^2 - \\tfrac12 v^2\\ ✓$$`, [tUp + .85*tDown, Infinity]]);
+                return arr;
+            })(),
+            answers: stays
+                ? `a₁ = ${fmt(a1)} m/s²，d = ${fmt(d)} m　·　tanθ ≤ μ，停在最高点`
+                : `a₁ = ${fmt(a1)} m/s²，d = ${fmt(d)} m　·　a₂ = ${fmt(a2)} m/s²，返回速度 ${fmt(vRet)} m/s`,
+        };
+    },
+},
+};
+
+/* ================================================================
+   引擎（对所有题型一致）
+================================================================ */
+const S = { prob:'belt', t:0, playing:false, speed:1, ended:false, scrubbing:false, params:{} };
+let M = null;   // 当前 model
+
+function currentSpec(){ return PROBLEMS[S.prob]; }
+
+function rebuild(rebuildSolution = true) {
+    M = currentSpec().build(S.params);
+    S.t = Math.min(S.t, M.tMax);
+    S.ended = S.t >= M.tMax - 1e-9;
+    $('scrub').max = M.tMax;
+    // 阶段分界刻度
+    $('phase-ticks').innerHTML = M.phases.slice(1).map(ph =>
+        `<div class="phase-tick" style="left:${ph.t0/M.tMax*100}%"></div>`).join('');
+    $('force-block').classList.toggle('hidden', !M.forces);
+    $('energy-block').classList.toggle('hidden', !M.energy);
+    if (rebuildSolution) { buildProblem(); buildSolution(); }
+}
+
+function switchProblem(id) {
+    S.prob = id; S.t = 0; S.ended = false; S.params = {};
+    currentSpec().params.forEach(p => S.params[p.key] = p.def);
+    document.querySelectorAll('.prob-tab').forEach(b => b.classList.toggle('active', b.dataset.p === id));
+    buildParams();
+    rebuild();
+    setPlaying(false);
+    setTimeout(() => setPlaying(true), 500);
+}
+
+/* ---------- 左栏渲染 ---------- */
+function buildProblem() {
+    $('prob-body').innerHTML = `<div class="font-bold text-slate-800 mb-1">${currentSpec().title}</div>
+        <p>${currentSpec().statement(S.params)}</p>`;
+    renderKatex($('prob-body'));
+}
+function buildParams() {
+    $('params').innerHTML = currentSpec().params.map(p => `
+        <div>
+            <div class="flex justify-between items-center mb-1.5">
+                <label class="text-sm font-semibold text-slate-600">${p.label}</label>
+                <span id="pv-${p.key}" class="bg-blue-50 text-blue-600 px-2.5 py-0.5 rounded-md text-xs font-mono font-bold border border-blue-100">${fmt(S.params[p.key] ?? p.def)} ${p.unit}</span>
+            </div>
+            <input type="range" data-k="${p.key}" min="${p.min}" max="${p.max}" step="${p.step}" value="${S.params[p.key] ?? p.def}"
+                class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+        </div>`).join('');
+    $('params').querySelectorAll('input').forEach(inp => inp.addEventListener('input', e => {
+        const spec = currentSpec().params.find(q => q.key === e.target.dataset.k);
+        S.params[spec.key] = +e.target.value;
+        $('pv-'+spec.key).textContent = fmt(+e.target.value) + ' ' + spec.unit;
+        rebuild(false); debouncedSolution();
+    }));
+}
+let solTimer = null;
+const debouncedSolution = () => { clearTimeout(solTimer); solTimer = setTimeout(() => { buildProblem(); buildSolution(); }, 160); };
+
+function buildSolution() {
+    $('solution-body').innerHTML = M.steps.map(([title, body], i) => `
+        <div class="sol-step rounded-xl border border-slate-200 p-3.5" data-step="${i}">
+            <div class="flex items-center gap-2 mb-1">
+                <span class="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 text-[11px] font-bold flex items-center justify-center flex-shrink-0">${i+1}</span>
+                <span class="font-bold text-sm text-slate-800">${title}</span>
+            </div>
+            <div class="text-[13px] text-slate-600 leading-relaxed">${body}</div>
+        </div>`).join('') + `
+        <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-3.5 text-sm">
+            <div class="font-bold text-emerald-700 mb-1">✓ 答案</div>
+            <div class="font-mono text-[13px] text-emerald-800">${M.answers}</div>
+        </div>`;
+    renderKatex($('solution-body'));
+    document.querySelectorAll('.sol-step').forEach(el => el.addEventListener('click', () => {
+        const [a, b] = M.steps[+el.dataset.step][2];
+        S.t = Math.min(isFinite(b) ? (a+b)/2 : a + .2, M.tMax); S.ended = false;
+    }));
+    curStep = -1;
+}
+function renderKatex(el) {
+    if (window.renderMathInElement) renderMathInElement(el, {
+        delimiters: [{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}], throwOnError: false });
+}
+let curStep = -1;
+function updateStepHighlight() {
+    let idx = M.steps.length - 1;
+    for (let i = 0; i < M.steps.length; i++) { const [a,b] = M.steps[i][2]; if (S.t >= a && S.t < b) { idx = i; break; } }
+    if (idx === curStep) return;
+    curStep = idx;
+    document.querySelectorAll('.sol-step').forEach(el => el.classList.toggle('active', +el.dataset.step === idx));
+}
+
+/* ---------- 画布 ---------- */
+const cv = $('sim-canvas'), ctx = cv.getContext('2d');
+const cvV = $('chart-v'), ctxV = cvV.getContext('2d');
+const cvX = $('chart-x'), ctxX = cvX.getContext('2d');
+function fit(c) { const dpr = devicePixelRatio||1, r = c.getBoundingClientRect();
+    if (c.width !== Math.round(r.width*dpr) || c.height !== Math.round(r.height*dpr)) { c.width = Math.round(r.width*dpr); c.height = Math.round(r.height*dpr); }
+    return [r.width, r.height, dpr]; }
+
+function arrow(g, x1, y1, x2, y2, color, lw, label) {
+    const dx = x2-x1, dy = y2-y1, L = Math.hypot(dx,dy); if (L < 6) return;
+    g.strokeStyle = color; g.fillStyle = color; g.lineWidth = lw;
+    g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.stroke();
+    const a = Math.atan2(dy,dx), hs = Math.min(9, L*.45);
+    g.beginPath(); g.moveTo(x2,y2);
+    g.lineTo(x2-hs*Math.cos(a-.42), y2-hs*Math.sin(a-.42));
+    g.lineTo(x2-hs*Math.cos(a+.42), y2-hs*Math.sin(a+.42)); g.closePath(); g.fill();
+    if (label) { g.font = 'bold 11px ui-monospace,monospace';
+        g.fillText(label, x2 + 6*Math.cos(a) + 2, y2 + 6*Math.sin(a) - 2); }
+}
+
+function drawScene() {
+    const [W, H, dpr] = fit(cv);
+    ctx.save(); ctx.scale(dpr, dpr);
+    ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, W, H);
+    const sc = M.scene, st = M.state(S.t);
+
+    if (sc.kind === 'belt' || sc.kind === 'chase') {
+        const ML = 40, MR = 24;
+        const pxm = (W - ML - MR) / sc.L;
+        const gy = H * .62;
+        // 地面/带基准线 + 网格刻度
+        ctx.strokeStyle = '#334155'; ctx.lineWidth = 1; ctx.fillStyle = '#64748b';
+        ctx.font = '10px ui-monospace,monospace'; ctx.textAlign = 'center';
+        const gs = [1,2,5,10,20,50,100].find(g => g*pxm >= 46) || 100;
+        for (let x = 0; x <= sc.L; x += gs) {
+            ctx.beginPath(); ctx.moveTo(ML+x*pxm, gy); ctx.lineTo(ML+x*pxm, gy+6); ctx.stroke();
+            ctx.fillText(x+'', ML+x*pxm, gy+18);
+        }
+        ctx.fillText('单位: m', W-40, H-10);
+
+        if (sc.kind === 'belt') {
+            // 传送带：两滚轮 + 移动条纹
+            const bh = 14, by = gy - bh;
+            ctx.fillStyle = '#1e293b'; ctx.fillRect(ML, by, sc.L*pxm, bh);
+            ctx.strokeStyle = '#475569'; ctx.strokeRect(ML, by, sc.L*pxm, bh);
+            const off = (sc.beltX(S.t) * pxm) % 26;
+            ctx.strokeStyle = '#64748b'; ctx.lineWidth = 2;
+            ctx.save(); ctx.beginPath(); ctx.rect(ML, by, sc.L*pxm, bh); ctx.clip();
+            for (let x = -26; x < sc.L*pxm + 26; x += 26) {
+                ctx.beginPath(); ctx.moveTo(ML + x + off, by + bh); ctx.lineTo(ML + x + off + 8, by); ctx.stroke();
+            }
+            ctx.restore();
+            [ML, ML + sc.L*pxm].forEach(rx => { ctx.fillStyle = '#475569';
+                ctx.beginPath(); ctx.arc(rx, by + bh/2, bh/2 + 3, 0, 7); ctx.fill(); });
+            // 划痕（相对滑动量，画在物块后方）
+            const scr = sc.scratch(S.t);
+            if (scr > 0.02) { ctx.strokeStyle = '#f87171'; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.moveTo(ML + (st.x - 0)*pxm - scr*pxm, by - 2); ctx.lineTo(ML + st.x*pxm, by - 2); ctx.stroke();
+                ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px ui-monospace,monospace';
+                ctx.fillText(`划痕 Δs = ${fmt(scr)} m`, ML + st.x*pxm - scr*pxm/2, by - 26); }
+            // 物块
+            const bx = ML + st.x*pxm, bw = 30;
+            ctx.fillStyle = '#818cf8'; ctx.strokeStyle = '#c7d2fe';
+            ctx.beginPath(); ctx.roundRect(bx - bw/2, by - 26, bw, 24, 4); ctx.fill(); ctx.stroke();
+            drawForces(bx, by - 14);
+            // 皮带速度箭头（放在带体下方远处，避开 mg 矢量标签）
+            arrow(ctx, ML + 8, by + bh + 52, ML + 54, by + bh + 52, '#f59e0b', 2, `v带 = ${fmt(sc.beltX(1))} m/s`);
+        } else {
+            // 追及：两车
+            ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(ML-8, gy); ctx.lineTo(W-8, gy); ctx.stroke();
+            const y1 = gy - 16, y2 = gy - 46;
+            sc.cars.forEach((c, i) => {
+                const x = ML + c.x(S.t)*pxm, y = i ? y2 : y1;
+                ctx.fillStyle = c.col;
+                ctx.beginPath(); ctx.roundRect(x - 17, y - 11, 34, 22, 5); ctx.fill();
+                ctx.fillStyle = '#0f172a'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+                ctx.fillText(c.lab, x, y + 4);
+                arrow(ctx, x + 19, y, x + 19 + c.v(S.t)*3.2, y, c.col, 2, fmt(c.v(S.t),1));
+            });
+            // 间距括线
+            const xa = ML + sc.cars[0].x(S.t)*pxm, xb = ML + sc.cars[1].x(S.t)*pxm;
+            if (xa - xb > 4) { ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 1.5; ctx.setLineDash([4,3]);
+                ctx.beginPath(); ctx.moveTo(xb, gy + 26); ctx.lineTo(xa, gy + 26); ctx.stroke(); ctx.setLineDash([]);
+                ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 11px ui-monospace,monospace'; ctx.textAlign = 'center';
+                ctx.fillText(`Δx = ${fmt(xa/pxm - xb/pxm, 1)} m` + (Math.abs(S.t - sc.gapMaxT) < .18 ? '  ◀ 最大!' : ''), (xa+xb)/2, gy + 42); }
+            // 相遇点旗
+            const mx = ML + sc.meetX*pxm;
+            ctx.strokeStyle = '#f87171'; ctx.beginPath(); ctx.moveTo(mx, gy); ctx.lineTo(mx, gy - 58); ctx.stroke();
+            ctx.fillStyle = '#f87171'; ctx.beginPath();
+            ctx.moveTo(mx, gy-58); ctx.lineTo(mx+30, gy-51); ctx.lineTo(mx, gy-44); ctx.closePath(); ctx.fill();
+            ctx.font = 'bold 10px ui-monospace,monospace'; ctx.textAlign = 'left';
+            ctx.fillText(` 相遇 ${fmt(sc.meetX)} m`, mx + 2, gy - 64);
+        }
+    }
+    else if (sc.kind === 'incline') {
+        const th = sc.th * Math.PI/180;
+        const baseX = 60, baseY = H - 46;
+        const pxm = Math.min((W - 140) / (sc.D * Math.cos(th)), (H - 120) / (sc.D * Math.sin(th)));
+        const topX = baseX + sc.D*Math.cos(th)*pxm, topY = baseY - sc.D*Math.sin(th)*pxm;
+        // 斜面
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.lineTo(topX, topY); ctx.lineTo(topX, baseY); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#475569'; ctx.stroke();
+        ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(baseX - 30, baseY); ctx.lineTo(W - 20, baseY); ctx.stroke();
+        // 角度标注
+        ctx.strokeStyle = '#64748b'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(baseX, baseY, 34, -th, 0); ctx.stroke();
+        ctx.fillStyle = '#94a3b8'; ctx.font = '11px ui-monospace,monospace'; ctx.textAlign = 'left';
+        ctx.fillText(`θ=${sc.th}°`, baseX + 38, baseY - 8);
+        // 最远点标记
+        const dX = baseX + sc.d*Math.cos(th)*pxm, dY = baseY - sc.d*Math.sin(th)*pxm;
+        ctx.strokeStyle = '#f59e0b88'; ctx.setLineDash([3,4]);
+        ctx.beginPath(); ctx.moveTo(dX, dY); ctx.lineTo(dX, baseY); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 11px ui-monospace,monospace';
+        ctx.fillText(`d = ${fmt(sc.d)} m`, dX + 6, dY - 8);
+        // 物块（沿斜面）
+        const s = st.s, bx = baseX + s*Math.cos(th)*pxm, by = baseY - s*Math.sin(th)*pxm;
+        const bw = 28;
+        ctx.save(); ctx.translate(bx, by); ctx.rotate(-th);
+        ctx.fillStyle = '#818cf8'; ctx.strokeStyle = '#c7d2fe';
+        ctx.beginPath(); ctx.roundRect(-bw/2, -bw + 2, bw, bw - 4, 4); ctx.fill(); ctx.stroke();
+        ctx.restore();
+        drawForces(bx, by - 12);
+        // 速度矢量
+        if (Math.abs(st.v) > .05) {
+            const vs = 5;
+            arrow(ctx, bx, by - 12, bx + st.v*Math.cos(th)*vs, by - 12 - st.v*Math.sin(th)*vs, '#fb923c', 2.5, `v=${fmt(Math.abs(st.v),1)}`);
+        }
+    }
+
+    // HUD：时间 + 阶段
+    const phase = M.phases.find(p => S.t >= p.t0 && S.t <= p.t1 + 1e-9) || M.phases[M.phases.length-1];
+    ctx.font = 'bold 13px ui-monospace,monospace'; ctx.textAlign = 'left';
+    ctx.fillStyle = '#e2e8f0'; ctx.fillText(`t = ${S.t.toFixed(2)} s`, 14, 22);
+    ctx.fillStyle = '#a5b4fc'; ctx.fillText(phase.label, 14, 40);
+    if (S.ended) { ctx.fillStyle = '#fbbf24'; ctx.fillText('过程结束 · ⟲ 重播', 14, 58); }
+    ctx.restore();
+
+    function drawForces(bx, by) {
+        if (!M.forces) return;
+        const fs = 4.5;
+        M.forces(S.t).forEach(f => {
+            const a = f.ang * Math.PI/180;
+            arrow(ctx, bx, by, bx + Math.cos(a)*f.mag*fs, by - Math.sin(a)*f.mag*fs, f.col, 2, f.lab);
+        });
+    }
+}
+
+/* ---------- 通用图表 ---------- */
+function drawChart(c, g, series, title, shade) {
+    const [W, H, dpr] = fit(c);
+    g.save(); g.scale(dpr, dpr);
+    g.fillStyle = '#0f172a'; g.fillRect(0, 0, W, H);
+    const ML = 34, MR = 8, MT = 16, MB = 14;
+    const N = 160;
+    let ymin = 0, ymax = -Infinity;
+    const data = series.map(s => { const pts = [];
+        for (let i = 0; i <= N; i++) { const t = M.tMax*i/N, y = s.fn(t);
+            pts.push([t, y]); ymin = Math.min(ymin, y); ymax = Math.max(ymax, y); }
+        return pts; });
+    if (ymax <= ymin) ymax = ymin + 1;
+    const pad = (ymax - ymin) * .12; ymax += pad; if (ymin < 0) ymin -= pad;
+    const TX = t => ML + t/M.tMax*(W-ML-MR), TY = y => MT + (1-(y-ymin)/(ymax-ymin))*(H-MT-MB);
+    // 零线 + 相位分界
+    g.strokeStyle = '#1e293b'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(ML, TY(0)); g.lineTo(W-MR, TY(0)); g.stroke();
+    g.beginPath(); g.moveTo(ML, MT); g.lineTo(ML, H-MB); g.stroke();
+    M.phases.slice(1).forEach(p => { g.strokeStyle = '#f59e0b44'; g.setLineDash([3,4]);
+        g.beginPath(); g.moveTo(TX(p.t0), MT); g.lineTo(TX(p.t0), H-MB); g.stroke(); g.setLineDash([]); });
+    // 阴影（两曲线之间）
+    if (shade) { const [i0, i1, ta, tb] = shade;
+        g.fillStyle = 'rgba(245,183,74,.18)'; g.beginPath();
+        data[i0].filter(p => p[0] >= ta && p[0] <= tb).forEach((p, k) => k ? g.lineTo(TX(p[0]), TY(p[1])) : g.moveTo(TX(p[0]), TY(p[1])));
+        data[i1].filter(p => p[0] >= ta && p[0] <= tb).reverse().forEach(p => g.lineTo(TX(p[0]), TY(p[1])));
+        g.closePath(); g.fill(); }
+    // 曲线
+    series.forEach((s, i) => { g.strokeStyle = s.color; g.lineWidth = 1.8; g.beginPath();
+        data[i].forEach((p, k) => k ? g.lineTo(TX(p[0]), TY(p[1])) : g.moveTo(TX(p[0]), TY(p[1]))); g.stroke(); });
+    // 游标
+    const tx = TX(S.t);
+    g.strokeStyle = '#818cf8'; g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(tx, MT); g.lineTo(tx, H-MB); g.stroke();
+    series.forEach(s => { g.fillStyle = s.color;
+        g.beginPath(); g.arc(tx, TY(s.fn(S.t)), 3.2, 0, 7); g.fill(); });
+    // 标题图例
+    g.font = 'bold 10px ui-monospace,monospace'; g.fillStyle = '#94a3b8'; g.fillText(title, ML + 4, 11);
+    let lx = ML + 40;
+    series.forEach(s => { g.fillStyle = s.color; g.fillText('— ' + s.label, lx, 11); lx += g.measureText('— '+s.label).width + 14; });
+    g.restore();
+}
+
+/* ---------- 读数/受力/能量 ---------- */
+function syncUI() {
+    $('readouts').innerHTML = M.readouts(S.t).map(([k, v]) =>
+        `<div class="flex justify-between"><span class="text-slate-400">${k}</span><span>${v}</span></div>`).join('');
+    if (M.forces) $('force-table').innerHTML = M.forces(S.t).map(f =>
+        `<div class="flex justify-between"><span style="color:${f.col}">→ ${f.lab}</span><span>${fmt(f.mag,1)} N</span></div>`).join('');
+    if (M.energy) { const e = M.energy(S.t);
+        $('e0-label').textContent = `E₀ = ${fmt(e.E0)} J`;
+        $('bar-ke').style.width = (e.ke/e.E0*100) + '%';
+        $('bar-pe').style.width = (e.pe/e.E0*100) + '%';
+        $('bar-q').style.width = (e.q/e.E0*100) + '%';
+        $('v-ke').textContent = fmt(e.ke,1)+' J'; $('v-pe').textContent = fmt(e.pe,1)+' J'; $('v-q').textContent = fmt(e.q,1)+' J'; }
+    if (!S.scrubbing) $('scrub').value = S.t;
+    $('t-label').textContent = `${S.t.toFixed(2)} / ${M.tMax.toFixed(2)} s`;
+    updateStepHighlight();
+}
+
+/* ---------- 时间控制 ---------- */
+function setPlaying(p) { S.playing = p;
+    $('btn-play').innerHTML = p ? '❚❚ 暂停' : (S.ended ? '↻ 重播' : '▶ 播放'); }
+$('btn-play').addEventListener('click', () => { if (S.ended) { S.t = 0; S.ended = false; } setPlaying(!S.playing); });
+$('btn-reset').addEventListener('click', () => { S.t = 0; S.ended = false; setPlaying(false); });
+const frameStep = d => { setPlaying(false); S.ended = false; S.t = Math.max(0, Math.min(M.tMax, S.t + d/60)); };
+$('btn-back').addEventListener('click', () => frameStep(-1));
+$('btn-fwd').addEventListener('click', () => frameStep(1));
+document.querySelectorAll('.spd-btn').forEach(b => b.addEventListener('click', () => {
+    S.speed = +b.dataset.spd;
+    document.querySelectorAll('.spd-btn').forEach(x => x.classList.toggle('active', x === b)); }));
+const scrub = $('scrub');
+scrub.addEventListener('pointerdown', () => S.scrubbing = true);
+window.addEventListener('pointerup', () => S.scrubbing = false);
+scrub.addEventListener('input', () => { S.t = +scrub.value; S.ended = S.t >= M.tMax - 1e-9; });
+document.querySelectorAll('.prob-tab').forEach(b => b.addEventListener('click', () => switchProblem(b.dataset.p)));
+window.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' && e.target.type !== 'range') return;
+    if (e.code === 'Space') { e.preventDefault(); $('btn-play').click(); }
+    else if (e.code === 'ArrowLeft') { e.preventDefault(); frameStep(-1); }
+    else if (e.code === 'ArrowRight') { e.preventDefault(); frameStep(1); }
+});
+
+/* ---------- 主循环 ---------- */
+let last = performance.now();
+function loop(now) {
+    const dt = Math.max(0, Math.min((now - last)/1000, .05)); last = now;
+    if (S.playing) { S.t += dt * S.speed;
+        if (S.t >= M.tMax) { S.t = M.tMax; S.ended = true; setPlaying(false); } }
+    syncUI(); drawScene();
+    drawChart(cvV, ctxV, M.charts.v, 'v–t', M.charts.vShadeBetween);
+    drawChart(cvX, ctxX, M.charts.x, 'x–t', null);
+    requestAnimationFrame(loop);
+}
+
+/* ---------- 启动 ---------- */
+window.DBG = { S, state: () => M, PROBLEMS, switchProblem, setPlaying, step: ms => loop_once(ms) };
+function loop_once(ms) { const now = ms ?? performance.now();
+    const dt = Math.max(0, Math.min((now - last)/1000, .05)); last = now;
+    if (S.playing) { S.t += dt * S.speed;
+        if (S.t >= M.tMax) { S.t = M.tMax; S.ended = true; setPlaying(false); } }
+    syncUI(); drawScene();
+    drawChart(cvV, ctxV, M.charts.v, 'v–t', M.charts.vShadeBetween);
+    drawChart(cvX, ctxX, M.charts.x, 'x–t', null); }
+
+switchProblem('belt');
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "kind": "edu-viz-patch",
+  "patches": [
+    { "figure": "fig-crisis", "ops": [] },
+  ]
+}

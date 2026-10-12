@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>__PAGE_TITLE__</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+<script>__VIZ_JS__</script>
+<style>
+  :root{
+    --paper:#faf7f2; --card:#ffffff; --ink:#1f1b16; --ink2:#4a423a; --dim:#7d756a;
+    --accent:#b45309; --accent2:#6d28d9; --rule:#e7e0d5; --warn-bg:#fdf6e8; --note-bg:#f4f2fb;
+    --serif:"Source Han Serif SC","Noto Serif CJK SC","Songti SC",Georgia,"SimSun",serif;
+    --sans:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  html{scroll-behavior:smooth;}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);}
+  .prose{font-family:var(--serif);}
+  .prose p{font-size:1.0625rem;line-height:2.05;margin:1.05em 0;color:var(--ink);}
+  .prose h2{font-family:var(--sans);font-size:1.2rem;font-weight:700;margin:2.4em 0 .9em;
+            padding-left:.7rem;border-left:4px solid var(--accent);line-height:1.5;}
+  .prose h3{font-family:var(--sans);font-size:1.03rem;font-weight:700;margin:1.8em 0 .6em;color:var(--ink);}
+  .lead{font-size:1.16rem;line-height:2.1;color:var(--ink2);border-left:3px solid var(--rule);
+        padding-left:1rem;margin:1.6em 0;font-family:var(--serif);}
+  .quote{font-family:var(--serif);font-size:1.05rem;line-height:2;color:var(--ink2);
+         background:var(--card);border:1px solid var(--rule);border-radius:.6rem;
+         padding:1rem 1.25rem;margin:1.5em 0;font-style:normal;}
+  .quote .cite{display:block;margin-top:.6rem;font-size:.8rem;color:var(--dim);font-family:var(--sans);font-style:normal;}
+  .note{background:var(--note-bg);border-left:3px solid var(--accent2);border-radius:0 .5rem .5rem 0;
+        padding:.85rem 1rem;margin:1.4em 0;font-size:.93rem;line-height:1.9;color:var(--ink2);font-family:var(--sans);}
+  .warn{background:var(--warn-bg);border-left:3px solid var(--accent);border-radius:0 .5rem .5rem 0;
+        padding:.85rem 1rem;margin:1.4em 0;font-size:.93rem;line-height:1.9;color:var(--ink2);font-family:var(--sans);}
+  figure{margin:2em 0;}
+  figure .figbox{background:var(--card);border:1px solid var(--rule);border-radius:.7rem;
+                 padding:.6rem .6rem .2rem;box-shadow:0 1px 3px rgba(31,27,22,.04);}
+  figure canvas{width:100%;display:block;border-radius:.4rem;}
+  figcaption{font-family:var(--sans);font-size:.83rem;color:var(--dim);line-height:1.75;
+             margin-top:.7rem;padding:0 .2rem;}
+  figcaption b{color:var(--accent);font-weight:700;margin-right:.35rem;}
+  .table{width:100%;border-collapse:collapse;font-family:var(--sans);font-size:.86rem;margin:1.4em 0;}
+  .table th{background:#f4efe6;border:1px solid var(--rule);padding:.5rem .65rem;text-align:left;font-weight:700;}
+  .table td{border:1px solid var(--rule);padding:.5rem .65rem;color:var(--ink2);vertical-align:top;}
+  .katex{font-size:1.02em;}
+  .katex-display{overflow-x:auto;overflow-y:hidden;padding:2px 0 6px;margin:.9em 0;}
+  .steps{list-style:none;padding:0;margin:1.4em 0;counter-reset:st;}
+  .steps li{counter-increment:st;position:relative;padding-left:2.4rem;margin:.85em 0;
+            font-size:.97rem;line-height:1.95;color:var(--ink2);font-family:var(--sans);}
+  .steps li::before{content:counter(st);position:absolute;left:0;top:.15rem;width:1.6rem;height:1.6rem;
+    border-radius:50%;background:#f1ece2;color:var(--accent);font-weight:700;font-size:.78rem;
+    display:flex;align-items:center;justify-content:center;border:1px solid var(--rule);}
+  .steps li b{color:var(--ink);}
+  .toc a{display:block;padding:.45rem .6rem;border-radius:.4rem;font-size:.85rem;color:var(--ink2);
+         border-left:3px solid transparent;}
+  .toc a:hover{background:#f3eee5;}
+  .toc a.cur{background:#f1ece2;border-left-color:var(--accent);color:var(--accent);font-weight:700;}
+  .toc .num{font-family:ui-monospace,monospace;font-size:.72rem;color:var(--dim);margin-right:.5rem;}
+  .figctl{display:flex;align-items:center;gap:.5rem;padding:.45rem .3rem 0;font-family:var(--sans);}
+  .figctl button{border:1px solid var(--rule);background:#fff;border-radius:.4rem;font-size:.75rem;
+                 padding:.2rem .55rem;color:var(--ink2);cursor:pointer;}
+  .figctl button:hover{background:#f6f2ea;}
+  .figctl button:disabled{opacity:.4;cursor:default;}
+  .figctl input[type=range]{flex:1;height:4px;-webkit-appearance:none;appearance:none;background:#e2dbcf;border-radius:2px;outline:none;}
+  .figctl input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;
+                 background:var(--accent);border:2px solid #fff;box-shadow:0 1px 2px rgba(0,0,0,.2);cursor:pointer;}
+  .stepnote{font-family:var(--sans);font-size:.82rem;color:var(--accent);background:#fdf6e8;
+            border-radius:.4rem;padding:.4rem .6rem;margin-top:.5rem;min-height:1.9em;line-height:1.7;}
+  .prog{position:fixed;top:0;left:0;height:3px;background:var(--accent);z-index:50;transition:width .1s linear;}
+  .lead::first-letter{font-size:2.6em;float:left;line-height:.9;margin:.08em .12em 0 0;color:var(--accent);font-weight:700;}
+  /* ---- 共享状态层：工具条 / 草稿标记 ---- */
+  #statetools{position:fixed;right:16px;bottom:16px;z-index:60;font-family:var(--sans);}
+  #statepanel{display:none;background:#fff;border:1px solid var(--rule);border-radius:.6rem;
+              box-shadow:0 8px 28px rgba(31,27,22,.16);padding:12px;width:340px;margin-bottom:8px;}  #statepanel textarea{width:100%;height:150px;border:1px solid var(--rule);border-radius:.4rem;
+              font-family:ui-monospace,monospace;font-size:11px;padding:6px;resize:vertical;color:var(--ink2);}
+  .stbtn{border:1px solid var(--rule);background:#fff;border-radius:.45rem;font-size:12px;
+         padding:.32rem .6rem;color:var(--ink2);cursor:pointer;}
+  .stbtn:hover{background:#f6f2ea;}
+  #draftbadge{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:60;
+              background:#fdf6e8;border:1px solid #f0d9a8;color:#92400e;font-size:11px;
+              padding:.25rem .55rem;border-radius:.4rem;display:none;font-family:var(--sans);}
+  .figdirty{position:relative;}
+  .figdirty::after{content:"本地草稿";position:absolute;top:-8px;right:8px;background:#fdf6e8;
+                   border:1px solid #f0d9a8;color:#92400e;font-size:10px;padding:1px 6px;border-radius:4px;font-family:var(--sans);}
+  /* ---- 实时问答 ---- */
+  .askbtn{margin-left:.5rem;border:1px solid var(--rule);background:#fff;border-radius:.4rem;
+          font-size:.72rem;padding:.1rem .5rem;color:var(--accent);cursor:pointer;font-family:var(--sans);}
+  .askbtn:hover{background:#fdf6e8;}
+  #askpanel{position:fixed;right:16px;bottom:64px;z-index:70;width:360px;background:#fff;
+            border:1px solid var(--rule);border-radius:.7rem;box-shadow:0 12px 36px rgba(31,27,22,.2);
+            padding:12px;display:none;font-family:var(--sans);}
+  #askpanel textarea{width:100%;height:76px;border:1px solid var(--rule);border-radius:.4rem;
+                     font-size:13px;padding:6px;resize:vertical;color:var(--ink);font-family:var(--sans);}
+  #askreply{margin-top:8px;font-size:12px;line-height:1.75;color:var(--ink2);background:#f7f4ee;
+            border-radius:.4rem;padding:8px;display:none;max-height:180px;overflow:auto;}
+  .conn{position:fixed;left:50%;transform:translateX(-50%);bottom:44px;z-index:60;font-size:11px;padding:.25rem .55rem;
+        border-radius:.4rem;font-family:var(--sans);display:none;}
+  #askreply code{background:#fff;border:1px solid var(--rule);border-radius:3px;padding:0 3px;font-size:11px;}
+  .livebadge{position:absolute;top:-8px;left:8px;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;
+             font-size:10px;padding:1px 6px;border-radius:4px;font-family:var(--sans);z-index:2;}
+</style>
+</head>
+<body>
+<div class="prog" id="prog" style="width:0"></div>
+
+<header class="sticky top-0 z-40 bg-[#faf7f2]/92 backdrop-blur border-b border-[var(--rule)]">
+  <div class="max-w-[1180px] mx-auto px-5 h-13 flex items-center gap-4 py-2.5">
+    <a href="index.html" class="text-[13px] text-[var(--dim)] hover:text-[var(--accent)] whitespace-nowrap">← 目录</a>
+    <div class="flex-1 text-center text-[13px] font-semibold text-[var(--ink2)] truncate" id="top-title"></div>
+    <div class="flex items-center gap-2 whitespace-nowrap">
+      <a id="nav-prev" class="text-[13px] text-[var(--dim)] hover:text-[var(--accent)]" href="#">← 上一章</a>
+      <a id="nav-next" class="text-[13px] text-[var(--accent)] hover:underline font-semibold" href="#">下一章 →</a>
+    </div>
+  </div>
+</header>
+
+<div class="max-w-[1180px] mx-auto px-5 flex gap-10">
+  <nav class="toc hidden md:block w-[190px] shrink-0 py-8">
+    <div class="sticky top-16">
+      <div class="text-[11px] uppercase tracking-widest text-[var(--dim)] font-bold mb-2 px-2">目录</div>
+      <div id="toc"></div>
+      <div class="mt-5 pt-4 border-t border-[var(--rule)] px-2">
+        <div class="text-[11px] text-[var(--dim)] leading-relaxed" id="book-meta"></div>
+      </div>
+    </div>
+  </nav>
+  <main class="flex-1 min-w-0 py-8 max-w-[720px]">
+    <div class="mb-8">
+      <div class="text-[11px] uppercase tracking-[0.2em] text-[var(--accent)] font-bold mb-2" id="ch-num"></div>
+      <h1 class="text-[1.75rem] font-bold leading-snug mb-2" id="ch-title" style="font-family:var(--sans)"></h1>
+      <div class="text-[15px] text-[var(--dim)] leading-relaxed" id="ch-sub"></div>
+    </div>
+    <article class="prose" id="body"></article>
+    <div class="mt-14 pt-6 border-t border-[var(--rule)] flex justify-between text-[13px]" id="foot-nav"></div>
+  </main>
+</div>
+
+<!-- 共享状态层：工具条 -->
+<div id="draftbadge">本章有本地修改</div>
+<div id="statetools">
+  <div id="statepanel">
+    <div class="text-[12px] font-bold mb-2" style="color:var(--ink)">状态 / 补丁</div>
+    <div class="text-[11px] mb-2" style="color:var(--dim);line-height:1.6">
+      导出：把「你正在看什么 + 图的完整 spec」交给 AI，它就能给出针对性补丁。<br>
+      导入：粘贴补丁 JSON，立即生效并保存为本地草稿。
+    </div>
+    <textarea id="statearea" placeholder="点「导出状态」生成；或粘贴补丁 JSON 后点「应用补丁」"></textarea>
+    <div class="flex gap-2 mt-2 flex-wrap">
+      <button class="stbtn" id="btn-export">导出状态</button>
+      <button class="stbtn" id="btn-apply">应用补丁</button>
+      <button class="stbtn" id="btn-copydraft">导出草稿</button>
+      <button class="stbtn" id="btn-reset">还原</button>
+    </div>
+    <div id="statemsg" class="text-[11px] mt-2" style="color:var(--dim);min-height:1.4em"></div>
+  </div>
+  <div class="flex justify-end">
+    <button class="stbtn" id="btn-toggle" style="background:#fff;box-shadow:0 2px 10px rgba(31,27,22,.12)">
+      状态 / 交给 AI
+    </button>
+  </div>
+</div>
+
+<!-- 实时问答面板 -->
+<div id="conn" class="conn"></div>
+<div id="askpanel">
+  <div class="flex items-center justify-between mb-2">
+    <div class="text-[12px] font-bold" style="color:var(--ink)" id="askhead">问这张图</div>
+    <button class="stbtn" id="askclose" style="padding:.1rem .4rem">✕</button>
+  </div>
+  <textarea id="askinput" placeholder="例如：这一步为什么能这么推？／把第二个卡片改清楚一点"></textarea>
+  <div class="flex gap-2 mt-2 items-center">
+    <button class="stbtn" id="asksend" style="border-color:var(--accent);color:var(--accent)">发送给 AI</button>
+    <span class="text-[11px]" id="askhint" style="color:var(--dim)"></span>
+  </div>
+  <div id="askreply"></div>
+</div>
+
+<script type="application/json" id="book-data">__BOOK_DATA__</script>
+<script>
+(function(){
+  const DATA = JSON.parse(document.getElementById('book-data').textContent);
+  const BOOK = DATA.book, CH = DATA.chapter, FIG = DATA.figures || {};
+  const LS_KEY = `edu-viz-draft:${BOOK.title}:${CH.id}`;
+
+  // =====================================================================
+  // 一、补丁引擎（与 Python 侧 vizkit.apply_ops 同语义）
+  // =====================================================================
+  function splitPath(p){ return String(p).split('/').filter(s=>s!=='').map(s=>/^-?\d+$/.test(s)? +s : s); }
+  // 与 Python 侧同语义：中间段必须存在；数组下标必须在界内；对象的新键允许 set（Python dict 同）
+  // 不收紧的话，JS 里 arr[99]=v 只会撑长数组，而 Python 会 IndexError —— 同一份补丁两边结果不同。
+  function _miss(path){ throw new Error('路径不存在或数组越界：' + path); }
+  function _step(c, k, path){
+    if (c === null || c === undefined) _miss(path);
+    if (Array.isArray(c)){
+      if (typeof k !== 'number') { if (!(k in c)) _miss(path); }
+      else if (k < 0 || k >= c.length || !(k in c)) _miss(path);
+      return c[k];
+    }
+    if (typeof c !== 'object') _miss(path);          // 走穿了基本类型
+    return c[k];                                      // 对象键可为新键
+  }
+  function getAt(o, path){
+    const ps = splitPath(path); if (!ps.length) return o;
+    let c = o;
+    for (const k of ps) c = _step(c, k, path);
+    if (c === null || c === undefined) _miss(path);
+    return c;
+  }
+  function setAt(o, path, v){
+    const ps = splitPath(path); if (!ps.length) throw new Error('空路径');
+    const last = ps.pop(); let c = o;
+    for (const k of ps) c = _step(c, k, path);
+    if (Array.isArray(c)){
+      if (typeof last !== 'number' || last < 0 || last >= c.length || !(last in c)) _miss(path);
+    } else if (c === null || c === undefined || typeof c !== 'object') _miss(path);
+    c[last] = v;
+  }
+  function delAt(o, path){
+    const ps = splitPath(path); if (!ps.length) throw new Error('空路径');
+    const last = ps.pop(); let c = o;
+    for (const k of ps) c = _step(c, k, path);
+    if (c === null || c === undefined || !(last in c)) _miss(path);
+    delete c[last];
+  }
+  function applyOps(spec, ops){
+    const out = JSON.parse(JSON.stringify(spec));
+    for (const op of ops||[]){
+      const kind = op.op || 'set';
+      if (kind==='set') setAt(out, op.path, op.value);
+      else if (kind==='append') getAt(out, op.path).push(op.value);
+      else if (kind==='delete') delAt(out, op.path);
+      else throw new Error('未知操作 ' + kind);
+    }
+    return out;
+  }
+
+  // =====================================================================
+  // 二、草稿持久化（本地草稿 > overrides.json > 原始 spec）
+  // =====================================================================
+  function loadDrafts(){ try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch(e){ return {}; } }
+  function saveDrafts(d){ try { localStorage.setItem(LS_KEY, JSON.stringify(d)); } catch(e){} }
+  let DRAFTS = loadDrafts();                       // {figId: {ops:[...]}}
+  let OVERRIDES = {};                              // 来自 overrides.json（已入库的改动）
+
+  function specOf(id){
+    let sp = FIG[id];
+    if (!sp) return null;
+    const o = OVERRIDES[id];
+    if (o && o.ops) { try { sp = applyOps(sp, o.ops); } catch(e){ console.warn('overrides 应用失败', id, e); } }
+    // 叠加次序：原始 → overrides（已入库） → LIVE（AI 实时改的） → drafts（读者本地试改）
+    sp = applyLive(sp, id);
+    const d = DRAFTS[id];
+    if (d && d.ops) { try { sp = applyOps(sp, d.ops); } catch(e){ console.warn('草稿应用失败', id, e); } }
+    return sp;
+  }
+  function isDirty(id){ const d = DRAFTS[id]; return !!(d && d.ops && d.ops.length); }
+
+  async function loadOverrides(){
+    const hit = [];
+    for (const f of ['overrides.json','../overrides.json']) {
+      try {
+        const r = await fetch(f, { cache:'no-store' });
+        if (!r.ok) continue;
+        const j = await r.json();
+        const list = j.patches || (Array.isArray(j) ? j : []);
+        list.forEach(p => { if (p && p.figure && FIG[p.figure]) { OVERRIDES[p.figure] = p; hit.push(p.figure); } });
+        console.info('已载入 overrides.json：', list.length, '条');
+        break;
+      } catch(e){ /* 没有就算了 */ }
+    }
+    return hit;
+  }
+
+  // =====================================================================
+  // 三、正文块渲染
+  // =====================================================================
+  function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+  function rich(s){ return s == null ? '' : String(s); }
+
+  document.getElementById('toc').innerHTML = BOOK.chapters.map(c =>
+    `<a href="${c.file}" class="${c.id===CH.id?'cur':''}"><span class="num">${c.num}</span>${esc(c.title)}</a>`).join('');
+  document.getElementById('book-meta').innerHTML =
+    `${esc(BOOK.title)}<br><span class="text-[10px]">${esc(BOOK.author||'')}</span>`;
+
+  document.getElementById('top-title').textContent = `${BOOK.title} · ${CH.num} ${CH.title}`;
+  document.getElementById('ch-num').textContent = `第 ${CH.num} 章`;
+  document.getElementById('ch-title').textContent = CH.title;
+  document.getElementById('ch-sub').textContent = CH.subtitle || '';
+  document.title = `${CH.title} · ${BOOK.title}`;
+
+  const idx = BOOK.chapters.findIndex(c => c.id === CH.id);
+  const prev = BOOK.chapters[idx-1], next = BOOK.chapters[idx+1];
+  const setNav = (el, ch, label) => {
+    if (ch) { el.href = ch.file; el.textContent = label; }
+    else { el.classList.add('opacity-30','pointer-events-none'); }
+  };
+  setNav(document.getElementById('nav-prev'), prev, '← ' + (prev ? prev.num + ' ' + prev.title : ''));
+  setNav(document.getElementById('nav-next'), next, (next ? next.num + ' ' + next.title : '') + ' →');
+
+  let figN = 0;
+  const figNo = () => `${CH.num}.${++figN}`;
+  const html = [];
+  (CH.blocks || []).forEach(b => {
+    switch (b.type) {
+      case 'lead':  html.push(`<p class="lead">${rich(b.text)}</p>`); break;
+      case 'p':     html.push(`<p>${rich(b.text)}</p>`); break;
+      case 'h2':    html.push(`<h2>${rich(b.text)}</h2>`); break;
+      case 'h3':    html.push(`<h3>${rich(b.text)}</h3>`); break;
+      case 'quote': html.push(`<blockquote class="quote">${rich(b.text)}${b.cite?`<span class="cite">—— ${esc(b.cite)}</span>`:''}</blockquote>`); break;
+      case 'note':  html.push(`<div class="note">${rich(b.text)}</div>`); break;
+      case 'warn':  html.push(`<div class="warn">${rich(b.text)}</div>`); break;
+      case 'formula': html.push(`<div>$$${b.tex}$$</div>`); break;
+      case 'list':  html.push(`<${b.ordered?'ol':'ul'} style="font-family:var(--sans);font-size:.96rem;line-height:1.95;color:var(--ink2);padding-left:1.3rem;margin:1.2em 0;list-style:${b.ordered?'decimal':'disc'}">${b.items.map(i=>`<li style="margin:.4em 0">${rich(i)}</li>`).join('')}</${b.ordered?'ol':'ul'}>`); break;
+      case 'steps': html.push(`<ol class="steps">${b.items.map(i=>`<li><b>${esc(i.t)}</b>　${rich(i.d)}</li>`).join('')}</ol>`); break;
+      case 'table': html.push(`<table class="table"><thead><tr>${b.headers.map((h,i)=>`<th${i?' style="text-align:center"':''}>${esc(h)}</th>`).join('')}</tr></thead><tbody>${b.rows.map(r=>`<tr>${r.map((c,i)=>`<td${i?' style="text-align:center"':''}>${rich(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`); break;
+      case 'figure': {
+        const fno = figNo();
+        html.push(`<figure id="${b.id}">
+          <div class="figbox"><canvas data-fig="${b.id}" style="height:${b.height||300}px"></canvas></div>
+          <div class="figctl-slot" data-slot="${b.id}"></div>
+          <figcaption><b>图 ${fno}</b>${rich(b.caption||'')}
+            <button class="askbtn" data-ask-fig="${b.id}" data-ask-label="图 ${fno}">问这张图</button>
+          </figcaption>
+        </figure>`);
+        break;
+      }
+    }
+  });
+  document.getElementById('body').innerHTML = html.join('');
+  document.getElementById('foot-nav').innerHTML =
+    (prev?`<a href="${prev.file}" class="text-[var(--dim)] hover:text-[var(--accent)]">← ${prev.num} ${esc(prev.title)}</a>`:'<span></span>')
+    + (next?`<a href="${next.file}" class="text-[var(--accent)] font-semibold hover:underline">${next.num} ${esc(next.title)} →</a>`:'<span></span>');
+
+  // =====================================================================
+  // 四、挂载插图（可重复挂载：补丁后重新 mount）
+  // =====================================================================
+  const mounted = {};          // id -> viz
+  const liveStep = {};         // id -> 当前步（供导出状态用）
+
+  function mountFigure(id){
+    const cv = document.querySelector(`canvas[data-fig="${id}"]`);
+    if (!cv) return;
+    if (mounted[id]) { try { mounted[id].destroy(); } catch(e){} delete mounted[id]; }
+    const spec = specOf(id);
+    if (!spec) { console.warn('缺少图定义:', id); return; }
+    let viz;
+    try { viz = Viz.mount(cv, spec); }
+    catch(e){ console.error('挂载插图失败:', id, e); return; }
+    mounted[id] = viz;
+    wireSteps(id, viz, spec);
+    const fig = document.getElementById(id);
+    if (fig) fig.classList.toggle('figdirty', isDirty(id));
+  }
+
+  function wireSteps(id, viz, spec){
+    const slot = document.querySelector(`div[data-slot="${id}"]`);
+    if (!slot) return;
+    if (!spec.steps || spec.steps.length <= 1) { slot.innerHTML = ''; return; }
+    slot.innerHTML = `<div class="figctl">
+        <button data-prev="${id}">◀</button>
+        <input type="range" data-slider="${id}" min="0" max="${spec.steps.length-1}" value="0">
+        <button data-next="${id}">▶</button>
+        <span data-count="${id}" style="font-size:.72rem;color:var(--dim);min-width:3.4em;text-align:right"></span>
+      </div><div class="stepnote" data-note="${id}"></div>`;
+    const sl = slot.querySelector(`input[data-slider="${id}"]`);
+    const cnt = slot.querySelector(`span[data-count="${id}"]`);
+    const note = slot.querySelector(`div[data-note="${id}"]`);
+    const pv = slot.querySelector(`button[data-prev="${id}"]`);
+    const nx = slot.querySelector(`button[data-next="${id}"]`);
+    const sync = () => {
+      const i = viz.currentStep();
+      liveStep[id] = i;
+      sl.value = i;
+      if (cnt) cnt.textContent = `${i+1}/${spec.steps.length}`;
+      if (note) note.textContent = spec.steps[i].note || '';
+      if (pv) pv.disabled = i === 0;
+      if (nx) nx.disabled = i === spec.steps.length-1;
+    };
+    sl.addEventListener('input', () => { viz.setStep(+sl.value); sync(); });
+    if (pv) pv.addEventListener('click', () => { viz.setStep(viz.currentStep()-1); sync(); });
+    if (nx) nx.addEventListener('click', () => { viz.setStep(viz.currentStep()+1); sync(); });
+    sync();
+  }
+
+  // =====================================================================
+  // 五、共享状态层：导出 / 导入 / 草稿
+  // =====================================================================
+  window.BookState = {
+    exportState(){
+      const figures = {};
+      Object.keys(FIG).forEach(id => { const s = specOf(id); if (s) figures[id] = s; });
+      const viewing = [...document.querySelectorAll('canvas[data-fig]')].map(cv => {
+        const id = cv.dataset.fig, v = mounted[id];
+        return { figure: id, step: v ? v.currentStep() : 0, steps: v ? v.stepCount() : 1 };
+      });
+      const h = document.documentElement.scrollHeight - window.innerHeight;
+      return {
+        kind: 'edu-book-state', version: 1,
+        book: BOOK.title, chapter: CH.id, chapterTitle: CH.title,
+        viewing, figures,
+        selection: String(window.getSelection ? window.getSelection() : '').slice(0, 600),
+        scroll: h > 0 ? +(window.scrollY / h).toFixed(3) : 0,
+        draft: DRAFTS,
+        live: LIVE,
+      };
+    },
+    importPatch(json){
+      let p;
+      try { p = typeof json === 'string' ? JSON.parse(json) : json; }
+      catch(e){ return { ok:false, msg:'JSON 解析失败：' + e.message }; }
+      const list = p.patches || (Array.isArray(p) ? p : [p]);
+      const applied = [], failed = [];
+      list.forEach(item => {
+        const id = item.figure;
+        if (!FIG[id]) { failed.push(`${id}（无此图）`); return; }
+        const ops = item.ops;
+        if (!ops) { failed.push(`${id}（只支持 ops 补丁；整图替换请走 overrides.json）`); return; }
+        // 试算：出错不落地
+        try { applyOps(specOf(id), ops); }
+        catch(e){ failed.push(`${id}（${e.message}）`); return; }
+        DRAFTS[id] = { ops, note: item.note || '' };
+        applied.push(id);
+      });
+      if (applied.length) {
+        saveDrafts(DRAFTS);
+        applied.forEach(mountFigure);
+        updateDraftBadge();
+      }
+      return { ok: applied.length > 0, applied, failed };
+    },
+    reset(){
+      DRAFTS = {}; saveDrafts(DRAFTS);
+      Object.keys(FIG).forEach(mountFigure);
+      updateDraftBadge();
+    },
+    exportDraft(){
+      const patches = Object.keys(DRAFTS).map(id => ({ figure: id, ops: DRAFTS[id].ops, note: DRAFTS[id].note||'' }));
+      return { kind:'edu-viz-patch', version:1, book: BOOK.title, chapter: CH.id, patches };
+    },
+    _drafts(){ return DRAFTS; },
+  };
+
+  function updateDraftBadge(){
+    const n = Object.keys(DRAFTS).filter(isDirty).length;
+    const b = document.getElementById('draftbadge');
+    b.style.display = n ? 'block' : 'none';
+    b.textContent = `本章有 ${n} 处本地修改`;
+  }
+
+  // ---- 工具条交互 ----
+  const area = document.getElementById('statearea');
+  const msg = document.getElementById('statemsg');
+  const say = (t, color) => { msg.textContent = t; msg.style.color = color || 'var(--dim)'; };
+  document.getElementById('btn-toggle').addEventListener('click', () => {
+    const p = document.getElementById('statepanel');
+    p.style.display = p.style.display === 'block' ? 'none' : 'block';
+  });
+  document.getElementById('btn-export').addEventListener('click', () => {
+    const s = JSON.stringify(window.BookState.exportState(), null, 2);
+    area.value = s;
+    navigator.clipboard?.writeText(s).then(()=>say('✓ 已复制到剪贴板，粘贴给 AI 即可'), ()=>say('已生成，请手动复制'));
+  });
+  document.getElementById('btn-apply').addEventListener('click', () => {
+    const r = window.BookState.importPatch(area.value);
+    if (r.ok) say(`✓ 已应用：${r.applied.join(', ')}` + (r.failed.length?`（跳过 ${r.failed.join('、')}）`:''), 'var(--accent)');
+    else say('✗ ' + (r.msg || ('未能应用：' + r.failed.join('、'))), '#b91c1c');
+  });
+  document.getElementById('btn-copydraft').addEventListener('click', () => {
+    const s = JSON.stringify(window.BookState.exportDraft(), null, 2);
+    area.value = s;
+    navigator.clipboard?.writeText(s).then(()=>say('✓ 草稿已复制——把它存成 overrides.json 就写进书里了'), ()=>say('已生成，请手动复制'));
+  });
+  document.getElementById('btn-reset').addEventListener('click', () => {
+    window.BookState.reset(); say('已还原为本页原始插图', 'var(--accent)');
+  });
+
+  // =====================================================================
+  // 六、实时通道：问 AI + 接收补丁（桥不在时自动降级为纯离线）
+  // =====================================================================
+  let LIVE = {};                 // {figId: {ops:[...]}}  来自桥的实时补丁（可复现：每次载入从日志重放）
+  let liveSeq = -1;
+  let ES = null;
+
+  function applyLive(sp, id){
+    const L = LIVE[id];
+    if (!L || !L.ops || !L.ops.length) return sp;
+    try { return applyOps(sp, L.ops); } catch(e){ console.warn('live 补丁应用失败', id, e); return sp; }
+  }
+  function setConn(state, text){
+    const el = document.getElementById('conn');
+    if (state === 'off'){ el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    el.textContent = text;
+    el.style.background = state === 'on' ? '#ecfdf5' : '#fef2f2';
+    el.style.border = '1px solid ' + (state === 'on' ? '#a7f3d0' : '#fecaca');
+    el.style.color = state === 'on' ? '#065f46' : '#991b1b';
+  }
+
+  async function bridgeAvailable(){
+    if (!location.protocol.startsWith('http')) return false;
+    try { const r = await fetch('/api/status', { cache:'no-store' }); return r.ok; }
+    catch(e){ return false; }
+  }
+
+  function markLive(id){
+    const fig = document.getElementById(id);
+    if (!fig || fig.querySelector('.livebadge')) return;
+    const b = document.createElement('div');
+    b.className = 'livebadge';
+    b.textContent = 'AI 已改';
+    (fig.querySelector('.figbox') || fig).appendChild(b);
+  }
+
+  function showReply(text, note, askLabel){
+    const box = document.getElementById('askreply');
+    const parts = [];
+    if (text) parts.push(`<div>${esc(text).replace(/\n/g,'<br>')}</div>`);
+    if (note) parts.push(`<div style="color:var(--dim);font-size:11px;margin-top:5px">图上的改动：${esc(note)}</div>`);
+    if (!parts.length) return;
+    box.innerHTML = parts.join('');
+    box.style.display = 'block';
+    if (askLabel) document.getElementById('askhead').textContent = askLabel;
+    document.getElementById('askpanel').style.display = 'block';
+  }
+
+  function onLivePatches(list){
+    if (!list || !list.length) return;
+    const touched = new Set();
+    list.forEach(p => {
+      liveSeq = Math.max(liveSeq, p.seq);
+      if (p.replace || p.spec || !LIVE[p.figure]) LIVE[p.figure] = { ops: [] };
+      if (p.spec) { LIVE[p.figure] = { ops: [], spec: p.spec }; }
+      else if (p.ops) { LIVE[p.figure].ops = (p.replace ? [] : LIVE[p.figure].ops).concat(p.ops); }
+      touched.add(p.figure);
+      if (p.reply) showReply(p.reply, p.note);
+      else if (p.note) showReply(null, p.note);
+    });
+    touched.forEach(id => { mountFigure(id); markLive(id); });
+  }
+
+  function connectLive(){
+    if (ES) { try { ES.close(); } catch(e){} }
+    ES = new EventSource('/api/events?since=' + liveSeq);
+    ES.onopen = () => setConn('on', '已连接 AI（改动会实时出现在图上）');
+    ES.onmessage = ev => {
+      try { onLivePatches([JSON.parse(ev.data)]); } catch(e){ console.warn('补丁解析失败', e); }
+    };
+    ES.onerror = () => {
+      setConn('off');
+      try { ES.close(); } catch(e){}
+      ES = null;
+      setTimeout(() => bridgeAvailable().then(ok => { if (ok) connectLive(); }), 4000);
+    };
+  }
+
+  // ---- 提问面板 ----
+  let askFigure = null;
+  document.addEventListener('click', ev => {
+    const btn = ev.target.closest('.askbtn');
+    if (!btn) return;
+    askFigure = btn.dataset.askFig;
+    document.getElementById('askhead').textContent = '问「' + btn.dataset.askLabel + '」';
+    const p = document.getElementById('askpanel');
+    p.style.display = (p.style.display === 'block' && p.dataset.fig === askFigure) ? 'none' : 'block';
+    p.dataset.fig = askFigure;
+    document.getElementById('askinput').focus();
+  });
+  document.getElementById('askclose').addEventListener('click', () => {
+    document.getElementById('askpanel').style.display = 'none';
+  });
+  document.getElementById('asksend').addEventListener('click', async () => {
+    const q = document.getElementById('askinput').value.trim();
+    const hint = document.getElementById('askhint');
+    if (!q){ hint.textContent = '先写一句话'; return; }
+    hint.textContent = '发送中…';
+    const state = window.BookState.exportState();
+    if (!askFigure) askFigure = (state.viewing[0] || {}).figure;
+    try {
+      const r = await fetch('/api/ask', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ figure: askFigure, question: q, state: state }),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      hint.textContent = '已发送（' + j.id + '），等待 AI…';
+      document.getElementById('askinput').value = '';
+      showReply('你的问题已发出。AI 的回答与图上改动会**实时出现在这里和图上**——不用刷新。', null);
+      if (!ES) connectLive();
+    } catch (e) {
+      hint.textContent = '';
+      showReply('连不上桥（' + e.message + '）。\n桥没启动时书页仍可离线阅读；要实时问答请先跑：\n  python bridge.py serve', null);
+    }
+  });
+
+  // 启动时探测桥；有桥就重放历史补丁并订阅
+  (async () => {
+    if (!await bridgeAvailable()) { setConn('off'); return; }
+    try {
+      const r = await fetch('/api/patches?since=-1', { cache:'no-store' });
+      if (r.ok) { const j = await r.json(); onLivePatches(j.patches); }
+    } catch(e){}
+    connectLive();
+  })();
+
+  // =====================================================================
+  // 七、启动：先同步挂载（立即可见），再异步叠加 overrides
+  // =====================================================================
+  [...document.querySelectorAll('canvas[data-fig]')].forEach(cv => mountFigure(cv.dataset.fig));
+  updateDraftBadge();
+  if (window.renderMathInElement) {
+    renderMathInElement(document.getElementById('body'), {
+      delimiters: [{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],
+      throwOnError: false,
+    });
+  }
+  // overrides.json 是网络请求，放在最后：拿到后只重挂受影响的图，不让首屏等待
+  loadOverrides().then(hit => { (hit || []).forEach(mountFigure); });
+
+  const prog = document.getElementById('prog');
+  window.addEventListener('scroll', () => {
+    const h = document.documentElement.scrollHeight - window.innerHeight;
+    prog.style.width = (h > 0 ? Math.min(100, window.scrollY / h * 100) : 0) + '%';
+  });
+})();
+</script>
+</body>
+</html>

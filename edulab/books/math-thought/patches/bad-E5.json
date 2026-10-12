@@ -1,0 +1,16 @@
+{
+  "kind": "edu-viz-patch",
+  "version": 1,
+  "_note": "故意越界：把卡片放到 view 之外 → 应被 E5 拒绝，exit=1",
+  "patches": [
+    {
+      "figure": "fig-crisis",
+      "ops": [
+        { "path": "/layers/0/when", "op": "set", "value": "k >= 3" },
+        { "path": "/layers", "op": "append", "value": {
+          "geom": "card", "x": 999, "y": 999, "w": 2, "h": 2, "label": "跑出画布"
+        } }
+      ]
+    }
+  ]
+}

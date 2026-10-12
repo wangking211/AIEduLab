@@ -1,0 +1,10 @@
+{
+  "kind": "edu-viz-patch",
+  "version": 1,
+  "_note": "故意越界：改一个不存在的下标 → 应被 E4 拒绝，exit=1",
+  "patches": [
+    { "figure": "fig-crisis", "ops": [
+      { "path": "/layers/9999/label", "op": "set", "value": "越界" }
+    ] }
+  ]
+}
