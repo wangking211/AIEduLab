@@ -1,0 +1,20 @@
+                // ---- 函数曲线（kind:'function'）专用构造 ----
+                case 'point_on_function': addPt(d.name, pointOnFunction(conics[d.conic], resolveNum(d.x)), {color:d.color||'point', label:d.label||d.name, emphasis:d.emphasis}); break;
+                case 'intersect_line_function': {
+                    const ip=intersectLineFunction(lines[d.line].L, conics[d.conic]);
+                    const names=[].concat(d.name), cols=d.colors||['ptA','ptB'];
+                    names.forEach((nm,i)=>addPt(nm, ip[i]||null, {color:cols[i]||'point', label:(d.labels&&d.labels[i])||nm}));
+                    break; }
+                case 'root_on_function': { const r=rootOnFunction(conics[d.conic], resolveNum(d.a), resolveNum(d.b));
+                    addPt(d.name, r!==null? [r, 0] : null, {color:d.color||'fixed', label:d.label||d.name, emphasis:true}); break; }
+                case 'tangent_function': lines[d.name]={L:tangentOnFunction(conics[d.conic], resolveNum(d.x)), color:d.color||'line', label:d.label, dashed:d.dashed}; break;
+                case 'secant_function': { const cn=conics[d.conic], x1=resolveNum(d.x1), x2=resolveNum(d.x2);
+                    const p1=pointOnFunction(cn,x1), p2=pointOnFunction(cn,x2);
+                    lines[d.name]={L:(p1&&p2)? lineThroughPoints(p1,p2):null, color:d.color||'line', label:d.label, dashed:d.dashed}; break; }
+                case 'area_fill': { // 曲线与 x 轴在 [a,b] 间的阴影（零点符号示意）
+                    const cn=conics[d.conic]; if(cn&&cn.f){
+                        const xa=resolveNum(d.a), xb=resolveNum(d.b), N=120, poly=[[xa,0]];
+                        for(let i=0;i<=N;i++){ const xv=xa+(xb-xa)*i/N, yv=cn.f(xv); if(isFinite(yv)&&Math.abs(yv)<1e6) poly.push([xv,yv]); }
+                        poly.push([xb,0]);
+                        polys.push({pts:poly, color:d.color||'area'});
+                    } break; }

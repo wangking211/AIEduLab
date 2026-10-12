@@ -1,0 +1,23 @@
+    // ---- 初中平面几何扩展基元 ----
+    const vsub=(a,b)=>[a[0]-b[0],a[1]-b[1]];
+    const vadd=(a,b)=>[a[0]+b[0],a[1]+b[1]];
+    const vscale=(v,k)=>[v[0]*k,v[1]*k];
+    const vnorm=v=>{const l=Math.hypot(v[0],v[1])||1; return [v[0]/l,v[1]/l];};
+    // 角平分线（内角）：过 vertex，方向为两边单位向量之和
+    function bisectorLine(A,vertex,B){ const d1=vnorm(vsub(A,vertex)), d2=vnorm(vsub(B,vertex));
+        return {p0:vertex.slice(), dir:[d1[0]+d2[0], d1[1]+d2[1]]}; }
+    // 线段 AB 的中垂线
+    function perpBisector(A,B){ const m=midpoint(A,B), d=vsub(B,A);
+        return {p0:m, dir:[-d[1],d[0]]}; }
+    const parallelThrough=(P,L)=>({p0:P.slice(), dir:L.dir.slice()});
+    const perpThrough=(P,L)=>({p0:P.slice(), dir:[-L.dir[1],L.dir[0]]});
+    // 旋转（deg 逆时针）与位似（以 center 为中心缩放 k 倍）
+    function rotatePt(P,center,deg){ const a=toRad(deg), c=Math.cos(a), s=Math.sin(a);
+        const x=P[0]-center[0], y=P[1]-center[1];
+        return [center[0]+x*c-y*s, center[1]+x*s+y*c]; }
+    const homothety=(P,center,k)=>[center[0]+(P[0]-center[0])*k, center[1]+(P[1]-center[1])*k];
+    // 由圆心 + 圆上一点构造圆（conic 对象）
+    function circleCenterPt(O,P){ return {kind:'circle', center:O.slice(), r:Math.hypot(P[0]-O[0],P[1]-O[1])}; }
+    // 外心（中垂线交点）与外接圆
+    function circumcenterOf(A,B,C){ const L1=perpBisector(A,B), L2=perpBisector(B,C);
+        return intersectLineLine(L1,L2); }

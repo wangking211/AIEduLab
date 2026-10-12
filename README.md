@@ -14,8 +14,10 @@ AIEduLab/
 │   │   │   ├── state.md      改图/补丁/实时通道契约（agent 读它改已有图）
 │   │   │   └── page.html     书页模板（阅读流 + 内嵌图 + 步骤控件 + 问答面板）
 │   │   └── skillkit.py     ★ 技能共用运行时：统一 CLI / 渲染 / 校验 / 目录页
+│   │   └── board/          ★ Family A 的共享模板骨架 + base 片段
 │   ├── tools/
-│   │   └── check_skills.py  技能闸门：可运行 + 可复现（跨哈希种子）+ 与基线一致
+│   │   ├── check_skills.py     技能闸门：可运行 + 可复现（跨哈希种子）+ 与基线一致
+│   │   └── compose_templates.py 用「共享骨架 + 各自片段」组装 template/board.html
 │   ├── books/math-thought/ 第一本书《数学思想：从计数到无穷》（3 章 11 图）
 │   ├── skills/             13 个学科技能（数理化生 + 初高中物理/几何 + 视频 + CS）
 │   └── demos/ out/         手写 HTML 演示
@@ -58,12 +60,37 @@ Get-ChildItem "edulab\skills" -Directory | ForEach-Object {
 `skills-lock.json` 记录已安装技能的内容哈希。注意：现有条目是**安装当时的快照**，
 若之后修改过技能源码，哈希不会再对得上 —— 它只作记录，不参与技能加载。
 
-改完任意技能后，跑一次闸门（可运行 + 跨哈希种子可复现 + 与基线一致）：
+改完任意技能后，跑一次闸门（可运行 + 跨哈希种子可复现 + 与基线/骨架一致）：
 
 ```bash
 python edulab/tools/check_skills.py            # 差异即失败
 python edulab/tools/check_skills.py --update   # 确认新产物正确后刷新基线
 ```
+
+### Family A 模板：改骨架，别改产物
+
+`edu-analytic-geometry` / `edu-plane-geometry` / `edu-function-derivative` 三个技能
+的 `template/board.html` 原本是三份 90% 相同的文件（约 1600 行重复），现在由
+**共享骨架 + 各自片段**组装而成：
+
+```
+edulab/shared/board/shell.html          唯一骨架，槽位写成独占一行的 {{slot:name}}
+edulab/shared/board/parts/<name>.html   该槽位的 base 版本（= analytic 的内容）
+<技能>/template/parts/<name>.html         该技能自己的版本；不存在则用 base 版本
+```
+
+解析规则刻意做成零配置：**自己的片段优先，缺失就回退到 base 版本**。
+所以 `analytic-geometry` 是 base，一个片段文件都不需要。改这三个技能的模板时：
+
+```bash
+# 改 shared/board/shell.html 或某个 parts/<name>.html，然后：
+python edulab/tools/compose_templates.py          # 重新组装三份 board.html
+python edulab/tools/compose_templates.py --check   # 只校验是否与骨架一致
+```
+
+组装产物**提交进仓库**，所以技能仍然自包含（`generate.py` 只读自己目录下的
+`template/`，不依赖 `shared/board/`）；漂移由 `compose --check` 与
+`check_skills.py` 一起拦住。
 
 成品按需重新生成：
 

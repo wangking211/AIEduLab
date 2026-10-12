@@ -60,6 +60,17 @@ def main(argv):
     names = skill_names()
     print(f"技能 {len(names)} 个：{', '.join(names)}\n")
 
+    # 0) 模板一致性：Family A 的 board.html 必须与共享骨架 + 各自片段一致
+    import subprocess as _sp
+    r = _sp.run([sys.executable, str(HERE / "compose_templates.py"), "--check"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+    tpl_ok = r.returncode == 0
+    print(f"  {'✓' if tpl_ok else '✗'} 模板一致性（shared/board 骨架 + 片段）")
+    if not tpl_ok:
+        for ln in (r.stdout or "").splitlines()[-4:]:
+            print(f"      {ln}")
+    print()
+
     baseline = {}
     if BASELINE.exists():
         baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
@@ -102,15 +113,18 @@ def main(argv):
                             encoding="utf-8")
         print(f"✓ 基线已刷新：{BASELINE.relative_to(ROOT).as_posix()}（{len(fresh)} 个技能）")
         return 0
-    if failures:
-        print(f"✗ {len(failures)} 项未通过")
-        for s, why, tail in failures:
-            print(f"    {s}: {why}")
-            for ln in tail:
-                print(f"      | {ln}")
-        print("\n  若确认新产物正确，用 `--update` 刷新基线。")
+    if failures or not tpl_ok:
+        if failures:
+            print(f"✗ {len(failures)} 项未通过")
+            for s, why, tail in failures:
+                print(f"    {s}: {why}")
+                for ln in tail:
+                    print(f"      | {ln}")
+        if not tpl_ok:
+            print("✗ 模板与共享骨架不一致")
+        print("\n  若确认新产物正确，用 `--update` 刷新基线；模板用 compose_templates.py 重新组装。")
         return 1
-    print(f"✓ 全部 {len(names)} 个技能：可运行、可复现、与基线一致")
+    print(f"✓ 全部 {len(names)} 个技能：可运行、可复现、与基线一致；模板与骨架一致")
     return 0
 
 

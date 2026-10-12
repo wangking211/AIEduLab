@@ -1,0 +1,18 @@
+                // ---- 初中平面几何扩展构造 ----
+                case 'angle_bisector': lines[d.name]={L:bisectorLine(P(d.a),P(d.vertex),P(d.b)), color:d.color||'line', label:d.label, dashed:d.dashed}; break;
+                case 'perp_bisector':  lines[d.name]={L:perpBisector(P(d.a),P(d.b)), color:d.color||'line', label:d.label, dashed:d.dashed}; break;
+                case 'parallel_through': lines[d.name]={L:parallelThrough(P(d.point), lines[d.line].L), color:d.color||'line', label:d.label, dashed:d.dashed}; break;
+                case 'perp_through':   lines[d.name]={L:perpThrough(P(d.point), lines[d.line].L), color:d.color||'line', label:d.label, dashed:d.dashed}; break;
+                case 'rotate': addPt(d.name, rotatePt(P(d.of), Array.isArray(d.center)?d.center:P(d.center), resolveNum(d.deg)), {color:d.color||'point', label:d.label||d.name, emphasis:d.emphasis}); break;
+                case 'homothety': addPt(d.name, homothety(P(d.of), Array.isArray(d.center)?d.center:P(d.center), resolveNum(d.k)), {color:d.color||'point', label:d.label||d.name, emphasis:d.emphasis}); break;
+                case 'circle_from_center_pt': { const c=circleCenterPt(P(d.center), P(d.through));
+                    conics[d.name]=Object.assign(c, {color:d.color||'curve', label:d.label||d.name, dashed:d.dashed, name:d.name}); break; }
+                case 'circumcircle': { const O=circumcenterOf(P(d.a),P(d.b),P(d.c));
+                    if(O){ addPt(d.name+'_O', O, {color:d.color||'fixed', label:d.label||'O', emphasis:true});
+                        conics[d.name]=Object.assign(circleCenterPt(O, P(d.a)), {color:d.color||'curve', label:d.label||'外接圆', dashed:d.dashed, name:d.name}); } break; }
+                // 角弧标注（angle_arc）与直角符号（right_angle_mark）
+                case 'angle_arc': marks.push({type:'angle', a:P(d.a), vertex:P(d.vertex), b:P(d.b),
+                    r:d.r||0.3, color:col(d.color||'aux'), label:d.label||'', labelR:d.labelR||null, arcs:d.arcs||1}); break;
+                case 'right_angle_mark': marks.push({type:'right', a:P(d.a), vertex:P(d.vertex), b:P(d.b),
+                    s:d.s||0.22, color:col(d.color||'aux')}); break;
+                case 'arc_mark': marks.push({type:'tick', a:P(d.a), b:P(d.b), n:d.n||1, color:col(d.color||'aux')}); break;
