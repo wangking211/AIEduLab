@@ -5,17 +5,22 @@
 ```
 AIEduLab/
 ├── edulab/                 技能与图书的主体（见下方「来源」）
-│   ├── shared/viz/         ★ 图形语法层：一套 spec 描述图，引擎负责渲染/校验/改图
-│   │   ├── viz.js          渲染引擎（16 图元、双主题、零依赖、Canvas 2D）
-│   │   ├── vizkit.py       构造 DSL + 校验器（E1–E6/W1–W3，每条带 ↳ 修法）+ 补丁引擎
-│   │   ├── bridge.py       本地桥：静态服务 + 读者提问 ⇄ agent 改图的实时通道
-│   │   ├── grammar.md      写图契约（agent 读它生成新图）
-│   │   ├── state.md        改图/补丁/实时通道契约（agent 读它改已有图）
-│   │   └── page.html       书页模板（阅读流 + 内嵌图 + 步骤控件 + 问答面板）
+│   ├── shared/             全家族共用层
+│   │   ├── viz/            ★ 图形语法层：一套 spec 描述图，引擎负责渲染/校验/改图
+│   │   │   ├── viz.js        渲染引擎（16 图元、双主题、零依赖、Canvas 2D）
+│   │   │   ├── vizkit.py     构造 DSL + 校验器（E1–E6/W1–W3）+ 补丁引擎
+│   │   │   ├── bridge.py     本地桥：静态服务 + 读者提问 ⇄ agent 改图的实时通道
+│   │   │   ├── grammar.md    写图契约（agent 读它生成新图）
+│   │   │   ├── state.md      改图/补丁/实时通道契约（agent 读它改已有图）
+│   │   │   └── page.html     书页模板（阅读流 + 内嵌图 + 步骤控件 + 问答面板）
+│   │   └── skillkit.py     ★ 技能共用运行时：统一 CLI / 渲染 / 校验 / 目录页
+│   ├── tools/
+│   │   └── check_skills.py  技能闸门：可运行 + 可复现（跨哈希种子）+ 与基线一致
 │   ├── books/math-thought/ 第一本书《数学思想：从计数到无穷》（3 章 11 图）
 │   ├── skills/             13 个学科技能（数理化生 + 初高中物理/几何 + 视频 + CS）
 │   └── demos/ out/         手写 HTML 演示
 ├── .agents/skills/         技能安装副本（**本地目录，不进版本库**；真源是 edulab/skills/）
+├── .agents/shared/         共用层安装副本（同上；真源是 edulab/shared/）
 ├── mental-models/          查理·芒格思维模型：sympy 精确内核 + 交互页
 └── skills-lock.json        技能安装锁（含内容哈希）
 ```
@@ -33,14 +38,32 @@ AIEduLab/
 ## 安装技能（本地）
 
 技能加载器从 `.agents/skills/` 发现技能，而真源在 `edulab/skills/`。
-克隆仓库后，把需要的技能复制过去即可（改完 `edulab/skills/` 后同样复制一次）：
+每个技能的 `scripts/generate.py` 都会从 `../../shared/` 加载共用运行时
+（`skillkit.py`）——两种布局到它的相对深度相同：
+
+```
+edulab/skills/<技能>/scripts/generate.py   → ../../shared  → edulab/shared
+.agents/skills/<技能>/scripts/generate.py  → ../../shared  → .agents/shared
+```
+
+所以克隆后**两处都要复制**（改完 `edulab/` 后同样再复制一次）：
 
 ```powershell
-Copy-Item "edulab\skills\edu-cs" ".agents\skills\edu-cs" -Recurse -Force
+Copy-Item "edulab\shared" ".agents\shared" -Recurse -Force
+Get-ChildItem "edulab\skills" -Directory | ForEach-Object {
+  Copy-Item $_.FullName ".agents\skills\$($_.Name)" -Recurse -Force
+}
 ```
 
 `skills-lock.json` 记录已安装技能的内容哈希。注意：现有条目是**安装当时的快照**，
 若之后修改过技能源码，哈希不会再对得上 —— 它只作记录，不参与技能加载。
+
+改完任意技能后，跑一次闸门（可运行 + 跨哈希种子可复现 + 与基线一致）：
+
+```bash
+python edulab/tools/check_skills.py            # 差异即失败
+python edulab/tools/check_skills.py --update   # 确认新产物正确后刷新基线
+```
 
 成品按需重新生成：
 

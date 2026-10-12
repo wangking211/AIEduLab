@@ -10,34 +10,23 @@ generate.py — 把结构化课程数据注入 template/lesson.html，产出单�
     python3 scripts/generate.py [输出路径.html]
 """
 
-import json
 import sys
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
-TEMPLATE = SKILL_DIR / "template" / "lesson.html"
 PLACEHOLDER = "__LESSON_DATA__"
 
+sys.path.insert(0, str(SKILL_DIR.parent.parent / "shared"))   # 共享运行时（edulab/shared/skillkit.py）
 sys.path.insert(0, str(SKILL_DIR / "lib"))
 import geometry_kernel as gk  # noqa: E402
 import bodies  # noqa: E402
+from skillkit import cli      # noqa: E402
 
 
 def _centroid(three_points):
     names = list(three_points)
     n = len(names)
     return [sum(three_points[k][i] for k in names) / n for i in range(3)]
-
-
-def render_html(data: dict, out_path: Path) -> Path:
-    """把数据以 JSON 形式注入模板占位符，写出 html。"""
-    template = TEMPLATE.read_text(encoding="utf-8")
-    if PLACEHOLDER not in template:
-        raise RuntimeError(f"模板中未找到占位符 {PLACEHOLDER}")
-    payload = json.dumps(data, ensure_ascii=False)
-    html = template.replace(PLACEHOLDER, payload)
-    out_path.write_text(html, encoding="utf-8")
-    return out_path
 
 
 def build_cube_data() -> dict:
@@ -347,32 +336,25 @@ PROBLEMS = {
 }
 
 
-def main():
-    args = list(sys.argv[1:])
-    problem = "pyramid"
-    out = None
-    seed = 0
-    for a in args:
-        if a in PROBLEMS or a == "random":
-            problem = a
-        elif a.isdigit():
-            seed = int(a)
-        else:
-            out = Path(a)
-    if out is None:
-        # 默认写到“用户当前工作目录”(cwd)，而不是技能自身目录
-        out = Path.cwd() / f"{problem}.html"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    data = build_random_data(seed) if problem == "random" else PROBLEMS[problem]()
-
-    # --- 自检：最终步骤展示的答案必须等于答案卡的答案（同为 kernel 计算结果）---
+def _prepare(key, data):
+    """自检：最终步骤展示的答案必须等于答案卡（同为 kernel 计算结果）。"""
     final_step = data["steps"][-1]["content"]
     assert data["_answer"] in final_step, "最终步骤未包含计算所得答案"
     data.pop("_answer", None)
+    return data
 
-    render_html(data, out)
-    print(f"已生成: {out}")
+
+def _random_build(rng):
+    return "random", build_random_data(rng.randint(0, 10 ** 6))
+
+
+def main(argv=None):
+    # 统一入口（edulab/shared/skillkit.py）：
+    #   python generate.py list | all <目录> | random [seed] [输出] | pyramid|cube|box [输出]
+    return cli(PROBLEMS, doc=__doc__, prepare=_prepare, random_build=_random_build,
+               template_name="lesson.html", token=PLACEHOLDER,
+               index="立体几何 · 建系向量法 · 交互课件", argv=argv or sys.argv[1:])
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

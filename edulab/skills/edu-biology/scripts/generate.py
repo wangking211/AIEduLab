@@ -18,16 +18,17 @@ generate.py — 生物学科：注入模板 + 范例 build_* + CLI + 随机出�
 """
 
 import json
-import random
 import sys
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(SKILL_DIR.parent.parent / "shared"))   # 共享运行时（edulab/shared/skillkit.py）
 sys.path.insert(0, str(SKILL_DIR / "lib"))
 
 import sympy as sp                       # noqa: E402
 import bio_kernel as K                   # noqa: E402
 import cell_library as CL                # noqa: E402
+from skillkit import cli, render_html as _render_html   # noqa: E402
 
 BOARD_T = (SKILL_DIR / "template" / "board.html").read_text(encoding="utf-8")
 CELL_T = (SKILL_DIR / "template" / "cell.html").read_text(encoding="utf-8")
@@ -108,11 +109,13 @@ def _punnett_scene(summary, pheno_label=None, footer=None):
 
 
 def _board(data, out):
-    return render_html(data, out, template=BOARD_T, token="__LESSON_DATA__")
+    """Canvas-2D 画板模板（序列化 / 建目录统一在 skillkit.render_html 里）。"""
+    return _render_html(data, out, template=BOARD_T, token="__LESSON_DATA__", compact=True)
 
 
 def _cell(data, out):
-    return render_html(data, out, template=CELL_T, token="__CELL_DATA__")
+    """Three.js 3D 细胞模板。"""
+    return _render_html(data, out, template=CELL_T, token="__CELL_DATA__", compact=True)
 
 
 # =====================================================================
@@ -1118,13 +1121,16 @@ META = {
 ORDER = [k for ks in MODULES.values() for k in ks]
 
 
-def _render(key, out_dir):
-    build = REGISTRY[key]
-    data = build()
-    kind = META[key][3]
-    if kind == "cell":
-        return _cell(data, out_dir / f"{key}.html")
-    return _board(data, out_dir / f"{key}.html")
+def _write(key, data, out_path):
+    """按题型选模板：cell 类走 Three.js 3D，其余走 Canvas-2D。"""
+    if META[key][3] == "cell":
+        return _cell(data, out_path)
+    return _board(data, out_path)
+
+
+def meta_of(key):
+    """skillkit 要的 (分类, 标题, 一句话) —— 取 META 的前三项。"""
+    return (META[key][0], META[key][1], META[key][2])
 
 
 def build_index(out):
@@ -1166,45 +1172,23 @@ def build_index(out):
     return out
 
 
-def random_lesson():
+def _random(rng):
     """随机出题：优先挑需要计算的题型（遗传/生态/代谢），参数随机但答案规整。"""
-    pick = random.choice(["monohybrid", "dihybrid", "sexlinked",
-                          "energy_pyramid", "population", "photosynthesis"])
+    pick = rng.choice(["monohybrid", "dihybrid", "sexlinked",
+                       "energy_pyramid", "population", "photosynthesis"])
     return pick, REGISTRY[pick]()
 
 
+def _index(out_dir):
+    return build_index(Path(out_dir) / "index.html")
+
+
 def main(argv):
-    if not argv or argv[0] in ("list", "-l"):
-        for mod, keys in MODULES.items():
-            print(f"[{mod}]")
-            for k in keys:
-                print(f"  {k:18s} {META[k][0]} —— {META[k][1]}")
-        print("\n用法: python generate.py <key|all|random> [输出目录]")
-        return 0
-    if argv[0] == "all":
-        out_dir = Path(argv[1]) if len(argv) > 1 else Path.cwd() / "output"
-        for key in ORDER:
-            p = _render(key, out_dir)
-            print(f"written: {p}")
-        print(f"written: {build_index(out_dir / 'index.html')}")
-        return 0
-    if argv[0] == "random":
-        key, data = random_lesson()
-        out = Path(argv[1]) if len(argv) > 1 else Path.cwd() / f"random_{key}.html"
-        if META[key][3] == "cell":
-            _cell(data, out)
-        else:
-            _board(data, out)
-        print(f"written: {out}  (题型: {key} — {META[key][1]})")
-        return 0
-    key = argv[0]
-    if key not in REGISTRY:
-        print(f"未知题型 {key}；可用：{', '.join(REGISTRY)}")
-        return 1
-    out = Path(argv[1]) if len(argv) > 1 else Path.cwd() / f"{key}.html"
-    _render(key, out.parent / out.name)
-    print(f"written: {out}")
-    return 0
+    # 统一入口（edulab/shared/skillkit.py）：
+    #   python generate.py list | all <目录> | random [seed] [输出] | <key> [输出]
+    return cli(REGISTRY, doc=__doc__, meta=meta_of, groups=MODULES,
+               random_build=_random, render=_write, index_writer=_index,
+               argv=argv)
 
 
 if __name__ == "__main__":

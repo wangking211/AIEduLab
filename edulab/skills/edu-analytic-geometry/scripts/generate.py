@@ -12,27 +12,18 @@ generate.py — 把结构化数据注入 template/board.html，产出单页解�
     python3 scripts/generate.py all <输出目录>     # 生成全部已注册题型
 """
 
-import json
 import sys
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
-TEMPLATE = SKILL_DIR / "template" / "board.html"
 PLACEHOLDER = "__LESSON_DATA__"
 
+sys.path.insert(0, str(SKILL_DIR.parent.parent / "shared"))   # 共享运行时（edulab/shared/skillkit.py）
 sys.path.insert(0, str(SKILL_DIR / "lib"))
 import sympy as sp                       # noqa: E402
 import conics                            # noqa: E402
 import analytic_kernel as K              # noqa: E402
-
-
-def render_html(data: dict, out_path: Path) -> Path:
-    template = TEMPLATE.read_text(encoding="utf-8")
-    if PLACEHOLDER not in template:
-        raise RuntimeError(f"模板中未找到占位符 {PLACEHOLDER}")
-    out_path.write_text(template.replace(PLACEHOLDER, json.dumps(data, ensure_ascii=False)),
-                        encoding="utf-8")
-    return out_path
+from skillkit import cli                 # noqa: E402
 
 
 # ---------------- 小工具 ----------------
@@ -409,26 +400,11 @@ REGISTRY = {
 
 
 def main(argv):
-    if not argv or argv[0] == "list":
-        print("已注册题型:")
-        for k in REGISTRY:
-            print("  -", k)
-        return
-    if argv[0] == "all":
-        out_dir = Path(argv[1]) if len(argv) > 1 else (SKILL_DIR / "output")
-        out_dir.mkdir(parents=True, exist_ok=True)
-        for k, fn in REGISTRY.items():
-            render_html(fn(), out_dir / f"{k}.html")
-            print("written:", out_dir / f"{k}.html")
-        return
-    key = argv[0]
-    if key not in REGISTRY:
-        print(f"未知题型 {key}；可用: {', '.join(REGISTRY)}")
-        sys.exit(1)
-    out = Path(argv[1]) if len(argv) > 1 else (SKILL_DIR / "output" / f"{key}.html")
-    render_html(REGISTRY[key](), out)
-    print("written:", out)
+    # 统一入口（edulab/shared/skillkit.py）：
+    #   python generate.py list | all <目录> | random [seed] [输出] | <key> [输出]
+    return cli(REGISTRY, doc=__doc__, template_name="board.html", token=PLACEHOLDER,
+               index="解析几何 · 圆锥曲线 · 交互课件", argv=argv)
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    raise SystemExit(main(sys.argv[1:]))

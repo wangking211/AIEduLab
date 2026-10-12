@@ -14,29 +14,18 @@ generate.py — 把结构化数据注入 template/board.html，产出单页初�
     python scripts/generate.py random [seed] [输出.html]
 """
 
-import json
-import random as _random
 import sys
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
-TEMPLATE = SKILL_DIR / "template" / "board.html"
 PLACEHOLDER = "__LESSON_DATA__"
 
+sys.path.insert(0, str(SKILL_DIR.parent.parent / "shared"))   # 共享运行时（edulab/shared/skillkit.py）
 sys.path.insert(0, str(SKILL_DIR / "lib"))
 import sympy as sp                       # noqa: E402
 import phys_kernel as K                  # noqa: E402
 from phys_kernel import tex, f          # noqa: E402
-
-
-def render_html(data: dict, out_path: Path) -> Path:
-    template = TEMPLATE.read_text(encoding="utf-8")
-    if PLACEHOLDER not in template:
-        raise RuntimeError(f"模板中未找到占位符 {PLACEHOLDER}")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(template.replace(PLACEHOLDER, json.dumps(data, ensure_ascii=False)),
-                        encoding="utf-8")
-    return out_path
+from skillkit import cli, required_sections   # noqa: E402
 
 
 # =====================================================================
@@ -579,44 +568,13 @@ SEEDS = ["lever", "pressure", "buoyancy", "pulley",
 
 
 def main(argv):
-    if len(argv) >= 2 and argv[1] == "list":
-        for k in REGISTRY:
-            print(k)
-        return 0
-    if len(argv) < 2:
-        print(__doc__)
-        return 1
-
-    if argv[1] == "random":
-        seed = int(argv[2]) if len(argv) > 2 and not argv[2].endswith(".html") else None
-        rng = _random.Random(seed)
-        key = rng.choice(SEEDS)
-        out = Path(argv[3]) if len(argv) > 3 and argv[2] and argv[2].endswith(".html") is False \
-            else (Path(argv[3]) if len(argv) > 3 else Path(f"{key}.html"))
-        if len(argv) == 3 and argv[2].endswith(".html"):
-            out = Path(argv[2])
-        print("random pick:", key, "seed:", seed)
-    elif argv[1] == "all":
-        out_dir = Path(argv[2]) if len(argv) > 2 else Path(".")
-        out_dir.mkdir(parents=True, exist_ok=True)
-        for k, fn in REGISTRY.items():
-            render_html(fn(), out_dir / f"{k}.html")
-            print("written:", out_dir / f"{k}.html")
-        return 0
-    else:
-        if argv[1] not in REGISTRY:
-            print("unknown key:", argv[1], "| available:", ", ".join(REGISTRY))
-            return 1
-        key = argv[1]
-        out = Path(argv[2]) if len(argv) > 2 else Path(f"{key}.html")
-
-    data = REGISTRY[key]()
-    for sect in ("lesson", "steps", "board"):
-        assert data.get(sect), f"{key} 缺少 {sect}"
-    assert len(data["steps"]) >= 3, f"{key} 步骤不足"
-    render_html(data, out)
-    print("written:", out)
-    return 0
+    # 统一入口（edulab/shared/skillkit.py）：
+    #   python generate.py list | all <目录> | random [seed] [输出] | <key> [输出]
+    return cli(
+        REGISTRY, doc=__doc__, seeds=SEEDS,
+        validate=required_sections("lesson", "steps", "board", min_steps=3),
+        template_name="board.html", token=PLACEHOLDER,
+        index="初中物理 · 力学与电学 · 交互课件", argv=argv)
 
 
 if __name__ == "__main__":

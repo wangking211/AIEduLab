@@ -661,13 +661,14 @@ def prim_mst(nodes, edges):
     g, t = _adj(nodes, edges), Trace()
     pos = _circular_layout(nodes)
     start = nodes[0]
-    in_tree = {start}
+    in_order = [start]                 # 并入顺序：确定不变，保证产物可复现
+    in_tree = {start}                  # 只用来 O(1) 判成员
     chosen = []
-    t.add(pos=pos, edges=[list(e) for e in edges], inTree=list(in_tree), chosen=[],
+    t.add(pos=pos, edges=[list(e) for e in edges], inTree=list(in_order), chosen=[],
           note=f"从 {start} 开始，树中只有它")
     while len(in_tree) < len(nodes):
         best = None
-        for u in in_tree:
+        for u in in_order:             # 必须按并入顺序遍历：集合迭代顺序随哈希种子变化，产物会随机
             for v, w in g[u]:
                 if v not in in_tree and (best is None or w < best[2]):
                     best = (u, v, w)
@@ -676,8 +677,9 @@ def prim_mst(nodes, edges):
         u, v, w = best
         chosen.append([u, v, w])
         in_tree.add(v)
+        in_order.append(v)
         t.bump("edge")
-        t.add(pos=pos, edges=[list(e) for e in edges], inTree=list(in_tree), chosen=[list(c) for c in chosen],
+        t.add(pos=pos, edges=[list(e) for e in edges], inTree=list(in_order), chosen=[list(c) for c in chosen],
               add=[u, v, w], note=f"选连接树内外的最小边 {u}—{v}（权 {w}），把 {v} 并进来")
     return t.out(name="最小生成树（Prim）", pos=pos, edges=[list(e) for e in edges],
                  total=sum(c[2] for c in chosen), chosen=[list(c) for c in chosen])
@@ -928,6 +930,12 @@ if __name__ == "__main__":
     assert dj["dist"]["E"] == 11
     mst = prim_mst(NODES, EDGES)
     assert mst["total"] == 1 + 2 + 5 + 3, mst["total"]   # A-C(1) C-B(2) B-D(5) D-E(3) = 11
+    # 可复现性：inTree 必须是「并入顺序」的前缀。若哪天改回遍历 set，
+    # 集合迭代顺序会随 PYTHONHASHSEED 变化，这条断言就会不稳定地失败。
+    seqs = [tuple(s["inTree"]) for s in mst["steps"]]
+    for i, q in enumerate(seqs):
+        assert q == seqs[-1][:len(q)], f"prim_mst 的 inTree 不是并入顺序的前缀（第 {i} 帧）"
+    assert seqs[-1] == ("A", "C", "B", "D", "E"), seqs[-1]
 
     # 进制
     r = base_convert(45, 2)

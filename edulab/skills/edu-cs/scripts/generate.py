@@ -18,30 +18,21 @@ generate.py — 计算机科学：注入模板 + 范例 build_* + CLI + 随机�
 """
 
 import json
-import random
 import re
 import sys
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(SKILL_DIR.parent.parent / "shared"))   # 共享运行时（edulab/shared/skillkit.py）
 sys.path.insert(0, str(SKILL_DIR / "lib"))
 
-import cs_kernel as K           # noqa: E402
-
-BOARD_T = (SKILL_DIR / "template" / "board.html").read_text(encoding="utf-8")
+import cs_kernel as K                          # noqa: E402
+from skillkit import cli                       # noqa: E402
 
 
 # ==================== 载荷构造 ====================
-def render_html(data, out, token="__LESSON_DATA__"):
-    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=str)
-    payload = payload.replace("</", "<\\/")          # 防 </script> 逃逸
-    html = BOARD_T.replace(token, payload)
-    out = Path(out)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(html, encoding="utf-8")
-    return out
-
-
+# 渲染由 skillkit.render_html 负责：紧凑分隔符 + `</` 转义 + default=str，
+# 这三项由 main() 传给 cli(...) 的参数保持与历史产物逐字节一致。
 def mk(*, title, subtitle, module, intro, scene, steps, explain, answer,
        console=None, counters=None, pills=None, **top):
     d = {
@@ -1243,10 +1234,6 @@ def meta(key):
     return (d["module"], d["title"], d["subtitle"])
 
 
-def _render(key, out_path, data=None):
-    return render_html(data if data is not None else REGISTRY[key](), out_path)
-
-
 def build_index(out, built=None):
     built = built or {k: REGISTRY[k]() for k in ORDER}
     m = {k: (built[k]["module"], built[k]["title"], built[k]["subtitle"]) for k in ORDER}
@@ -1283,68 +1270,43 @@ def build_index(out, built=None):
     return out
 
 
-def random_lesson():
-    return random.choice(ORDER)
-
-
-def main(argv):
-    if not argv or argv[0] in ("-h", "--help", "help"):
-        print(__doc__.strip())
-        return 0
-    cmd = argv[0]
-
-    if cmd in ("verify", "list", "all"):
-        built = check_all()
-        if cmd == "verify":
-            print(f"✓ 注册表与契约校验通过：{len(ORDER)} 个课件、"
-                  f"{len(SCENE_KINDS)} 种场景")
-            for mod, keys in MODULES.items():
-                print(f"\n{mod}  ({len(keys)})")
-                for k in keys:
-                    d = built[k]
-                    nf = len(d["steps"])
-                    np_ = len((d.get("console") or {}).get("params", []))
-                    print(f"  {k:18s} [{d['scene']['kind']:8s}] "
-                          f"{nf:3d} 帧 · 控制台 {np_} 参数 · {d['title']}")
-            return 0
-        if cmd == "list":
-            for mod, keys in MODULES.items():
-                print(f"{mod}  ({len(keys)})")
-                for k in keys:
-                    print(f"  {k:18s} {built[k]['title']}")
-            return 0
-        out = Path(argv[1] if len(argv) > 1 else "./out")
-        for k in ORDER:
-            p = _render(k, out / f"{k}.html", built[k])
-            print(f"  ✓ {p}")
-        idx = build_index(out / "index.html", built)
-        print(f"  ✓ {idx}  ({len(ORDER)} 页)")
-        return 0
-
-    if cmd == "random":
-        built = check_all()
-        out = Path(argv[1] if len(argv) > 1 else "./out")
-        k = random_lesson()
-        p = _render(k, out / f"{k}.html", built[k])
-        print(f"  ✓ {k} → {p}")
-        return 0
-
-    if cmd not in REGISTRY:
-        print(f"✗ 未知条目 {cmd!r}；用 `list` 查看可选，或 `verify` 跑全量校验。")
-        return 1
-    if len(argv) < 2:
-        print(f"✗ 缺少输出路径：python generate.py {cmd} ./out/{cmd}.html")
-        return 1
-    d = REGISTRY[cmd]()
-    errs = validate_lesson(cmd, d)
+def _validate(key, data):
+    """契约校验：validate_lesson 返回错误清单，这里转成异常（skillkit 的约定）。"""
+    errs = validate_lesson(key, data)
     if errs:
-        for e in errs:
-            print(f"  ✗ {e}")
-        return 1
-    p = _render(cmd, Path(argv[1]), d)
-    print(f"  ✓ {p}")
+        raise AssertionError(f"{key} 契约校验未通过：\n"
+                             + "\n".join(f"  ✗ {e}" for e in errs))
+    return True
+
+
+def _index(out_dir):
+    return build_index(Path(out_dir) / "index.html")
+
+
+def _verify(rest):
+    """verify 子命令：注册表 + 契约全量校验，并逐页打印概览。"""
+    built = check_all()
+    print(f"✓ 注册表与契约校验通过：{len(ORDER)} 个课件、{len(SCENE_KINDS)} 种场景")
+    for mod, keys in MODULES.items():
+        print(f"\n{mod}  ({len(keys)})")
+        for k in keys:
+            d = built[k]
+            np_ = len((d.get("console") or {}).get("params", []))
+            print(f"  {k:18s} [{d['scene']['kind']:8s}] "
+                  f"{len(d['steps']):3d} 帧 · 控制台 {np_} 参数 · {d['title']}")
     return 0
 
 
+def main(argv=None):
+    # 统一入口（edulab/shared/skillkit.py）：
+    #   python generate.py verify | list | all <目录> | random [seed] [输出] | <key> [输出]
+    return cli(REGISTRY, doc=__doc__, groups=MODULES, meta=meta,
+               validate=_validate, index_writer=_index,
+               commands={"verify": _verify},
+               template_name="board.html", token="__LESSON_DATA__",
+               compact=True, escape_close=True, json_default=str,
+               argv=argv if argv is not None else sys.argv[1:])
+
+
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    raise SystemExit(main())
