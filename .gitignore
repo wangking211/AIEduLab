@@ -9,6 +9,9 @@ dist/
 build/
 *.html.bak
 
+# ---- 技能的本地安装副本（真源是 edulab/skills/，避免两份逐字节重复）----
+.agents/skills/
+
 # ---- 运行时数据（bridge.py 的问答与补丁日志）----
 _live/
 

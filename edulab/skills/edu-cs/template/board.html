@@ -1,0 +1,1345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CS · 算法步骤回放</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+<style>
+  body{font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;}
+  canvas{display:block;width:100%;}
+  .ro{font-variant-numeric:tabular-nums;}
+  input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;background:#e2e8f0;outline:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+    background:#0f766e;cursor:pointer;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3);}
+  input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:#0f766e;
+    cursor:pointer;border:2px solid #fff;}
+  .stepcard{transition:all .18s ease;}
+  .note-flash{animation:flash .4s ease;}
+  @keyframes flash{0%{background:#ccfbf1}100%{background:#f0fdfa}}
+  .pill{font-size:10px;padding:1px 7px;border-radius:999px;font-weight:700;letter-spacing:.03em;}
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+
+<!-- ============ 顶栏 ============ -->
+<div class="bg-white border-b border-slate-200">
+  <div class="max-w-[1500px] mx-auto px-5 py-3 flex items-center justify-between gap-4">
+    <div class="min-w-0">
+      <div class="text-[10px] uppercase tracking-widest text-teal-600 font-bold" id="modName"></div>
+      <h1 class="text-lg font-bold leading-tight truncate" id="ttl"></h1>
+      <div class="text-xs text-slate-500" id="sub"></div>
+    </div>
+    <div class="flex items-center gap-2 shrink-0" id="topPills"></div>
+  </div>
+</div>
+
+<div class="max-w-[1500px] mx-auto px-5 py-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+  <!-- ============ 左栏：题面 + 动态控制台 ============ -->
+  <aside class="lg:col-span-3 space-y-3">
+    <div class="bg-white rounded-xl border border-slate-200 p-4">
+      <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-2">题面</div>
+      <div class="text-[13px] leading-relaxed text-slate-700" id="intro"></div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 p-4">
+      <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-3">动态控制台</div>
+      <div id="params" class="space-y-3"></div>
+      <div class="border-t border-slate-100 my-3"></div>
+      <div id="readouts" class="space-y-1.5"></div>
+      <div id="lights" class="flex flex-wrap gap-1.5 mt-3"></div>
+      <div id="constBox" class="mt-3"></div>
+      <div class="text-[10px] text-slate-400 mt-3 leading-relaxed">
+        拖动滑块即时重算；讲义文字里的数值与右侧读数同源。
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ 中栏：当前步骤 + 分步解析 ============ -->
+  <section class="lg:col-span-4 space-y-3">
+    <div class="bg-white rounded-xl border border-teal-200 p-4 stepcard" id="stepCard">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-[10px] uppercase tracking-wider text-teal-600 font-bold">当前步骤</div>
+        <div class="pill bg-teal-50 text-teal-700 border border-teal-200" id="stepIdx">0 / 0</div>
+      </div>
+      <div class="text-[13.5px] leading-relaxed" id="stepNote">—</div>
+      <div id="stepExtra" class="mt-2 space-y-1"></div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 p-4">
+      <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-2">分步解析</div>
+      <div id="explain" class="space-y-3 text-[13px] leading-relaxed text-slate-700"></div>
+    </div>
+
+    <div class="bg-teal-50 rounded-xl border border-teal-200 p-4" id="answerBox">
+      <div class="text-[10px] uppercase tracking-wider text-teal-600 font-bold mb-1">结论</div>
+      <div class="text-[13px] leading-relaxed text-teal-900" id="answer"></div>
+    </div>
+  </section>
+
+  <!-- ============ 右栏：画板 + 回放控件 ============ -->
+  <div class="lg:col-span-5 space-y-3">
+    <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div class="flex items-center justify-between px-4 py-2 border-b border-slate-100">
+        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold" id="sceneCap">画板</div>
+        <div class="flex gap-1.5" id="legend"></div>
+      </div>
+      <div class="p-3">
+        <canvas id="cv"></canvas>
+      </div>
+      <!-- 回放控件 -->
+      <div class="px-4 pb-3 pt-1 border-t border-slate-100">
+        <div class="flex items-center gap-2 mb-2">
+          <button id="btnFirst" class="ctrl" title="第一帧">⏮</button>
+          <button id="btnPrev"  class="ctrl" title="上一步">◀</button>
+          <button id="btnPlay"  class="ctrl w-11" title="播放/暂停">▶</button>
+          <button id="btnNext"  class="ctrl" title="下一步">▶▶</button>
+          <button id="btnLast"  class="ctrl" title="最后一帧">⏭</button>
+          <div class="flex-1"></div>
+          <select id="speed" class="text-xs border border-slate-200 rounded px-1.5 py-1 bg-white">
+            <option value="900">慢</option>
+            <option value="450" selected>中</option>
+            <option value="200">快</option>
+            <option value="90">极快</option>
+          </select>
+        </div>
+        <input type="range" id="scrub" min="0" max="0" value="0" class="w-full">
+        <div class="flex justify-between text-[10px] text-slate-400 mt-1">
+          <span id="scrubLbl">0</span><span id="scrubMax">0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 轨迹摘要（counters / meta） -->
+    <div class="bg-white rounded-xl border border-slate-200 p-4" id="statsBox">
+      <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-2">统计</div>
+      <div id="stats" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .ctrl{width:32px;height:28px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;
+        font-size:11px;cursor:pointer;color:#334155;transition:.15s;}
+  .ctrl:hover{background:#f0fdfa;border-color:#5eead4;color:#0f766e}
+  .ctrl:disabled{opacity:.35;cursor:not-allowed}
+</style>
+
+<script>const LESSON = __LESSON_DATA__;</script>
+
+<script>
+/* =====================================================================
+   CS 步骤回放引擎 —— 10 类场景，按 LESSON.scene.kind 分发
+   所有画面都是 LESSON.steps[frame] 的直接呈现，不编造任何状态。
+   ===================================================================== */
+const CV = document.getElementById('cv');
+const CX = CV.getContext('2d');
+const P = {                       // 调色板（与模板主题一致）
+  bg:'#ffffff', axis:'#cbd5e1', text:'#0f172a', dim:'#64748b', muted:'#94a3b8',
+  bar:'#94a3b8', cmp:'#f59e0b', swap:'#f43f5e', sorted:'#14b8a6',
+  good:'#0f766e', bad:'#e11d48', hi:'#0ea5e9', node:'#ffffff', edge:'#94a3b8',
+  done:'#14b8a6', cur:'#f59e0b', sub:'#e2e8f0', panel:'#f8fafc'
+};
+
+let FRAME = 0, TIMER = null, W = 640, H = 400, DPR = Math.max(1, window.devicePixelRatio || 1);
+
+function steps(){ return Array.isArray(LESSON.steps) ? LESSON.steps : []; }
+function step(i){ return steps()[i] || {}; }
+function scene(){ return LESSON.scene || {}; }
+
+/* ---------------- 安全表达式求值（控制台读数 / 状态灯 / 定值） ---------- */
+const ENV = {};
+/* 助手函数：表达式里可直接写 pc(x) / lg(x) / bin(x) … */
+const HELP = {
+  pc:   x => { let c=0, v = x>>>0; while (v){ c += v&1; v >>>= 1; } return c; },  // 二进制里 1 的个数
+  lg:   x => Math.log2(Math.max(Number(x),1)),
+  ln:   x => Math.log(Math.max(Number(x),1)),
+  bin:  x => (x>>>0).toString(2),
+  hex:  x => '0x' + (x>>>0).toString(16).toUpperCase(),
+  twos: (x,w) => { const m = Math.pow(2, Number(w)||8);            // w 位补码
+                   const v = ((x % m) + m) % m;
+                   return v >= m/2 ? v - m : v; },
+  pct:  (a,b) => b ? (a/b) : 0
+};
+const _JS_RESERVED = new Set(('break case catch class const continue debugger default delete do else ' +
+  'enum export extends false finally for function if import in instanceof new null return super switch ' +
+  'this throw true try typeof var void while with yield let static await implements interface package ' +
+  'private protected public arguments eval').split(' '));
+const _IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+const _FCACHE = new Map();
+function evalExpr(src){
+  if (src == null || src === '') return null;
+  try {
+    // 助手优先：即便某个读数恰好叫 hex/bin，也不会把助手函数名覆盖掉
+    const scope = Object.assign({}, ENV, HELP);
+    // 只有合法标识符才能当 Function 的形参（保留字会让整段编译失败）
+    const names = Object.keys(scope).filter(k => _IDENT.test(k) && !_JS_RESERVED.has(k));
+    const sig = names.join(',');
+    let f = _FCACHE.get(src);
+    if (!f || f._sig !== sig){
+      f = Function(names, 'return (' + String(src) + ');');
+      f._sig = sig;
+      _FCACHE.set(src, f);
+    }
+    return f.apply(null, names.map(k => scope[k]));
+  } catch(e){ return null; }
+}
+function fmt(v){
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'boolean') return v ? '是' : '否';
+  if (typeof v === 'number'){
+    if (!isFinite(v)) return '∞';
+    if (Math.abs(v) >= 1e6) return v.toExponential(3);
+    if (Math.abs(v - Math.round(v)) < 1e-9) return String(Math.round(v));
+    return String(+v.toFixed(4));
+  }
+  if (Array.isArray(v)) return v.join(' , ');
+  return String(v);
+}
+
+/* ---------------- 尺寸 ---------------- */
+function resize(){
+  const box = CV.parentElement;
+  W = Math.max(320, box.clientWidth);
+  const kind = scene().kind;
+  H = ({ bars:330, curve:330, linear:230, linked:250, tree:360,
+         graph:370, table:300, bits:340, call:340,
+         coins:340, interval:330 })[kind] || 320;
+  CV.style.height = H + 'px';
+  CV.width = Math.round(W * DPR); CV.height = Math.round(H * DPR);
+  CX.setTransform(DPR, 0, 0, DPR, 0, 0);
+  draw();
+}
+
+/* ---------------- 通用小工具 ---------------- */
+function rr(x,y,w,h,r){
+  if (CX.roundRect){ CX.beginPath(); CX.roundRect(x,y,w,h,r); return; }
+  CX.beginPath(); CX.moveTo(x+r,y);
+  CX.arcTo(x+w,y,x+w,y+h,r); CX.arcTo(x+w,y+h,x,y+h,r);
+  CX.arcTo(x,y+h,x,y,r); CX.arcTo(x,y,x+w,y,r); CX.closePath();
+}
+function txt(s,x,y,{size=11,color=P.text,align='left',base='middle',weight=400}={}){
+  CX.fillStyle=color; CX.textAlign=align; CX.textBaseline=base;
+  CX.font = `${weight} ${size}px "PingFang SC","Microsoft YaHei",system-ui,sans-serif`;
+  CX.fillText(String(s), x, y);
+}
+function line(x1,y1,x2,y2,color=P.axis,w=1,dash=[]){
+  CX.save(); CX.setLineDash(dash); CX.strokeStyle=color; CX.lineWidth=w;
+  CX.beginPath(); CX.moveTo(x1,y1); CX.lineTo(x2,y2); CX.stroke(); CX.restore();
+}
+function dot(x,y,r,color){ CX.fillStyle=color; CX.beginPath(); CX.arc(x,y,r,0,7); CX.fill(); }
+function arrow(x1,y1,x2,y2,color=P.edge,w=1.6){
+  const a=Math.atan2(y2-y1,x2-x1), h=7;
+  CX.strokeStyle=color; CX.lineWidth=w; CX.beginPath(); CX.moveTo(x1,y1); CX.lineTo(x2,y2); CX.stroke();
+  CX.fillStyle=color; CX.beginPath();
+  CX.moveTo(x2,y2);
+  CX.lineTo(x2-h*Math.cos(a-0.42), y2-h*Math.sin(a-0.42));
+  CX.lineTo(x2-h*Math.cos(a+0.42), y2-h*Math.sin(a+0.42));
+  CX.closePath(); CX.fill();
+}
+const has = (o,k)=> o && Object.prototype.hasOwnProperty.call(o,k);
+
+/* =====================================================================
+   场景 1/10：bars —— 数组（排序 / 查找 / 贪心）
+   ===================================================================== */
+function drawBars(s, st){
+  const a = st.a || s.a || [];
+  const n = a.length; if (!n) return;
+  const pad = {l:26,r:14,t:34,b:34};
+  const bw = (W-pad.l-pad.r)/n;
+  const inner = H-pad.t-pad.b;
+  const lo = Math.min(...a, 0), hi = Math.max(...a, 1);
+  const span = (hi-lo)||1;
+  const yOf = v => pad.t + inner*(1-(v-lo)/span);
+  const zero = yOf(0);
+
+  const cmp = st.cmp || [], swp = st.swap || [], sortedIdx = st.sorted || [];
+  const range = st.range, mid = st.mid, pivot = st.pivot, found = st.found;
+
+  // 轴
+  line(pad.l-6, pad.t+inner, W-pad.r, pad.t+inner, P.axis, 1);
+
+  // range 高亮带
+  if (Array.isArray(range) && range.length === 2){
+    const x0 = pad.l + range[0]*bw, x1 = pad.l + (range[1]+1)*bw;
+    CX.fillStyle='rgba(14,165,233,.07)'; CX.fillRect(x0, pad.t-8, x1-x0, inner+8);
+    line(x0,pad.t-8,x0,pad.t+inner,'#7dd3fc',1.2,[3,3]);
+    line(x1,pad.t-8,x1,pad.t+inner,'#7dd3fc',1.2,[3,3]);
+    txt(`[${range[0]}, ${range[1]}]`, (x0+x1)/2, pad.t-16, {size:10,color:'#0284c7',align:'center'});
+  }
+
+  a.forEach((v,i)=>{
+    const x = pad.l + i*bw, y = yOf(v);
+    let c = P.bar;
+    if (sortedIdx.includes(i)) c = P.sorted;
+    if (cmp.includes(i)) c = P.cmp;
+    if (swp.includes(i)) c = P.swap;
+    if (found === i) c = P.good;
+    const yy = Math.min(y, zero), hh = Math.max(2, Math.abs(zero-y));
+    CX.fillStyle = c;
+    rr(x+1.5, yy, Math.max(2,bw-3), hh, 3); CX.fill();
+    // 数值
+    txt(v, x+bw/2, yy-9, {size: bw<30?9:10, align:'center',
+      color: (cmp.includes(i)||swp.includes(i))?c:P.dim, weight:(cmp.includes(i)||swp.includes(i))?700:400});
+    // 下标
+    txt(i, x+bw/2, H-pad.b+13, {size:9, align:'center', color:P.muted});
+  });
+
+  // mid / pivot 标记
+  const mark = (idx, label, color)=>{
+    if (idx==null || idx<0 || idx>=n) return;
+    const x = pad.l + idx*bw + bw/2;
+    txt('▼'+label, x, pad.t-6, {size:10, align:'center', color, weight:700});
+  };
+  mark(mid, ` mid`, '#0ea5e9');
+  mark(pivot, ` 枢轴`, '#e11d48');
+
+  // found 标记
+  if (found != null && found >= 0 && found < n){
+    const x = pad.l + found*bw + bw/2;
+    CX.strokeStyle=P.good; CX.lineWidth=2;
+    rr(pad.l+found*bw+1, yOf(a[found])-16, bw-2, H-pad.b-(yOf(a[found])-16)+2, 4); CX.stroke();
+    txt('✓ 命中', x, pad.t-20, {size:10.5, align:'center', color:P.good, weight:700});
+  }
+
+  // merge 区段
+  if (st.merge != null){
+    txt(`已回写 a[${st.merge}]`, W-pad.r, pad.t-20, {size:10, align:'right', color:'#7c3aed', weight:700});
+  }
+}
+
+/* =====================================================================
+   场景 2/10：curve —— 复杂度增长曲线
+   ===================================================================== */
+function drawCurve(s, st){
+  const series = s.series || [];
+  if (!series.length) return;
+  const n = (s.nmax || 64);
+  const pad = {l:44,r:14,t:18,b:30};
+  const iw = W-pad.l-pad.r, ih = H-pad.t-pad.b;
+  let maxV = 0;
+  series.forEach(sr => sr.values.forEach(v => { if (isFinite(v)) maxV = Math.max(maxV, v); }));
+  maxV = maxV || 1;
+  // 轴
+  line(pad.l, pad.t+ih, pad.l+iw, pad.t+ih, P.axis, 1.2);
+  line(pad.l, pad.t, pad.l, pad.t+ih, P.axis, 1.2);
+  for (let k=0;k<=4;k++){
+    const y = pad.t + ih*(1-k/4);
+    line(pad.l, y, pad.l+iw, y, '#f1f5f9', 1);
+    txt(fmt(maxV*k/4), pad.l-6, y, {size:9, align:'right', color:P.muted});
+  }
+  [0, .25, .5, .75, 1].forEach(f =>
+    txt(Math.round(n*f), pad.l+iw*f, pad.t+ih+13, {size:9, align:'center', color:P.muted}));
+  txt('n（规模）', pad.l+iw/2, H-6, {size:10, align:'center', color:P.dim});
+  txt('操作数', pad.l-32, pad.t-4, {size:10, color:P.dim});
+
+  const colors = ['#0f766e','#0ea5e9','#f59e0b','#e11d48','#8b5cf6','#10b981','#f43f5e'];
+  series.forEach((sr, si) => {
+    const c = colors[si % colors.length];
+    const vals = sr.values, m = vals.length;
+    CX.strokeStyle=c; CX.lineWidth=2; CX.beginPath();
+    vals.forEach((v,i)=>{
+      if (!isFinite(v)) return;
+      const x = pad.l + iw*(i/(m-1||1));
+      const y = pad.t + ih*(1-Math.min(v,maxV)/maxV);
+      i?CX.lineTo(x,y):CX.moveTo(x,y);
+    });
+    CX.stroke();
+    // 图例
+    const lx = pad.l + 10 + (si%2)*135, ly = pad.t + 6 + Math.floor(si/2)*15;
+    line(lx, ly, lx+16, ly, c, 2.2);
+    txt(sr.label, lx+21, ly, {size:10, color:c, weight:600});
+  });
+}
+
+/* =====================================================================
+   场景 3/10：linear —— 栈 / 队列
+   ===================================================================== */
+function drawLinear(s, st){
+  const arr = st.stack || st.queue || [];
+  const isStack = has(st,'stack');
+  const n = Math.max(arr.length, 4);
+  const cell = Math.min(58, (W-70)/n);
+  const x0 = (W - cell*n)/2, y0 = 46;
+
+  txt(isStack ? '栈（LIFO 后进先出）' : '队列（FIFO 先进先出）', W/2, 20,
+      {size:12, align:'center', color:P.dim, weight:700});
+
+  arr.forEach((v,i)=>{
+    const x = x0 + i*cell;
+    const isTop = (isStack && i === arr.length-1);
+    const isHead = (!isStack && i === 0);
+    CX.fillStyle = isTop||isHead ? '#ccfbf1' : '#f1f5f9';
+    CX.strokeStyle = isTop||isHead ? P.good : '#cbd5e1';
+    CX.lineWidth = isTop||isHead ? 2 : 1;
+    rr(x, y0, cell-4, cell-4, 6); CX.fill(); CX.stroke();
+    txt(v, x+(cell-4)/2, y0+(cell-4)/2, {size:15, align:'center', weight:700,
+      color: isTop||isHead ? P.good : P.text});
+    txt(i, x+(cell-4)/2, y0+cell+4, {size:9, align:'center', color:P.muted});
+  });
+  // 指针
+  if (isStack && arr.length){
+    const x = x0 + (arr.length-1)*cell + (cell-4)/2;
+    txt('▲ top', x, y0-14, {size:10.5, align:'center', color:P.good, weight:700});
+  }
+  if (!isStack && arr.length){
+    txt('▲ 出队 head', x0+(cell-4)/2, y0-14, {size:10.5, align:'center', color:P.good, weight:700});
+    txt('入队 tail ▲', x0+(arr.length-1)*cell+(cell-4)/2, y0+cell+18,
+        {size:10.5, align:'center', color:'#0ea5e9', weight:700});
+  }
+  if (!arr.length){
+    txt('（空）', W/2, y0+20, {size:13, align:'center', color:P.muted});
+  }
+  if (st.op) txt('操作：'+st.op, W/2, H-16, {size:11.5, align:'center', color:P.dim});
+  if (s.rule) txt(s.rule, W/2, H-34, {size:10.5, align:'center', color:P.muted});
+}
+
+/* =====================================================================
+   场景 4/10：linked —— 链表（**顺着 next 指针走**，不是按数组下标画）
+   ===================================================================== */
+function drawLinked(s, st){
+  const nodes = st.nodes || [];
+  if (!nodes.length){ txt('（空链表）', W/2, H/2, {size:13, align:'center', color:P.muted}); return; }
+  const byId = {}; nodes.forEach(n => byId[n.id] = n);
+  const head = (st.head != null) ? st.head : nodes[0].id;
+
+  // 从 head 顺着 next 走一遍 —— 这才是链表的真实逻辑顺序
+  const ordered = [], seen = new Set();
+  let cur = head;
+  while (cur && byId[cur] && !seen.has(cur)){ seen.add(cur); ordered.push(byId[cur]); cur = byId[cur].next; }
+  const orphans = nodes.filter(n => !seen.has(n.id));
+  const hi = new Set(st.hi || []);          // 内核用 hi 标出「被摘掉的结点」
+  const isNewId = id => st.new != null && id === st.new;
+  const isDelId = id => hi.has(id);
+
+  const BW = 52, PW = 40, GAP = 16, CELL = BW + PW + GAP;
+  const rows = orphans.length ? 2 : 1;
+  const y1 = rows > 1 ? 52 : Math.round(H/2) - 26;
+  const y2 = y1 + 104;
+
+  function drawRow(row, y, dim){
+    const x0 = (W - (row.length*CELL - GAP))/2;
+    const pos = {};
+    row.forEach((nd,i)=>{
+      const x = x0 + i*CELL;
+      pos[nd.id] = x;
+      const del = isDelId(nd.id), fresh = isNewId(nd.id);
+      let fill, stroke, tcol;
+      if (dim && del)        { fill = '#ffe4e6'; stroke = P.swap;  tcol = P.swap;  }
+      else if (dim && fresh) { fill = '#ede9fe'; stroke = '#8b5cf6'; tcol = '#6d28d9'; }
+      else if (dim)          { fill = '#f8fafc'; stroke = '#cbd5e1'; tcol = P.muted;  }
+      else if (del || hi.has(nd.id)) { fill = '#ccfbf1'; stroke = P.good; tcol = P.good; }
+      else                   { fill = '#fff';    stroke = '#cbd5e1'; tcol = P.text;   }
+      const strong = !dim || del || fresh;
+      CX.save();
+      CX.setLineDash(dim ? [4,3] : []);
+      CX.fillStyle = fill; CX.strokeStyle = stroke; CX.lineWidth = strong ? 1.6 : 1;
+      rr(x, y, BW, 40, 5); CX.fill(); CX.stroke();
+      rr(x+BW, y, PW, 40, 5); CX.fill(); CX.stroke();
+      CX.restore();
+      txt(nd.val, x+BW/2, y+20, {size:15, align:'center', weight:700, color: tcol});
+      if (dim && del) txt('✕', x+BW/2, y+20, {size:26, align:'center', color:'rgba(244,63,94,.32)'});
+      // 指针格：画出它**实际**指向谁
+      if (nd.next && byId[nd.next]){
+        arrow(x+BW+5, y+20, x+CELL-4, y+20,
+              dim ? (del ? '#fda4af' : (fresh ? '#c4b5fd' : '#cbd5e1'))
+                  : (hi.has(nd.id) ? '#0ea5e9' : P.edge), 1.6);
+      } else {
+        txt('∅', x+BW+PW/2, y+20, {size:13, align:'center', color:P.muted});
+      }
+      txt(nd.id, x+BW/2, y+52, {size:9, align:'center', color:P.muted});
+    });
+    return pos;
+  }
+
+  const pos = drawRow(ordered, y1, false);
+  // head 指针
+  const hx = pos[head];
+  if (hx != null){
+    txt('head', hx-4, y1-18, {size:10.5, align:'left', color:P.good, weight:700});
+    arrow(hx+18, y1-14, hx+18, y1-2, P.good, 1.6);
+  }
+  if (orphans.length){
+    const hasDel = orphans.some(n => isDelId(n.id));
+    const hasNew = orphans.some(n => isNewId(n.id));
+    const label = (hasDel && hasNew) ? '未接入的新结点 / 已摘除的结点'
+                : hasNew ? '新结点尚未接入 —— 还差最后一步改指针'
+                : '已摘除（不再可达）';
+    txt(label, W/2, y2-16, {size:10.5, align:'center', weight:700,
+        color: (hasNew && !hasDel) ? '#6d28d9' : P.bad});
+    drawRow(orphans, y2, true);
+  }
+  // 新结点 / prev 标记
+  const mark = (id, label, color, dy) => {
+    const x = pos[id]; if (x == null) return;
+    txt(label, x+BW/2, y1+dy, {size:10.5, align:'center', color, weight:700});
+  };
+  mark(st.new,  '＋新结点', '#8b5cf6', -6);
+  mark(st.prev, 'prev',    '#f59e0b', 70);
+  if (st.note) txt(st.note, W/2, H-12, {size:11.5, align:'center', color:P.dim});
+}
+
+/* =====================================================================
+   场景 5/10：tree —— 二叉树 / BST / 堆
+   ===================================================================== */
+/* ---- 统一成 {pos, ids, val, parents, hi, swap}，兼容 三种数据源 ----
+   1) 二叉树遍历 / BST：s.nodes=[{id,val,edges?}] + s.pos
+   2) 堆：st.heap 数组，结点 id = h0..hn                                   */
+function treeModel(s, st){
+  const pos = {}, ids = [], vals = {}, parents = {};
+  let valToId = {};
+
+  if (st.heap){
+    const h = st.heap, n = h.length;
+    let maxLvl = 0;
+    const lv = i => { let l=0,k=i; while(k>0){k=(k-1)>>1;l++;} return l; };
+    for (let i=0;i<n;i++) maxLvl = Math.max(maxLvl, lv(i));
+    for (let i=0;i<n;i++){
+      const id = 'h'+i, l = lv(i), start = Math.pow(2,l)-1, j = i-start, cnt = Math.pow(2,l);
+      pos[id] = [(j+0.5)/cnt, maxLvl ? 1 - l/maxLvl : 1];
+      ids.push(id); vals[id] = h[i];
+      if (i>0) parents[id] = 'h'+((i-1)>>1);
+    }
+    valToId = {};
+  } else {
+    const nodes = s.nodes || [];
+    nodes.forEach(nd=>{
+      pos[nd.id] = (s.pos && s.pos[nd.id]) || [nd.x, 1-(nd.y!=null?nd.y:0)];
+      ids.push(nd.id); vals[nd.id] = nd.val;
+      if (!(nd.val in valToId)) valToId[nd.val] = nd.id;
+      if (nd.parent) parents[nd.id] = nd.parent;
+    });
+    nodes.forEach(nd=>{ (nd.edges||[]).forEach(c => { parents[c] = nd.id; }); });
+    // 树遍历的 steps 只给 visit 值，用值反查 id
+    nodes.forEach(nd=>{ if (!(nd.val in valToId)) valToId[nd.val] = nd.id; });
+  }
+
+  const norm = x => {
+    if (x === null || x === undefined) return null;
+    if (pos[x] !== undefined) return x;
+    if (valToId[x] !== undefined) return valToId[x];
+    if (st.heap && typeof x === 'number') return 'h'+x;
+    return String(x);
+  };
+  // 可能是数组、也可能只是单个值（如 st.visit 是一个结点 id），统一成数组
+  const normSet = x => new Set(
+    (Array.isArray(x) ? x : (x === null || x === undefined ? [] : [x]))
+      .map(norm).filter(Boolean));
+
+  const hi = new Set([...normSet(st.hi), ...normSet(st.path), ...normSet(st.visited)]);
+  if (st.at != null) { const v = norm(st.at); if (v) hi.add(v); }
+  if (st.visit != null) { const v = norm(st.visit); if (v) hi.add(v); }
+  const swap = normSet(st.swap);
+  return {pos, ids, vals, parents, hi, swap, isNew: norm(st.new), valToId};
+}
+function drawTree(s, st){
+  const M = treeModel(s, st);
+  const ids = M.ids;
+  if (!ids.length) return;
+  const pad = {l:34,r:34,t:40,b:44};
+  const iw = W-pad.l-pad.r, ih = H-pad.t-pad.b;
+  const X = p => pad.l + p[0]*iw, Y = p => pad.t + (1-p[1])*ih;
+
+  // 边
+  ids.forEach(id=>{
+    const p = M.pos[id], par = M.parents[id];
+    if (p && par && M.pos[par]){
+      const hot = M.hi.has(id) && M.hi.has(par);
+      line(X(M.pos[par]), Y(M.pos[par]), X(p), Y(p), hot?P.good:'#cbd5e1', hot?2.4:1.6);
+    }
+  });
+
+  const R = Math.max(13, Math.min(18, iw/Math.max(ids.length,1)/2.4));
+  ids.forEach(id=>{
+    const p = M.pos[id]; if (!p) return;
+    const x = X(p), y = Y(p);
+    let fill='#fff', stroke='#cbd5e1', lw=1.7, tc=P.text;
+    if (M.hi.has(id)){ fill='#ccfbf1'; stroke=P.good; lw=2.6; tc=P.good; }
+    if (M.swap.has(id)){ fill='#ffe4e6'; stroke=P.swap; lw=2.8; tc=P.swap; }
+    if (id === M.isNew){ fill='#ede9fe'; stroke='#8b5cf6'; lw=2.8; tc='#6d28d9'; }
+    CX.fillStyle=fill; CX.strokeStyle=stroke; CX.lineWidth=lw;
+    CX.beginPath(); CX.arc(x,y,R,0,7); CX.fill(); CX.stroke();
+    txt(M.vals[id], x, y+1, {size:R<15?11:13.5, align:'center', weight:700, color:tc});
+    if (st.heap) txt('#'+id.slice(1), x, y+R+11, {size:9, align:'center', color:P.muted});
+  });
+
+  const foot = [];
+  if (st.pop != null) foot.push(`弹出堆顶 ${st.pop}`);
+  if (st.dir) {
+    const pathIds = (st.path||[]).map(x=>{
+      const n = M.valToId && (x in M.valToId) ? M.valToId[x] : (M.vals[x]!==undefined?x:x);
+      return M.vals[n]!==undefined ? M.vals[n] : n;
+    });
+    foot.push(`${st.op||'查找'}：向${st.dir==='L'?'左':'右'}${pathIds.length?'（'+pathIds.join(' → ')+'）':''}`);
+  }
+  else if (st.op && st.path && st.path.length) foot.push(`${st.op}：${st.path.join(' → ')}`);
+  if (st.op && !st.path?.length && !st.dir) foot.push(st.op);
+  if (s.traversal) foot.push(`中序遍历序列：${(s.orders&&s.orders.in||[]).join('  ')}`);
+  txt(foot.filter(Boolean).join('      '), W/2, H-14,
+      {size:11.5, align:'center', color:P.dim, weight:600});
+}
+
+/* =====================================================================
+   场景 6/10：graph —— BFS / DFS / Dijkstra / MST
+   ===================================================================== */
+function drawGraph(s, st){
+  const pos = st.pos || s.pos || {};
+  const edges = st.edges || s.edges || [];
+  const ids = Object.keys(pos); if (!ids.length) return;
+  const pad = 46;
+  const X = p => pad + p[0]*(W-2*pad), Y = p => pad + p[1]*(H-2*pad);
+  const key = (u,v) => [u,v].sort().join('|');
+
+  const visited = new Set(st.visited || []);
+  const done    = new Set(st.done || []);
+  const inTree  = new Set(st.inTree || []);
+  const addN    = new Set();
+  (st.add && Array.isArray(st.add[0]) ? [] : (st.add ? [st.add] : []))
+    .forEach(e => addN.add(typeof e === 'string' ? e : e[0]));
+  // chosen 是**边三元组** [u,v,w] 的数组，要拆成结点集 + 边集
+  const chosenN = new Set(), chosenE = new Set();
+  (st.chosen || []).forEach(e => { if (Array.isArray(e)){ chosenN.add(e[0]); chosenN.add(e[1]); chosenE.add(key(e[0],e[1])); } });
+  // relax：内核给的是**被松弛的结点 id**（字符串）；也兼容 [u,v] 或结点数组
+  const relaxE = new Set(), relaxN = new Set();
+  const rl = st.relax;
+  if (Array.isArray(rl) && rl.length === 2 && rl.every(x => typeof x === 'string'))
+    relaxE.add(key(rl[0], rl[1]));
+  else if (typeof rl === 'string') relaxN.add(rl);
+  else if (Array.isArray(rl)) rl.forEach(x => { if (typeof x === 'string') relaxN.add(x); });
+  const hotE = new Set();
+  if (st.edge && Array.isArray(st.edge)) hotE.add(key(st.edge[0], st.edge[1]));
+  if (Array.isArray(st.add) && st.add.length >= 2 && Array.isArray(st.add[0])) hotE.add(key(st.add[0], st.add[1]));
+  else if (st.add && Array.isArray(st.add) && st.add.length >= 2 && typeof st.add[0] === 'string') hotE.add(key(st.add[0], st.add[1]));
+
+  // ---- 边 ----
+  edges.forEach(e=>{
+    const u = e[0], v = e[1], w = e.length>2 ? e[2] : null;
+    if (!pos[u] || !pos[v]) return;
+    const k = key(u,v);
+    let c = '#e2e8f0', lw = 1.8, dash = [];
+    const onTree = chosenE.has(k) || (inTree.has(u) && inTree.has(v));
+    const onRelax = relaxE.has(k);
+    if (hotE.has(k) || onRelax){ c = P.good; lw = 3.4; }
+    else if (onTree){ c = P.good; lw = 3; }
+    else if (visited.has(u) && visited.has(v)){ c = '#94a3b8'; lw = 2.2; }
+    else if (visited.size || done.size || inTree.size){ c = '#e2e8f0'; lw = 1.8; dash = [4,3]; }
+    line(X(pos[u]), Y(pos[u]), X(pos[v]), Y(pos[v]), c, lw, dash);
+    if (w != null){
+      const mx=(X(pos[u])+X(pos[v]))/2, my=(Y(pos[u])+Y(pos[v]))/2;
+      const hot = hotE.has(k) || onTree || onRelax;
+      CX.fillStyle='#fff'; CX.strokeStyle= hot ? P.good : '#e2e8f0'; CX.lineWidth= hot?1.8:1;
+      const tw = 16+String(w).length*6;
+      rr(mx-tw/2, my-9, tw, 18, 5); CX.fill(); CX.stroke();
+      txt(w, mx, my, {size:10.5, align:'center', color: hot?P.good:P.dim, weight:700});
+    }
+  });
+
+  // ---- 结点 ----
+  ids.forEach(id=>{
+    const p = pos[id], x=X(p), y=Y(p), R=17;
+    let fill='#fff', stroke='#cbd5e1', tc=P.text, lw=1.8;
+    if (inTree.has(id) || chosenN.has(id) || done.has(id)){ fill='#ccfbf1'; stroke=P.good; tc=P.good; lw=2.6; }
+    else if (visited.has(id)){ fill='#e0f2fe'; stroke='#0ea5e9'; tc='#0369a1'; lw=2.4; }
+    if (id === st.cur){ fill='#fef3c7'; stroke=P.cur; tc='#b45309'; lw=3.2; }
+    if (id === st.push){ fill='#ede9fe'; stroke='#8b5cf6'; tc='#6d28d9'; lw=3.2; }
+    if (addN.has(id) || relaxN.has(id)){ fill='#ccfbf1'; stroke=P.good; tc=P.good; lw=3.2; }
+    CX.fillStyle=fill; CX.strokeStyle=stroke; CX.lineWidth=lw;
+    CX.beginPath(); CX.arc(x,y,R,0,7); CX.fill(); CX.stroke();
+    txt(id, x, y-1, {size:13, align:'center', weight:700, color:tc});
+    if (st.dist && Object.prototype.hasOwnProperty.call(st.dist, id)){
+      const d = st.dist[id];
+      txt((d === null || d === undefined) ? '∞' : d, x, y+R+12,
+          {size:11, align:'center', weight:700,
+           color: (d === null || d === undefined) ? P.muted : P.good});
+    }
+    else if (st.depth != null && id === st.cur)
+      txt('d='+st.depth, x, y+R+12, {size:10.5, align:'center', color:'#b45309', weight:700});
+  });
+
+  const q = st.queue || st.stack;
+  if (q) txt((st.queue?'队列':'栈')+'：'+(q.join('  →  ')||'（空）'),
+             W/2, 20, {size:12, align:'center', color:P.dim, weight:600});
+}
+
+/* =====================================================================
+   场景 7/10：table —— DP 表 / 哈希桶
+   ===================================================================== */
+function drawTable(s, st){
+  if ((s.mode || (st.buckets ? 'buckets' : 'dp')) === 'buckets') return drawBuckets(s, st);
+  const raw = st.table != null ? st.table : s.table;
+  if (!raw || !raw.length) return;
+  const is2D = Array.isArray(raw[0]);
+
+  if (!is2D) return draw1D(s, st, raw);
+
+  // ---- 2D DP 表（0-1 背包）：hi = [行, 列]，from_ = [行, 列] ----
+  const tb = raw, rows = tb.length, cols = (tb[0]||[]).length;
+  const labels = s.rowLabels || null, colLabels = s.colLabels || null;
+  const pad = {l: labels?104:46, r:14, t:44, b:30};
+  const cw = (W-pad.l-pad.r)/cols, ch = (H-pad.t-pad.b)/rows;
+  const hi  = Array.isArray(st.hi) && st.hi.length===2 ? st.hi : null;
+  const from = Array.isArray(st.from_) && st.from_.length===2 ? st.from_ : null;
+
+  if (s.title) txt(s.title, pad.l, 16, {size:11, align:'left', color:P.dim, weight:700});
+  if (colLabels) colLabels.forEach((c,j)=>
+    txt(c, pad.l+j*cw+cw/2, pad.t-20, {size:9.5, align:'center', color:P.dim}));
+  if (labels) labels.forEach((l,i)=>
+    txt(l, pad.l-10, pad.t+i*ch+ch/2, {size:10, align:'right', color:P.dim, weight:600}));
+
+  for (let i=0;i<rows;i++) for (let j=0;j<cols;j++){
+    const x = pad.l+j*cw, y = pad.t+i*ch;
+    const isHi = hi && hi[0]===i && hi[1]===j;
+    const isFrom = from && from[0]===i && from[1]===j;
+    CX.fillStyle = isHi ? '#ccfbf1' : (isFrom ? '#e0f2fe' : ((i+j)%2 ? '#f8fafc' : '#fff'));
+    CX.strokeStyle = isHi ? P.good : '#e2e8f0'; CX.lineWidth = isHi ? 2.4 : 1;
+    CX.fillRect(x,y,cw,ch); CX.strokeRect(x+.5,y+.5,cw-1,ch-1);
+    const v = tb[i][j];
+    txt(v===null||v===undefined||v===''?'·':v, x+cw/2, y+ch/2,
+        {size: cw<40?10.5:13, align:'center', weight:isHi||isFrom?700:500,
+         color: isHi?P.good:(isFrom?'#0369a1':P.text)});
+    if (isHi) txt('★', x+cw-7, y+8, {size:9, align:'center', color:P.good, weight:700});
+  }
+  // 来源连线
+  if (hi && from){
+    const x1=pad.l+hi[1]*cw+cw/2, y1=pad.t+hi[0]*ch+ch/2;
+    const x2=pad.l+from[1]*cw+cw/2, y2=pad.t+from[0]*ch+ch/2;
+    line(x1,y1,x2,y2,'#7dd3fc',1.6,[4,3]);
+  }
+  if (st.note) txt(st.note, W/2, H-10, {size:11, align:'center', color:P.dim});
+}
+/* ---- 1D 表（斐波那契 f(0..n)）：hi = 下标数组，from_ = 两个来源下标 ---- */
+function draw1D(s, st, tb){
+  const n = tb.length;
+  const pad = {l:24, r:24, t:70, b:44};
+  const cw = (W-pad.l-pad.r)/n, y = pad.t, h = 54;
+  if (s.title) txt(s.title, W/2, 20, {size:12, align:'center', color:P.dim, weight:700});
+  txt('自底向上：先把 f(0)、f(1) 放好，再一路往后推', W/2, 40,
+      {size:10.5, align:'center', color:P.muted});
+  const hi = new Set(st.hi || []);
+  const from = st.from_ || [];
+  for (let i=0;i<n;i++){
+    const x = pad.l+i*cw, on = hi.has(i), src = from.includes(i);
+    CX.fillStyle = on ? '#ccfbf1' : (src ? '#e0f2fe' : '#f8fafc');
+    CX.strokeStyle = on ? P.good : (src ? '#0ea5e9' : '#e2e8f0');
+    CX.lineWidth = on ? 2.4 : 1;
+    rr(x+1, y, cw-3, h, 6); CX.fill(); CX.stroke();
+    txt(tb[i], x+cw/2, y+h/2-6, {size: cw<44?14:17, align:'center', weight:700,
+        color: on ? P.good : (src ? '#0369a1' : P.text)});
+    txt(`f(${i})`, x+cw/2, y+h+15, {size:9.5, align:'center', color:P.muted});
+    if (on && !src){
+      CX.strokeStyle=P.good; CX.lineWidth=2;
+      CX.strokeRect(x+.5, y-.5, cw-2, h+1);
+    }
+  }
+  // 求和连线
+  if (from.length === 2 && hi.size){
+    const cur = [...hi][0];
+    if (cur != null && from[0] < n && from[1] < n){
+      const yb = y+h+28;
+      const cx = pad.l+cur*cw+cw/2;
+      [from[0], from[1]].forEach(k=>{
+        const xk = pad.l+k*cw+cw/2;
+        CX.strokeStyle='#7dd3fc'; CX.lineWidth=1.6;
+        CX.beginPath(); CX.moveTo(xk, y+h+18); CX.quadraticCurveTo(xk, yb, cx, yb); CX.stroke();
+      });
+      txt('相加 →', cx+8, yb+2, {size:10.5, align:'left', color:'#0284c7', weight:700});
+    }
+  }
+  if (st.note) txt(st.note, W/2, H-10, {size:11, align:'center', color:P.dim});
+}
+function drawBuckets(s, st){
+  const b = st.buckets || [];
+  const size = b.length;
+  const bh = Math.min(34, (H-70)/Math.max(size,1));
+  const bwid = Math.min(210, W-150);
+  const x0 = 62, y0 = (H - bh*size)/2 + 6;
+  txt(`哈希表 · ${size} 个桶`, W/2, 18, {size:11.5, align:'center', color:P.dim, weight:700});
+  const hi = st.hi || [];
+  for (let i=0;i<size;i++){
+    const y = y0+i*bh;
+    const isHi = hi.includes(i);
+    CX.fillStyle = isHi?'#ccfbf1':'#f8fafc';
+    CX.strokeStyle = isHi?P.good:'#cbd5e1'; CX.lineWidth=isHi?2:1;
+    rr(x0, y, 40, bh-4, 4); CX.fill(); CX.stroke();
+    txt(i, x0+20, y+(bh-4)/2, {size:11.5, align:'center', color:isHi?P.good:P.dim, weight:700});
+    // 桶内容
+    const items = b[i]||[];
+    let bx = x0+48;
+    items.forEach(it=>{
+      CX.fillStyle = '#fff'; CX.strokeStyle = '#94a3b8'; CX.lineWidth=1.4;
+      rr(bx, y+4, 46, bh-12, 4); CX.fill(); CX.stroke();
+      arrow(bx-8, y+(bh-4)/2, bx-2, y+(bh-4)/2, '#94a3b8', 1.4);
+      txt(it, bx+23, y+(bh-4)/2, {size:11.5, align:'center', weight:600});
+      bx += 56;
+    });
+    if (!items.length) txt('∅', x0+64, y+(bh-4)/2, {size:11, color:'#cbd5e1'});
+  }
+  if (st.h != null) txt(`h(${st.key}) = ${st.key} mod ${size} = ${st.h}`, W-14, 18,
+      {size:11, align:'right', color:P.good, weight:700});
+  if (st.note) txt(st.note, W/2, H-8, {size:10.5, align:'center', color:P.dim});
+}
+
+/* =====================================================================
+   场景 8/10：bits —— 进制 / 位运算 / 编码
+   ===================================================================== */
+function drawBits(s, st){
+  // mode 由 generate.py 显式给出，避免用"当前帧有没有某字段"来猜场景
+  const mode = s.mode || (s.rows ? 'ops' : (s.utf8_bits ? 'encode' : 'convert'));
+  if (mode === 'ops')     return drawBitRows(s, st);
+  if (mode === 'encode')  return drawEncoding(s, st);
+  return drawBaseConvert(s, st);
+}
+function drawBitRows(s, st){
+  // 内核行格式：{op:"A XOR B", expr:"12 ^ 10", bin:"00000110", dec:6}
+  const rows = st.rows || s.rows || [];
+  const width = s.width || (rows[0] ? String(rows[0].bin).length : 8);
+  const label = rows.map(r=>r.op).reduce((a,b)=> a.length>=b.length?a:b, '');
+  const labelW = Math.min(150, Math.max(84, label.length*7.2 + 10));
+  const cw = Math.min(34, (W - labelW - 74) / width);
+  const x0 = labelW + 14, y0 = 44, rh = Math.min(40, (H-76)/Math.max(rows.length,1));
+  txt(`${width} 位 · 高位在左`, W/2, 16, {size:11, align:'center', color:P.dim, weight:700});
+  // 位权标尺
+  for (let i=0;i<width;i++){
+    const x = x0 + (width-1-i)*cw;
+    txt(Math.pow(2,i), x+(cw-3)/2, y0-9, {size:8.5, align:'center', color:P.muted});
+  }
+  rows.forEach((r,ri)=>{
+    const y = y0 + ri*rh;
+    const isRes = ri >= 2;                       // 第 3 行起是运算结果
+    txt(r.op, x0-12, y+(rh-8)/2, {size:11, align:'right',
+        color: isRes ? P.good : P.dim, weight:isRes?700:600});
+    const bits = String(r.bin);
+    for (let i=0;i<bits.length;i++){
+      const x = x0 + i*cw, on = bits[i]==='1';
+      CX.fillStyle = on ? (isRes ? '#ccfbf1' : '#0f172a') : '#f1f5f9';
+      CX.strokeStyle = isRes ? P.good : '#e2e8f0'; CX.lineWidth = isRes?1.8:1;
+      rr(x, y, cw-3, rh-8, 4); CX.fill(); CX.stroke();
+      txt(bits[i], x+(cw-3)/2, y+(rh-8)/2, {size:13, align:'center', weight:700,
+        color: on ? (isRes?P.good:'#fff') : '#cbd5e1'});
+    }
+    const rx = x0 + bits.length*cw + 10;
+    txt(`= ${r.dec}`, rx, y+(rh-8)/2, {size:12, align:'left',
+        color: isRes ? P.good : P.text, weight:isRes?700:500});
+    if (r.expr && r.expr !== r.op)
+      txt(r.expr, rx + 54, y+(rh-8)/2, {size:10.5, color:P.muted});
+  });
+}
+function drawBaseConvert(s, st){
+  txt(`十进制 ${s.value}  →  ${s.base} 进制`, W/2, 22, {size:13, align:'center', color:P.dim, weight:700});
+  txt('短除法：不断除以基数，把余数记下来，最后倒序拼接', W/2, 44,
+      {size:10.5, align:'center', color:P.muted});
+
+  const rems = st.rems || [];
+  const done = st.step === 'done';
+
+  // 当前这一刀（正在做 / 或已完成）
+  const cy = 76;
+  if (st.n != null && st.q != null){
+    CX.fillStyle='#f8fafc'; CX.strokeStyle='#e2e8f0'; CX.lineWidth=1;
+    rr(W/2-168, cy, 336, 60, 8); CX.fill(); CX.stroke();
+    txt(`${st.n} ÷ ${s.base}`, W/2-150, cy+20, {size:15, align:'left', weight:700, color:P.text});
+    txt(`商 ${st.q}`, W/2+10, cy+20, {size:14, align:'left', weight:600, color:P.dim});
+    txt(`余 ${st.r}`, W/2-150, cy+44, {size:15, align:'left', weight:700, color:P.good});
+    txt('↑ 把余数记下来，下一轮拿商继续除', W/2+10, cy+44, {size:10.5, align:'left', color:P.muted});
+  }
+
+  // 已收集的余数（读取时从下往上 → 用倒序显示更贴近"逆序排列"）
+  const ry = 156;
+  if (rems.length){
+    txt('已记下的余数（自上而下是「先取的低位」→ 读的时候要倒过来）',
+        W/2, ry-14, {size:10.5, align:'center', color:P.muted});
+    const n = rems.length;
+    const dchar = v => v < 10 ? String(v) : 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[v-10] || String(v);
+    const cw = Math.min(64, (W-40)/n), x0 = (W - cw*n)/2;
+    for (let i=0;i<n;i++){
+      const idx = n-1-i;                 // 内核按"低位先记"存，展示时倒过来
+      const x = x0 + i*cw;
+      const first = i === 0;
+      CX.fillStyle = first ? '#ccfbf1' : '#fff';
+      CX.strokeStyle = first ? P.good : '#cbd5e1';
+      CX.lineWidth = first ? 2.2 : 1;
+      rr(x, ry, cw-6, 44, 6); CX.fill(); CX.stroke();
+      txt(dchar(rems[idx]), x+(cw-6)/2, ry+17, {size:17, align:'center', weight:700,
+        color: first ? P.good : P.text});
+      txt(`${s.base}^${idx}`, x+(cw-6)/2, ry+34, {size:8.5, align:'center', color:P.muted});
+      if (i) arrow(x-4, ry+22, x-1, ry+22, '#cbd5e1', 1.2);
+    }
+    if (n > 1) txt('读取方向 →', x0 + cw*n + 6, ry+22, {size:9.5, color:P.good, weight:700});
+  }
+
+  const res = st.result != null ? st.result : s.result;
+  if (done && res != null){
+    CX.fillStyle='#f0fdfa'; CX.strokeStyle=P.good; CX.lineWidth=2;
+    rr(W/2-180, H-72, 360, 54, 9); CX.fill(); CX.stroke();
+    txt(`${s.value}₁₀ = ${res}₍${s.base}₎`, W/2, H-45,
+        {size:16, align:'center', weight:700, color:P.good});
+  }
+}
+function drawEncoding(s, st){
+  // utf8_bits：单字节时是字符串 "01000001"，多字节时是数组
+  const raw = st.utf8_bits || s.utf8_bits || [];
+  const d = Array.isArray(raw) ? raw : [raw];
+  txt(`字符 '${s.char}' 的 UTF-8 编码`, W/2, 20, {size:12, align:'center', color:P.dim, weight:700});
+  const cp = st.codepoint != null ? st.codepoint : s.codepoint;
+  if (cp != null) txt(`码点 U+${Number(cp).toString(16).toUpperCase().padStart(4,'0')}  (十进制 ${cp})`,
+      W/2, 42, {size:11, align:'center', color:P.dim});
+  const hexs = s.bytes_hex || '';
+  const bh = Math.min(66, (H - 96) / Math.max(d.length,1));
+  d.forEach((byteBits, bi)=>{
+    const y = 66 + bi*bh;
+    txt(`第 ${bi+1} 字节`, x0Of(bi), y+(bh-14)/2, {size:10.5, align:'right', color:P.dim, weight:600});
+    String(byteBits).split('').forEach((bit,i)=>{
+      const x = xOf(i), on = bit==='1';
+      CX.fillStyle = on ? '#0f172a' : '#f1f5f9';
+      CX.strokeStyle = '#e2e8f0'; CX.lineWidth=1;
+      rr(x, y, cw()-3, bh-20, 4); CX.fill(); CX.stroke();
+      txt(bit, x+(cw()-3)/2, y+(bh-20)/2, {size:13, align:'center', weight:700,
+        color: on?'#fff':'#cbd5e1'});
+    });
+    const rx = xOf(7)+cw()+8;
+    txt(String(byteBits)+'₂', rx, y+(bh-20)/2-6, {size:10.5, color:P.dim});
+    txt('0x'+(hexs.split(' ')[bi]||parseInt(String(byteBits),2).toString(16).toUpperCase().padStart(2,'0')),
+        rx, y+(bh-20)/2+9, {size:11, color:P.good, weight:700});
+  });
+  txt(s.nbytes ? `${s.nbytes} 个字节（ASCII 兼容：首字节 < 128 时即其码点）` : '',
+      W/2, H-14, {size:10.5, align:'center', color:P.muted});
+  function cw(){ return Math.min(32, (W-190)/8); }
+  function xOf(i){ return (W - cw()*8 - 70)/2 + i*cw(); }
+  function x0Of(){ return xOf(0)-12; }
+}
+
+/* =====================================================================
+   场景 9/10：call —— 递归调用树
+   ===================================================================== */
+function drawCall(s, st){
+  const calls = st.calls || s.calls || [];
+  if (!calls.length){ txt('—', W/2, H/2, {size:12, align:'center', color:P.muted}); return; }
+  const path = new Set(st.path || []);
+  const cur = st.node;
+  // 位置：按深度分层
+  const depth = {}, order = [];
+  calls.forEach((c,i)=>{ depth[c.id] = c.depth!=null?c.depth:(c.id.split('-').length-1); });
+  const byLvl = {};
+  calls.forEach(c=>{ const d=depth[c.id]; (byLvl[d]=byLvl[d]||[]).push(c); });
+  const lvls = Object.keys(byLvl).map(Number).sort((a,b)=>a-b);
+  const maxLvl = lvls[lvls.length-1]||0;
+  const pad={l:22,r:22,t:34,b:26};
+  lvls.forEach(d=>{
+    const arr = byLvl[d];
+    arr.forEach((c,i)=>{
+      const x = pad.l + (W-pad.l-pad.r)*((i+0.5)/arr.length);
+      const y = pad.t + (H-pad.t-pad.b)*(maxLvl? d/maxLvl : 0);
+      const pp = calls.find(z=>z.id===c.parent);
+      if (pp){
+        const px = pad.l + (W-pad.l-pad.r)*((byLvl[depth[c.id]-1].indexOf(pp)+0.5)/byLvl[depth[c.id]-1].length);
+        const py = pad.t + (H-pad.t-pad.b)*(maxLvl? (d-1)/maxLvl : 0);
+        line(px, py+13, x, y-13, path.has(c.id)?P.good:'#e2e8f0', path.has(c.id)?2:1.4);
+      }
+    });
+  });
+  lvls.forEach(d=>{
+    const arr = byLvl[d];
+    arr.forEach(c=>{
+      const x = pad.l + (W-pad.l-pad.r)*((arr.indexOf(c)+0.5)/arr.length);
+      const y = pad.t + (H-pad.t-pad.b)*(maxLvl? d/maxLvl : 0);
+      const on = path.has(c.id), active = c.id===cur;
+      CX.fillStyle = active?'#fef3c7':(on?'#ccfbf1':'#fff');
+      CX.strokeStyle = active?P.cur:(on?P.good:'#cbd5e1'); CX.lineWidth = active?2.6:(on?2:1.4);
+      const w = 52, h=26;
+      rr(x-w/2, y-h/2, w, h, 6); CX.fill(); CX.stroke();
+      txt(c.label, x, y, {size:11.5, align:'center', weight:700,
+        color: active?'#b45309':(on?P.good:P.text)});
+    });
+  });
+  txt(`调用 ${calls.length} 次 · 深度 ${maxLvl+1}`, W/2, 16,
+      {size:11, align:'center', color:P.dim, weight:600});
+  if (st.note) txt(st.note, W/2, H-8, {size:11, align:'center', color:P.dim});
+}
+
+/* =====================================================================
+   场景 10/11：coins —— 贪心找零
+   ===================================================================== */
+function drawCoins(s, st){
+  const coins = st.coins || s.coins || [];
+  const used  = st.used || [];
+  const usedMap = {}; used.forEach(([d,c]) => usedMap[d] = c);
+  const left = st.left != null ? st.left : (s.amount || 0);
+  const amount = s.amount != null ? s.amount : left;
+  const total = coins.reduce((a,c)=>a + (usedMap[c]||0), 0) + (left ? 1 : 0);
+
+  txt(`要凑 ${amount}`, W/2, 22, {size:13, align:'center', color:P.dim, weight:700});
+
+  // 剩余进度条
+  const bw = W-72, bx = 36, by = 44;
+  CX.fillStyle='#f1f5f9'; CX.fillRect(bx, by, bw, 20);
+  const frac = amount ? (amount-left)/amount : 1;
+  CX.fillStyle='#ccfbf1'; CX.fillRect(bx, by, bw*Math.max(0,Math.min(1,frac)), 20);
+  CX.strokeStyle='#cbd5e1'; CX.lineWidth=1; CX.strokeRect(bx+.5, by+.5, bw-1, 19);
+  txt(`已凑 ${amount-left} / ${amount}`, bx+8, by+10, {size:10.5, color:'#0f766e', weight:700});
+  txt(`剩余 ${left}`, bx+bw-8, by+10, {size:10.5, align:'right', color: left?'#be123c':'#0f766e', weight:700});
+
+  // 每种面额一行
+  const rows = coins.length;
+  const rh = Math.min(52, (H-140)/Math.max(rows,1));
+  const y0 = 84;
+  const maxNeed = Math.max(...coins.map(c => amount ? Math.ceil(amount/c) : 1), 1);
+  const chip = Math.min(20, Math.max(6, (W-260)/maxNeed));
+
+  coins.forEach((d,i)=>{
+    const y = y0 + i*rh;
+    const c = usedMap[d] || 0;
+    const isTake = st.take === d;
+    const need = Math.ceil(left/d);
+    CX.fillStyle = isTake ? '#fffbeb' : (c ? '#f0fdfa' : '#f8fafc');
+    CX.strokeStyle = isTake ? '#f59e0b' : (c ? '#99f6e4' : '#e2e8f0');
+    CX.lineWidth = isTake ? 2.2 : 1;
+    rr(24, y, W-48, rh-8, 7); CX.fill(); CX.stroke();
+    txt(`${d}`, 44, y+(rh-8)/2, {size:15, align:'left', weight:700,
+        color: c||isTake ? P.good : P.muted});
+    txt(c ? `× ${c}` : '·', 78, y+(rh-8)/2, {size:12, align:'left',
+        weight:600, color: c ? P.good : '#cbd5e1'});
+    // 硬币图标
+    for (let k=0;k<c;k++){
+      const x = 112 + k*chip;
+      CX.fillStyle = '#fef3c7'; CX.strokeStyle='#f59e0b'; CX.lineWidth=1.4;
+      CX.beginPath(); CX.arc(x+8, y+(rh-8)/2, 8, 0, 7); CX.fill(); CX.stroke();
+      txt(d, x+8, y+(rh-8)/2, {size:7.5, align:'center', color:'#b45309', weight:700});
+    }
+    if (isTake) txt(`← 本轮拿走 1 枚`, W-40, y+(rh-8)/2,
+        {size:11, align:'right', color:'#b45309', weight:700});
+    else if (!c && need) txt(`（可拿 ${need} 枚，但先用大面额）`, W-40, y+(rh-8)/2,
+        {size:10, align:'right', color:'#cbd5e1'});
+  });
+
+  txt(st.note || '', W/2, H-14, {size:11.5, align:'center', color:P.dim});
+}
+
+/* =====================================================================
+   场景 11/11：interval —— 区间调度（贪心）
+   ===================================================================== */
+function drawInterval(s, st){
+  const tasks = st.tasks || s.tasks || [];
+  const sorted = st.sorted_ || tasks;
+  const chosen = new Set((st.chosen||[]).map(t=>t[0]+','+t[1]));
+  const hiS = st.hi ? st.hi[0]+','+st.hi[1] : null;
+  if (!tasks.length) return;
+
+  let lo = Infinity, hiT = -Infinity;
+  sorted.forEach(t=>{ lo=Math.min(lo,t[0]); hiT=Math.max(hiT,t[1]); });
+  lo = Math.floor(lo)-1; hiT = Math.ceil(hiT)+1;
+  const pad = {l:56, r:26, t:52, b:44};
+  const iw = W-pad.l-pad.r, ih = H-pad.t-pad.b;
+  const X = v => pad.l + iw*(v-lo)/(hiT-lo);
+
+  // 时间轴
+  line(pad.l, pad.t+ih, pad.l+iw, pad.t+ih, P.axis, 1.4);
+  for (let v=Math.ceil(lo); v<=Math.floor(hiT); v++){
+    line(X(v), pad.t+ih, X(v), pad.t+ih+5, P.axis, 1);
+    txt(v, X(v), pad.t+ih+17, {size:9.5, align:'center', color:P.muted});
+  }
+  txt('时间 →', pad.l+iw/2, H-8, {size:10.5, align:'center', color:P.dim});
+  txt('按「结束时间」排序后逐个决定要不要', W/2, 20,
+      {size:11.5, align:'center', color:P.dim, weight:700});
+  txt(`已选 ${(st.chosen||[]).length} 个`, pad.l, 38, {size:11, align:'left',
+      color:P.good, weight:700});
+
+  const rows = sorted.length;
+  const rh = ih/Math.max(rows,1);
+  sorted.forEach((t,i)=>{
+    const y = pad.t + i*rh + 4, h = Math.min(26, rh-9);
+    const k = t[0]+','+t[1];
+    const on = chosen.has(k), bad = k === hiS;
+    const cur = (st.chosen||[]).length === i;
+    CX.fillStyle = on ? '#ccfbf1' : (bad ? '#ffe4e6' : '#f1f5f9');
+    CX.strokeStyle = on ? P.good : (bad ? P.swap : '#cbd5e1');
+    CX.lineWidth = on ? 2 : (bad ? 2 : 1.2);
+    rr(X(t[0]), y, Math.max(6, X(t[1])-X(t[0])), h, 5); CX.fill(); CX.stroke();
+    txt(`[${t[0]}, ${t[1]})`, X(t[0])+7, y+h/2, {size:11, weight:600,
+        color: on ? P.good : (bad ? P.swap : P.dim)});
+    txt(`结束于 ${t[1]}`, X(t[1])+7, y+h/2, {size:9.5, color:P.muted});
+    // 上一个已选的结束线
+    if (on){
+      line(X(t[1]), pad.t, X(t[1]), pad.t+ih, '#5eead4', 1.4, [4,3]);
+      txt('结束', X(t[1]), pad.t-8, {size:9, align:'center', color:P.good, weight:700});
+    }
+    if (bad) txt('冲突 ✕', pad.l-8, y+h/2, {size:10, align:'right', color:P.swap, weight:700});
+  });
+  txt(st.note || '', W/2, H-26, {size:11.5, align:'center', color:P.dim});
+}
+
+/* ---------------- 分发 ---------------- */
+const RENDER = { bars:drawBars, curve:drawCurve, linear:drawLinear, linked:drawLinked,
+                 tree:drawTree, graph:drawGraph, table:drawTable, bits:drawBits,
+                 call:drawCall, coins:drawCoins, interval:drawInterval };
+function draw(){
+  CX.clearRect(0,0,W,H);
+  CX.fillStyle = P.bg; CX.fillRect(0,0,W,H);
+  const kind = scene().kind;
+  const fn = RENDER[kind];
+  if (!fn){ txt('未知场景类型: '+kind, 16, 24, {color:P.bad}); return; }
+  fn(scene(), step(FRAME));
+}
+
+/* =====================================================================
+   控制台（params / readouts / lights / constant）
+   ===================================================================== */
+function buildConsole(){
+  const c = LESSON.console || {};
+  (c.params||[]).forEach(p=>{
+    ENV[p.id] = p.value;
+    if (p.options){
+      const wrap = document.createElement('div');
+      wrap.innerHTML = `<div class="text-[11px] text-slate-500 mb-1">${p.label}</div>`;
+      const sel = document.createElement('select');
+      sel.className = 'w-full text-[13px] border border-slate-200 rounded px-2 py-1.5 bg-white';
+      p.options.forEach(o=>{
+        const op = document.createElement('option');
+        op.value = o.value; op.textContent = o.label;
+        if (o.value == p.value) op.selected = true;
+        sel.appendChild(op);
+      });
+      sel.onchange = ()=>{ ENV[p.id] = sel.value; paintConsole(); };
+      wrap.appendChild(sel);
+      document.getElementById('params').appendChild(wrap);
+    } else {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = `<div class="flex justify-between items-baseline mb-1">
+          <span class="text-[11px] text-slate-500">${p.label}</span>
+          <span class="text-[12px] font-bold text-teal-700 ro" id="pv_${p.id}"></span></div>`;
+      const r = document.createElement('input');
+      r.type='range'; r.min=p.min; r.max=p.max; r.step=p.step||1; r.value=p.value;
+      r.className='w-full';
+      r.oninput = ()=>{ ENV[p.id] = +r.value; paintConsole(); };
+      wrap.appendChild(r);
+      document.getElementById('params').appendChild(wrap);
+    }
+  });
+  (c.readouts||[]).forEach(r=>{
+    const el = document.createElement('div');
+    el.className = 'flex justify-between items-baseline';
+    el.innerHTML = `<span class="text-[11.5px] text-slate-600">${r.label}</span>
+                    <span class="text-[13px] font-bold ro" id="ro_${r.id}" style="color:${r.color||'#0f766e'}"></span>`;
+    document.getElementById('readouts').appendChild(el);
+  });
+  (c.lights||[]).forEach(l=>{
+    const el = document.createElement('div');
+    el.className = 'pill border';
+    el.id = 'lt_'+l.id; el.textContent = l.label;
+    document.getElementById('lights').appendChild(el);
+  });
+  if (c.constant){
+    document.getElementById('constBox').innerHTML =
+      `<div class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+         <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">定值不变量</div>
+         <div class="text-[12.5px] mt-0.5"><span class="text-slate-600">${c.constant.label}：</span>
+           <b class="text-teal-700 ro" id="cst"></b></div>
+         ${c.constant.note?`<div class="text-[10.5px] text-slate-400 mt-0.5">${c.constant.note}</div>`:''}
+       </div>`;
+  }
+  paintConsole();
+}
+function paintConsole(){
+  const c = LESSON.console || {};
+  (c.params||[]).forEach(p=>{
+    const el = document.getElementById('pv_'+p.id);
+    if (el) el.textContent = fmt(ENV[p.id]) + (p.unit||'');
+  });
+  (c.readouts||[]).forEach(r=>{
+    const v = evalExpr(r.expr);
+    ENV[r.id] = v;                       // 读数写回，后面的读数/定值可以引用它
+    const el = document.getElementById('ro_'+r.id);
+    if (el) el.textContent = fmt(v);
+  });
+  (c.lights||[]).forEach(l=>{
+    const el = document.getElementById('lt_'+l.id);
+    if (!el) return;
+    const on = !!evalExpr(l.expr);
+    el.style.background = on ? '#dcfce7' : '#f1f5f9';
+    el.style.color = on ? '#166534' : '#94a3b8';
+    el.style.borderColor = on ? '#86efac' : '#e2e8f0';
+    el.textContent = (on ? '● ' : '○ ') + l.label;
+  });
+  if (c.constant){
+    const v = evalExpr(c.constant.expr);
+    ENV.__cst = v;
+    const el = document.getElementById('cst');
+    if (el) el.textContent = fmt(v);
+  }
+}
+
+/* =====================================================================
+   步骤卡片 / 统计 / 解析
+   ===================================================================== */
+function paintStep(){
+  const st = step(FRAME), all = steps();
+  document.getElementById('stepIdx').textContent = `${FRAME+1} / ${all.length}`;
+  const noteEl = document.getElementById('stepNote');
+  noteEl.textContent = st.note || st.op || `第 ${FRAME+1} 帧`;
+  noteEl.classList.remove('note-flash'); void noteEl.offsetWidth; noteEl.classList.add('note-flash');
+
+  const ex = document.getElementById('stepExtra'); ex.innerHTML = '';
+  const bits = [];
+  if (st.cmp) bits.push(['比较', st.cmp.map(i=>`a[${i}]`).join('  ↔  ')]);
+  if (st.swap) bits.push(['交换', st.swap.map(i=>`a[${i}]`).join('  ↔  ')]);
+  if (st.range) bits.push(['当前区间', `[${st.range[0]}, ${st.range[1]}]`]);
+  if (st.mid != null) bits.push(['中点 mid', st.mid]);
+  if (st.pivot != null) bits.push(['枢轴下标', st.pivot]);
+  if (typeof st.found === 'number') bits.push(['命中位置', '下标 '+st.found]);
+  if (st.path && st.path.length) bits.push(['路径', st.path.join(' → ')]);
+  if (st.dir) bits.push(['转向', st.dir==='L'?'左子树':'右子树']);
+  if (st.dist) bits.push(['dist', Object.entries(st.dist)
+      .map(([k,v])=>`${k}:${(v===null||v===undefined)?'∞':v}`).join('   ')]);
+  if (st.queue || st.stack) bits.push([st.queue?'队列':'栈', (st.queue||st.stack).join(' → ')||'（空）']);
+  if (st.left != null) bits.push(['剩余待凑', st.left]);
+  if (st.take != null) bits.push(['本轮取', `面额 ${st.take} × 1 枚`]);
+  if (st.n != null && st.q != null) bits.push(['本轮除法', `被除数 ${st.n} → 商 ${st.q}，余 ${st.r}`]);
+  if (st.result != null) bits.push(['结果', st.result]);
+  if (st.add && Array.isArray(st.add) && st.add.length>=3 && typeof st.add[2]==='number')
+    bits.push(['新选边', `${st.add[0]} — ${st.add[1]}（权 ${st.add[2]}）`]);
+  bits.forEach(([k,v])=>{
+    const d = document.createElement('div');
+    d.className = 'flex gap-2 text-[12px]';
+    d.innerHTML = `<span class="text-slate-400 shrink-0 w-16">${k}</span>
+                   <span class="text-slate-700 ro">${v}</span>`;
+    ex.appendChild(d);
+  });
+  // 统计
+  const stats = document.getElementById('stats'); stats.innerHTML='';
+  const put = (k,v)=> {
+    const d = document.createElement('div');
+    d.className='bg-slate-50 rounded-lg px-2 py-1.5';
+    d.innerHTML = `<div class="text-[9.5px] text-slate-400 uppercase tracking-wider">${k}</div>
+                   <div class="text-[13px] font-bold text-slate-800 ro">${v}</div>`;
+    stats.appendChild(d);
+  };
+  Object.entries(LESSON.counters||{}).forEach(([k,v])=>put(k,v));
+  ['name','complex','result','target','total','size','n','capacity','count','naive_calls']
+    .forEach(k=>{
+    if (LESSON[k]!==undefined && LESSON[k]!==null && !Array.isArray(LESSON[k]) && typeof LESSON[k]!=='object')
+      put(k, fmt(LESSON[k]));
+  });
+  if (LESSON.order && Array.isArray(LESSON.order)) put('访问顺序', LESSON.order.join(' → '));
+  if (!stats.children.length) document.getElementById('statsBox').style.display='none';
+}
+
+/* =====================================================================
+   顶栏 / 图例 / 解析
+   ===================================================================== */
+function paintHead(){
+  document.getElementById('modName').textContent = LESSON.module || 'Computer Science';
+  document.getElementById('ttl').textContent = LESSON.title || '';
+  document.getElementById('sub').textContent = LESSON.subtitle || '';
+  document.getElementById('intro').textContent = LESSON.intro || '';
+  document.getElementById('sceneCap').textContent = (scene().caption) || '画板';
+  document.getElementById('answer').textContent = LESSON.answer || '';
+  if (!LESSON.answer) document.getElementById('answerBox').style.display='none';
+
+  const pills = document.getElementById('topPills');
+  (LESSON.pills||[]).forEach(p=>{
+    const s = document.createElement('span');
+    s.className='pill border';
+    s.style.background = p.bg||'#f0fdfa'; s.style.color = p.color||'#0f766e';
+    s.style.borderColor = p.color||'#0f766e';
+    s.textContent = p.text; pills.appendChild(s);
+  });
+
+  const legends = {
+    bars:  [['比较','#f59e0b'],['交换','#f43f5e'],['已就位','#14b8a6']],
+    graph: [['已访问','#0ea5e9'],['当前','#f59e0b'],['在解中','#14b8a6']],
+    tree:  [['高亮','#14b8a6'],['交换','#f43f5e'],['新结点','#8b5cf6']],
+    curve: [],
+    linear:[['端点','#14b8a6']],
+    linked:[['高亮','#14b8a6']],
+    table: [['当前','#14b8a6'],['来源','#0ea5e9']],
+    bits:  [['位为 1','#0f172a'],['运算结果','#14b8a6']],
+    call:  [['调用链','#14b8a6'],['当前','#f59e0b']],
+    coins: [['已取走','#14b8a6'],['本轮','#f59e0b']],
+    interval:[['已选','#14b8a6'],['冲突','#f43f5e'],['待定','#94a3b8']]
+  }[scene().kind] || [];
+  const lg = document.getElementById('legend'); lg.innerHTML='';
+  legends.forEach(([t,c])=>{
+    const s=document.createElement('span');
+    s.className='flex items-center gap-1 text-[9.5px] text-slate-500';
+    s.innerHTML=`<span style="width:8px;height:8px;border-radius:2px;background:${c};display:inline-block"></span>${t}`;
+    lg.appendChild(s);
+  });
+
+  const ex = document.getElementById('explain'); ex.innerHTML='';
+  (LESSON.explain||[]).forEach(b=>{
+    const d = document.createElement('div');
+    d.innerHTML = `<div class="font-bold text-slate-800 text-[12.5px] mb-0.5">${b.h||''}</div>
+                   <div class="text-slate-600 text-[12.5px] leading-relaxed">${b.body||''}</div>`;
+    ex.appendChild(d);
+  });
+}
+
+/* =====================================================================
+   回放控制
+   ===================================================================== */
+function setFrame(i){
+  const n = steps().length;
+  FRAME = Math.max(0, Math.min(n-1, i));
+  const sc = document.getElementById('scrub');
+  sc.value = FRAME;
+  document.getElementById('scrubLbl').textContent = `第 ${FRAME+1} 帧`;
+  paintStep(); draw();
+}
+function play(){
+  if (TIMER) return pause();
+  const btn = document.getElementById('btnPlay');
+  btn.textContent='❚❚';
+  TIMER = setInterval(()=>{
+    if (FRAME >= steps().length-1) return pause();
+    setFrame(FRAME+1);
+  }, +document.getElementById('speed').value);
+}
+function pause(){
+  if (TIMER) clearInterval(TIMER), TIMER=null;
+  document.getElementById('btnPlay').textContent='▶';
+}
+function wire(){
+  const n = steps().length;
+  const sc = document.getElementById('scrub');
+  sc.max = Math.max(0, n-1);
+  document.getElementById('scrubMax').textContent = `${n} 帧`;
+  sc.oninput = ()=> { pause(); setFrame(+sc.value); };
+  document.getElementById('btnFirst').onclick = ()=>{pause();setFrame(0)};
+  document.getElementById('btnPrev').onclick  = ()=>{pause();setFrame(FRAME-1)};
+  document.getElementById('btnPlay').onclick  = ()=>{ (FRAME>=steps().length-1)&&setFrame(0); play(); };
+  document.getElementById('btnNext').onclick  = ()=>{pause();setFrame(FRAME+1)};
+  document.getElementById('btnLast').onclick  = ()=>{pause();setFrame(steps().length-1)};
+  document.getElementById('speed').onchange = ()=>{ if(TIMER){pause();play();} };
+  window.addEventListener('keydown', e=>{
+    if (e.target.tagName==='INPUT'||e.target.tagName==='SELECT') return;
+    if (e.key==='ArrowRight'){pause();setFrame(FRAME+1);e.preventDefault()}
+    if (e.key==='ArrowLeft'){pause();setFrame(FRAME-1);e.preventDefault()}
+    if (e.key===' '){ (FRAME>=steps().length-1)&&setFrame(0); play(); e.preventDefault()}
+  });
+}
+
+/* ---------------- 启动 ---------------- */
+function boot(){
+  paintHead();
+  buildConsole();
+  wire();
+  resize();
+  setFrame(0);
+  if (window.renderMathInElement){
+    try{ renderMathInElement(document.body, {
+      delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$'}],
+      throwOnError:false }); }catch(e){}
+  }
+  if (steps().length > 1) setTimeout(play, 600);
+}
+window.addEventListener('resize', resize);
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();
+</script>
+</body>
+</html>

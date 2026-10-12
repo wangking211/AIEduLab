@@ -15,7 +15,7 @@ AIEduLab/
 │   ├── books/math-thought/ 第一本书《数学思想：从计数到无穷》（3 章 11 图）
 │   ├── skills/             13 个学科技能（数理化生 + 初高中物理/几何 + 视频 + CS）
 │   └── demos/ out/         手写 HTML 演示
-├── .agents/skills/         安装后的技能副本（由 skills-lock.json 校验）
+├── .agents/skills/         技能安装副本（**本地目录，不进版本库**；真源是 edulab/skills/）
 ├── mental-models/          查理·芒格思维模型：sympy 精确内核 + 交互页
 └── skills-lock.json        技能安装锁（含内容哈希）
 ```
@@ -26,7 +26,21 @@ AIEduLab/
 
 - `output/` —— 每个技能/书籍 `scripts/generate.py` 或 `build.py` 生成的成品 HTML
 - `_live/` —— `bridge.py` 的问答与补丁日志（运行时数据）
+- `.agents/skills/` —— 技能的本地安装副本。**真源只有 `edulab/skills/` 一份**，
+  避免 11MB 的逐字节重复；副本仅存在于本地，供技能加载器发现
 - `__pycache__/`、`node_modules/`、编辑器与系统文件
+
+## 安装技能（本地）
+
+技能加载器从 `.agents/skills/` 发现技能，而真源在 `edulab/skills/`。
+克隆仓库后，把需要的技能复制过去即可（改完 `edulab/skills/` 后同样复制一次）：
+
+```powershell
+Copy-Item "edulab\skills\edu-cs" ".agents\skills\edu-cs" -Recurse -Force
+```
+
+`skills-lock.json` 记录已安装技能的内容哈希。注意：现有条目是**安装当时的快照**，
+若之后修改过技能源码，哈希不会再对得上 —— 它只作记录，不参与技能加载。
 
 成品按需重新生成：
 

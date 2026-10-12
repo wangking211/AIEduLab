@@ -292,8 +292,13 @@ def queue_demo(ops):
     return t.out(name="队列", rule="先进先出 FIFO")
 
 
-def linked_list_demo(values, insert_after=None, delete_index=None):
-    """单链表：建表 → 插入 → 删除，记录指针重连的每一步。"""
+def linked_list_demo(values, insert_after=None, delete_index=None, value=None):
+    """单链表：建表 → 插入 → 删除，记录指针重连的每一步。
+
+    insert_after / delete_index 都是**下标**（不是值）。
+    value 是新结点的值；不给就取 prev 的值 +10。
+    删除时若没有前驱（说明它是表头）则移动 head。
+    """
     t = Trace()
     nodes = [{"id": f"n{i}", "val": v, "next": (f"n{i+1}" if i + 1 < len(values) else None)}
              for i, v in enumerate(values)]
@@ -305,23 +310,26 @@ def linked_list_demo(values, insert_after=None, delete_index=None):
         return d
 
     t.add(**snap("初始链表：头指针 head 指向第一个结点"))
-    if insert_after is not None and insert_after < len(nodes):
+    if insert_after is not None and 0 <= insert_after < len(nodes):
         nid = f"x{len(nodes)}"
         prev = nodes[insert_after]
-        nodes.append({"id": nid, "val": insert_after + 1 + 100, "next": prev["next"]})
-        t.add(**snap(f"新结点先指向 prev.next", new=nid, prev=prev["id"]))
+        new_val = value if value is not None else prev["val"] + 10
+        nodes.append({"id": nid, "val": new_val, "next": prev["next"]})
+        t.add(**snap("新结点先指向 prev.next（顺序不能反，否则后继会丢）",
+                     new=nid, prev=prev["id"]))
         prev["next"] = nid
-        t.add(**snap(f"再让 prev.next 指向新结点 → 插入完成", new=nid, prev=prev["id"], hi=[nid]))
-    if delete_index is not None and delete_index < len(nodes):
-        idx = [i for i, x in enumerate(nodes) if x["id"] != head or True]
+        t.add(**snap("再让 prev.next 指向新结点 → 插入完成",
+                     new=nid, prev=prev["id"], hi=[nid]))
+    if delete_index is not None and 0 <= delete_index < len(nodes):
         target = nodes[delete_index]
         prevs = [x for x in nodes if x["next"] == target["id"]]
         if prevs:
             prevs[0]["next"] = target["next"]
-            t.add(**snap(f"让前驱绕过待删结点 → 删除完成", hi=[target["id"]], prev=prevs[0]["id"]))
+            t.add(**snap("让前驱绕过待删结点 → 删除完成",
+                         hi=[target["id"]], prev=prevs[0]["id"]))
         else:
             head = target["next"]
-            t.add(**snap(f"删除的是头结点 → head 后移", hi=[target["id"]]))
+            t.add(**snap("删除的是头结点 → head 后移", hi=[target["id"]]))
     return t.out(name="单链表")
 
 
@@ -495,10 +503,10 @@ def heap_demo(push_values, pop_count=0):
             break
         top = h[0]
         popped.append(top)
-        last = h.pop()
+        last = h.pop()                      # 先摘掉数组末尾
         t.add(**snap(f"弹出堆顶最小值 {top}", pop=top))
-        if h:
-            h.insert(0, last)
+        if h:                               # 还有剩余元素才需要下沉
+            h[0] = last                     # 用末尾元素**顶掉**被弹出的堆顶
             i = 0
             t.add(**snap(f"把末尾 {last} 放到堆顶，再下沉", hi=[0]))
             while True:
@@ -877,6 +885,16 @@ if __name__ == "__main__":
     r = queue_demo([("enq", 1), ("enq", 2), ("deq",), ("enq", 3)])
     assert r["steps"][-1]["queue"] == [2, 3]
 
+    # 链表：按下标插入/删除，且指针确实重连了
+    r = linked_list_demo([10, 20, 30], insert_after=0, value=15, delete_index=1)
+    assert len(r["steps"]) == 4, [s["note"] for s in r["steps"]]
+    last = {n["id"]: n for n in r["steps"][-1]["nodes"]}
+    assert last["n0"]["next"] == "x3" and last["x3"]["next"] == "n2" \
+        and r["steps"][-1]["head"] == "n0", last
+    # 删表头 → head 后移
+    r = linked_list_demo([10, 20, 30], delete_index=0)
+    assert r["steps"][-1]["head"] == "n1", r["steps"][-1]["head"]
+
     # 二叉树遍历
     bt = binary_tree_traversals([1, 2, 3, 4, 5, 6, 7])
     assert bt["orders"]["pre"] == [0, 1, 3, 4, 2, 5, 6]
@@ -896,7 +914,8 @@ if __name__ == "__main__":
 
     # 哈希
     r = hash_table_demo([15, 22, 8, 29], size=7)
-    assert r["steps"][-1]["buckets"][1] == [15, 22, 29], r["steps"][-1]["buckets"]
+    # 15=2·7+1, 22=3·7+1, 8=1·7+1, 29=4·7+1 —— 四个键全都落在 1 号桶（链地址法）
+    assert r["steps"][-1]["buckets"][1] == [15, 22, 8, 29], r["steps"][-1]["buckets"]
 
     # 图
     NODES = ["A", "B", "C", "D", "E"]
