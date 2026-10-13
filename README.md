@@ -14,7 +14,7 @@ AIEduLab/
 │   │   │   ├── state.md      改图/补丁/实时通道契约（agent 读它改已有图）
 │   │   │   └── page.html     书页模板（阅读流 + 内嵌图 + 步骤控件 + 问答面板）
 │   │   └── skillkit.py     ★ 技能共用运行时：统一 CLI / 渲染 / 校验 / 目录页
-│   │   └── board/          ★ Family A 的共享模板骨架 + base 片段
+│   │   └── board/          ★ 模板骨架（geom-fn / seq-phys 两家族）+ base 片段
 │   ├── tools/
 │   │   ├── check_skills.py     技能闸门：可运行 + 可复现（跨哈希种子）+ 与基线一致
 │   │   └── compose_templates.py 用「共享骨架 + 各自片段」组装 template/board.html
@@ -60,12 +60,17 @@ Get-ChildItem "edulab\skills" -Directory | ForEach-Object {
 `skills-lock.json` 记录已安装技能的内容哈希。注意：现有条目是**安装当时的快照**，
 若之后修改过技能源码，哈希不会再对得上 —— 它只作记录，不参与技能加载。
 
-改完任意技能后，跑一次闸门（可运行 + 跨哈希种子可复现 + 与基线/骨架一致）：
+改完任意技能或根级产品后，跑一次闸门（可运行 + 跨哈希种子可复现 + 与基线/骨架一致）：
 
 ```bash
 python edulab/tools/check_skills.py            # 差异即失败
 python edulab/tools/check_skills.py --update   # 确认新产物正确后刷新基线
 ```
+
+闸门覆盖 `edulab/skills/` 下的 10 个技能，外加仓库根的独立产品 `mental-models`
+（它不走技能安装，但同样是「内核 + 模板 + 产物」这套约定，纳入后改动才有人把关）。
+新增项**没有基线记录会直接判失败**而不是默认放行——否则加一个新技能闸门就自动对它
+变绿，等于形同虚设。首次需要跑一次 `--update` 建立记录。
 
 ### 模板家族：改骨架，别改产物
 

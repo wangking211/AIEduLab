@@ -127,5 +127,13 @@
   "cube.html": "2ccc3bfd2a0a8f5fbd29ec62d02ecbc5da08b623ed69d820cb72ed412295a718",
   "index.html": "72dba76aec92df2f729b4acabd60dfbad46fd1dc43a56d6c15e6ba9d9f52b4c2",
   "pyramid.html": "e6abace0e91f2463900610d50eee3c386e553451c652b866742082e5995f1e1a"
+ },
+ "mental-models": {
+  "bayes.html": "4e0f275dbae57d31b1e3295f940d7be729ca6af26d16399f2a27b7b899824dae",
+  "compound.html": "e14ec9c4d493153bddd80a09c8674531facff8dfb0d6ae5365815a3ff2ddc160",
+  "expected.html": "edf47c676247ccebb3d5d85b3e5ea51d1eac957800827db699851e4e240475f1",
+  "index.html": "2d911a02a89d8f87452dc31104cde9ca83847544a2f944ac7227d01173d07ac0",
+  "opportunity.html": "a348e12332853f2d85bc33568392a7b44993a4a8cfe9136e6a87216c07a4e5cc",
+  "safety.html": "b189ce56213379286d6b708249d99270781ac92f832893168311796990fc2d66"
  }
 }
