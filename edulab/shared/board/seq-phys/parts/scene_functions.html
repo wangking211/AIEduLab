@@ -1,0 +1,161 @@
+// ===================== 场景绘制（数列 / 三角） =====================
+let animT = 0;
+const SUBD = '₀₁₂₃₄₅₆₇₈₉';
+const sub = n => String(n).split('').map(d => SUBD[+d]).join('');
+
+// ---- 1) 数列：上面板 Sₙ 折线，下面板 aₙ 柱状；高亮当前 n ----
+function drawSeq(S){
+    const terms = S.terms || [], part = S.partial || [];
+    const nmax = terms.length; if (!nmax) return;
+    const px0 = 1.1, px1 = 9.5, dx = (px1-px0)/nmax;
+    const ncur = Math.round(S.cur || 1);
+    const xc = k => px0 + dx*(k-0.5);
+
+    // ---- 上面板：前 n 项和 Sₙ ----
+    const uy0 = 3.5, uy1 = 6.0;
+    let smax = 0; part.forEach(v => smax = Math.max(smax, Math.abs(v)));
+    if (S.limit != null && isFinite(S.limit)) smax = Math.max(smax, S.limit*1.05);
+    if (smax <= 0) smax = 1;
+    const Ys = v => uy0 + (v/smax)*(uy1-uy0);
+    groundLine(uy0, px0, px1, '#334155');
+    label(px0, uy0-0.32, '前 n 项和 Sₙ', '#94a3b8', 'start', 11);
+    // 极限虚线（如裂项和 → 1）
+    if (S.limit != null && isFinite(S.limit)){
+        dashLine(px0-0.5, Ys(S.limit), px1+0.2, Ys(S.limit), '#f472b6', 1.4);
+        label(px0+0.05, Ys(S.limit)+0.24, '极限 '+fmt(S.limit,2), '#f472b6', 'start', 11);
+    }
+    if (part.length){
+        ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        for (let i=0;i<nmax;i++){ const x=xc(i+1), y=Ys(part[i]); i===0?ctx.moveTo(SX(x),SY(y)):ctx.lineTo(SX(x),SY(y)); }
+        ctx.stroke();
+        for (let i=0;i<nmax;i++){
+            const k=i+1, x=xc(k), y=Ys(part[k-1]), cur=(k===ncur);
+            ctx.fillStyle = cur?'#facc15':'#34d399';
+            ctx.beginPath(); ctx.arc(SX(x),SY(y), cur?6:3.2, 0, 7); ctx.fill();
+            if (cur){ ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.5; ctx.stroke();
+                label(x, y+0.30, 'S'+sub(k)+'='+fmt(part[k-1],2), '#facc15', 'center', 11); }
+        }
+    }
+
+    // ---- 下面板：通项 aₙ 柱状 ----
+    const ly0 = 0.7, ly1 = 2.9;
+    let tmax = 0; terms.forEach(v => tmax = Math.max(tmax, Math.abs(v)));
+    if (tmax <= 0) tmax = 1;
+    groundLine(ly0, px0, px1, '#334155');
+    label(px0, ly0-0.35, '通项 aₙ', '#94a3b8', 'start', 11);
+    for (let i=0;i<nmax;i++){
+        const k=i+1, x=xc(k), cur=(k===ncur);
+        const h = Math.abs(terms[i])/tmax*(ly1-ly0);
+        ctx.fillStyle = cur ? '#4f46e5' : '#818cf8';
+        ctx.fillRect(SX(x-dx*0.30), SY(ly0), dx*0.60*sc, h*sc);
+        if (cur) label(x, ly0+h+0.24, 'a'+sub(k)+'='+fmt(terms[i],2), '#facc15', 'center', 11);
+    }
+    // 当前 n 竖直贯穿虚线
+    dashLine(xc(ncur), 0.35, xc(ncur), 6.15, '#facc15', 1);
+    label(xc(ncur), 6.28, 'n = '+ncur, '#facc15', 'center', 12);
+    label(9.7, 6.28, 'n→'+nmax, '#64748b', 'end', 11);
+}
+
+// ---- 2) 正弦曲线：可画多条（恒等式对比），标周期/最值/当前点 ----
+function drawWave(S){
+    const px0 = 0.4, px1 = 9.6, py = 3.0;
+    const xmin = S.xmin, xmax = S.xmax, xr = xmax - xmin;
+    const curves = S.multi || [{A:S.A, omega:S.omega, phi:S.phi, color:'#4f46e5'}];
+    let maxA = 0; curves.forEach(c => maxA = Math.max(maxA, Math.abs(c.A)));
+    if (maxA <= 0) maxA = 1;
+    const AS = 2.05/maxA;                       // 振幅缩放
+    const X = x => px0 + (x-xmin)/xr*(px1-px0);
+    const Y = y => py + y*AS;
+
+    // 坐标轴
+    ctx.strokeStyle='#475569'; ctx.lineWidth=1.6;
+    ctx.beginPath(); ctx.moveTo(SX(px0),SY(py)); ctx.lineTo(SX(px1),SY(py)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(SX(X(0)),SY(py-2.5)); ctx.lineTo(SX(X(0)),SY(py+2.5)); ctx.stroke();
+    // x 轴刻度：π/2 步
+    for (let m=Math.ceil(xmin/(Math.PI/2)); m*(Math.PI/2)<=xmax; m++){
+        const xv=m*Math.PI/2; if (xv< xmin-1e-9) continue;
+        ctx.strokeStyle='#334155'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(SX(X(xv)),SY(py)); ctx.lineTo(SX(X(xv)),SY(py+0.13)); ctx.stroke();
+        const txt = (m===0)?'0':(m===1?'π/2':(m===2?'π':(m===-1?'−π/2':(m%2===0? (m/2)+'π' : m+'π/2'))));
+        label(X(xv), py-0.30, txt, '#64748b', 'center', 10);
+    }
+    label(px1-0.1, py-0.30, 'x', '#94a3b8', 'end', 11);
+
+    // 最值虚线（取主曲线振幅）
+    const main = curves[0];
+    dashLine(px0, Y(main.A), px1, Y(main.A), '#475569', 1);
+    dashLine(px0, Y(-main.A), px1, Y(-main.A), '#475569', 1);
+    label(px0+0.05, Y(main.A)+0.24, 'y='+fmt(main.A,1), '#64748b', 'start', 10);
+    label(px0+0.05, Y(-main.A)-0.24, 'y='+fmt(-main.A,1), '#64748b', 'start', 10);
+
+    // 曲线
+    curves.forEach((c, ci) => {
+        ctx.strokeStyle = c.color; ctx.lineWidth = 2.6; ctx.beginPath();
+        for (let i=0;i<=360;i++){
+            const x = xmin + xr*i/360, y = c.A*Math.sin(c.omega*x + c.phi);
+            i===0 ? ctx.moveTo(SX(X(x)),SY(Y(y))) : ctx.lineTo(SX(X(x)),SY(Y(y)));
+        }
+        ctx.stroke();
+    });
+
+    // 当前 θ 游标
+    const cur = S.cur;
+    dashLine(X(cur), py-2.5, X(cur), py+2.5, '#facc15', 1.2);
+    curves.forEach(c => {
+        const y = c.A*Math.sin(c.omega*cur + c.phi);
+        ctx.fillStyle='#facc15'; ctx.beginPath(); ctx.arc(SX(X(cur)),SY(Y(y)),5.5,0,7); ctx.fill();
+        ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.5; ctx.stroke();
+    });
+    label(X(cur), py+2.62, (S.curLabel||'θ')+'='+(S.curDeg!=null?fmt(S.curDeg,0)+'°':fmt(cur,2)), '#facc15', 'center', 12);
+    // 周期标注
+    if (S.T && isFinite(S.T)){
+        const xa = X(xmin+0.2), xb = X(xmin+0.2+S.T);
+        dimLine(xmin+0.2, py+2.15, xmin+0.2+S.T, py+2.15, 'T='+fmt(S.T,3), '#38bdf8');
+    }
+}
+
+// ---- 3) 三角形（SAS：两边 b、c 与夹角 A 可拖动） ----
+function drawTri(S){
+    const b = S.b, c = S.c, Ad = S.Ad, ar = Ad*Math.PI/180;
+    const Ax = 4.0, Ay = 1.0;
+    const Bx = Ax + c, By = Ay;
+    const Cx = Ax + b*Math.cos(ar), Cy = Ay + b*Math.sin(ar);
+
+    // 填充三角形
+    ctx.fillStyle = 'rgba(99,102,241,0.20)';
+    ctx.beginPath(); ctx.moveTo(SX(Ax),SY(Ay)); ctx.lineTo(SX(Bx),SY(By)); ctx.lineTo(SX(Cx),SY(Cy)); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#818cf8'; ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.moveTo(SX(Ax),SY(Ay)); ctx.lineTo(SX(Bx),SY(By)); ctx.lineTo(SX(Cx),SY(Cy)); ctx.closePath(); ctx.stroke();
+    groundLine(0.75, 0.5, 9.6, '#334155');
+
+    // 顶点
+    [[Ax,Ay,'A','#f87171'],[Bx,By,'B','#38bdf8'],[Cx,Cy,'C','#34d399']].forEach(([x,y,t,cc])=>{
+        ctx.fillStyle=cc; ctx.beginPath(); ctx.arc(SX(x),SY(y),5,0,7); ctx.fill();
+        ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.5; ctx.stroke();
+        const dxs = x-Ax, dys = y-Ay, L=Math.hypot(dxs,dys)||1;
+        label(x + dxs/L*0.34, y + dys/L*0.30 + 0.16, t, cc, 'center', 14);
+    });
+
+    // 边长标注（中点外偏）
+    const sideMid = (x1,y1,x2,y2,txt,cc)=>{
+        const mx=(x1+x2)/2, my=(y1+y2)/2;
+        const nx=(y2-y1), ny=-(x2-x1), L=Math.hypot(nx,ny)||1;
+        label(mx+nx/L*0.30, my+ny/L*0.30, txt, cc, 'center', 12);
+    };
+    const a = Math.hypot(Cx-Bx, Cy-By);
+    sideMid(Ax,Ay,Bx,By, 'c='+fmt(c,2), '#38bdf8');
+    sideMid(Ax,Ay,Cx,Cy, 'b='+fmt(b,2), '#34d399');
+    sideMid(Bx,By,Cx,Cy, 'a='+fmt(a,2), '#fbbf24');
+
+    // 夹角 A 弧 + 度数
+    ctx.strokeStyle='#f87171'; ctx.lineWidth=2; ctx.beginPath();
+    ctx.arc(SX(Ax),SY(Ay), 0.55*sc, -(Math.atan2(By-Ay,Bx-Ax)), -(Math.atan2(Cy-Ay,Cx-Ax)), Ad>180);
+    ctx.stroke();
+    const amid = ar/2;
+    label(Ax+Math.cos(amid)*0.95, Ay+Math.sin(amid)*0.95, fmt(Ad,0)+'°', '#f87171', 'center', 12);
+
+    label(9.7, 6.15, 'S△ = ½ b c sinA = '+fmt(S.area,2), '#facc15', 'end', 12);
+}
+
+// ===================== 渲染主入口 =====================

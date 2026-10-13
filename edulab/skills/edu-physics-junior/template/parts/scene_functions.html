@@ -1,0 +1,225 @@
+// ===================== 场景绘制 =====================
+let animT = 0;                                    // 动画时钟（秒，电流/水流用）
+
+// ---- 1) 杠杆 ----
+function drawLever(S){
+    const [px,py]=S.pivot, half=S.beamLen/2;
+    const th=(S.tilt||0)*Math.PI/180, ux=Math.cos(th), uy=Math.sin(th);
+    const d1=isFinite(S.d1)?S.d1:S.L1, d2=isFinite(S.d2)?S.d2:S.L2;   // 绘图臂长（可与真实值不同比例）
+    const fs1=isFinite(S.fs1)?S.fs1:(S.fScale||0.05), fs2=isFinite(S.fs2)?S.fs2:(S.fScale||0.05);
+    groundLine(py-0.62, 0.4, view.xRange[1]-0.4);
+    // 支点三角
+    ctx.fillStyle=col('metal');
+    ctx.beginPath(); ctx.moveTo(SX(px),SY(py)); ctx.lineTo(SX(px-0.35),SY(py-0.55));
+    ctx.lineTo(SX(px+0.35),SY(py-0.55)); ctx.closePath(); ctx.fill();
+    // 杠杆棒
+    const lx=px-half*ux, ly=py-half*uy, rx=px+half*ux, ry=py+half*uy;
+    ctx.strokeStyle='#e2e8f0'; ctx.lineWidth=8; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(SX(lx),SY(ly)); ctx.lineTo(SX(rx),SY(ry)); ctx.stroke();
+    ctx.lineCap='butt';
+    // 左端动力 F1（真实力臂 L1）
+    const p1x=px-d1*ux, p1y=py-d1*uy;
+    const a1=Math.min(S.F1*fs1, 1.6);
+    arrow(p1x, p1y+0.12, p1x, p1y+0.12+a1, 'effort', 3, 'F₁='+fmt(S.F1,1)+'N');
+    dimLine(px, py-0.28, p1x, p1y-0.28, 'L₁='+fmt(S.L1,2)+'m');
+    // 右端阻力 F2 + 重物
+    const p2x=px+d2*ux, p2y=py+d2*uy;
+    rectBox(p2x-0.4, p2y, 0.8, 0.55, col('load'), '#0f172a');
+    label(p2x, p2y+0.28, 'G', '#0f172a', 'center', 12);
+    const a2=Math.min(S.F2*fs2, 1.6);
+    arrow(p2x, p2y-0.62, p2x, p2y-0.62-a2, 'force', 3, 'F₂='+fmt(S.F2,1)+'N');
+    dimLine(px, py-0.5, p2x, p2y-0.5, 'L₂='+fmt(S.L2,2)+'m');
+    label(px, py-0.95, 'O', '#e2e8f0', 'center', 13);
+}
+
+// ---- 2) 压强（海绵下陷） ----
+function drawPressure(S){
+    const gy=0.9, sw=5.0, sh=0.9, cx=(view.xRange[0]+view.xRange[1])/2;
+    const sink=Math.max(0, Math.min(S.sink, sh*0.85));
+    // 桌面
+    groundLine(gy-0.02, cx-sw/2-0.6, cx+sw/2+0.6);
+    // 海绵（顶面在盒宽范围内下陷 sink）
+    const bw=S.boxW, top=gy+sh;
+    ctx.fillStyle=col('sponge'); ctx.beginPath();
+    ctx.moveTo(SX(cx-sw/2), SY(gy));
+    ctx.lineTo(SX(cx-sw/2), SY(top));
+    ctx.quadraticCurveTo(SX(cx-bw/2-0.35), SY(top-sink*0.25), SX(cx-bw/2), SY(top-sink));
+    ctx.lineTo(SX(cx+bw/2), SY(top-sink));
+    ctx.quadraticCurveTo(SX(cx+bw/2+0.35), SY(top-sink*0.25), SX(cx+sw/2), SY(top));
+    ctx.lineTo(SX(cx+sw/2), SY(gy));
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle='#065f46'; ctx.lineWidth=1.5; ctx.stroke();
+    // 方块
+    const boxH=S.boxH||0.85, boxTop=top-sink+boxH;
+    rectBox(cx-bw/2, top-sink, bw, boxH, col('obj'), '#0f172a');
+    label(cx, top-sink+boxH/2, S.boxLabel||'', '#0f172a', 'center', 12);
+    // 压力箭头 + 下陷标注
+    arrow(cx, boxTop+0.9, cx, boxTop+0.08, 'force', 3, 'F='+fmt(S.F,1)+'N');
+    if (sink>0.06) dimLine(cx+bw/2+0.45, top, cx+bw/2+0.45, top-sink, 'Δ='+fmt(S.sink/S.k,2)+'cm');
+}
+
+// ---- 3) 浮力（弹簧秤 + 浸入） ----
+function drawBuoyancy(S){
+    const tx0=2.2, tx1=7.8, ty0=0.7, wall=4.4, liquidY=S.liquidY;
+    // 容器
+    ctx.strokeStyle=col('metal'); ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(SX(tx0),SY(wall)); ctx.lineTo(SX(tx0),SY(ty0));
+    ctx.lineTo(SX(tx1),SY(ty0)); ctx.lineTo(SX(tx1),SY(wall)); ctx.stroke();
+    // 水
+    ctx.fillStyle='rgba(56,189,248,0.30)';
+    ctx.fillRect(SX(tx0)+2, SY(liquidY), (tx1-tx0)*sc-4, (liquidY-ty0)*sc);
+    ctx.strokeStyle=col('water'); ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(SX(tx0),SY(liquidY)); ctx.lineTo(SX(tx1),SY(liquidY)); ctx.stroke();
+    // 物体（部分浸入，浸没段加深）
+    const ow=S.objW, oh=S.objH, ocx=(tx0+tx1)/2;
+    const oTop=S.objTop, oBot=oTop-oh;
+    const subTop=Math.min(oTop, liquidY), subBot=Math.max(oBot, ty0+0.05);
+    rectBox(ocx-ow/2, oTop-oh, ow, oh, '#c4b5fd', '#0f172a');
+    if (subTop>subBot) rectBox(ocx-ow/2, subBot, ow, subTop-subBot, '#7c3aed', '#0f172a');
+    // 弹簧秤
+    const scY=wall+1.15;
+    rectBox(ocx-0.45, scY, 0.9, 0.7, '#e2e8f0', '#0f172a');
+    label(ocx, scY+0.35, 'N', '#0f172a', 'center', 12);
+    dashLine(ocx, scY, ocx, oTop, '#94a3b8', 2);
+    // 箭头：G 向下、F浮 向上、F拉 向上
+    arrow(ocx, oTop-oh/2, ocx, oTop-oh/2-Math.min(S.G*S.fScale,1.7), 'force', 3, 'G='+fmt(S.G,1)+'N');
+    if (S.F_buoy>0.001)
+        arrow(ocx, oBot+0.06, ocx, oBot+0.06+Math.min(S.F_buoy*S.fScale,1.7), 'water2', 3, 'F浮='+fmt(S.F_buoy,2)+'N');
+    arrow(ocx+0.02, oTop+0.04, ocx+0.02, oTop+0.04+Math.min(S.F_scale*S.fScale,1.7), 'good', 3, 'F拉='+fmt(S.F_scale,2)+'N');
+}
+
+// ---- 4) 滑轮组（一动一定，n=2） ----
+function drawPulley(S){
+    const ceil=5.6, fx=5.0, fy=5.05, r=0.42;
+    const my=S.my, mx=3.0;
+    // 天花板
+    ctx.strokeStyle=col('ground'); ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(SX(1.6),SY(ceil)); ctx.lineTo(SX(7.4),SY(ceil)); ctx.stroke();
+    ctx.lineWidth=1.2;
+    for (let x=1.7;x<7.4;x+=0.3){ ctx.beginPath(); ctx.moveTo(SX(x),SY(ceil)); ctx.lineTo(SX(x)-6,SY(ceil)+8); ctx.stroke(); }
+    // 定滑轮轴 + 吊杆
+    dashLine(fx, fy, fx, ceil, '#94a3b8', 3);
+    // 绳子（锚点→动滑轮→定滑轮→手）
+    const ax=2.2;
+    const handY=S.handY;
+    ctx.strokeStyle=col('rope'); ctx.lineWidth=2.5;
+    ctx.beginPath();
+    ctx.moveTo(SX(ax),SY(ceil));
+    ctx.lineTo(SX(mx-0.18),SY(my));
+    ctx.arc(SX(mx),SY(my), r*sc, Math.PI*1.06, Math.PI*1.94, false);   // 绕动滑轮下方
+    ctx.lineTo(SX(fx-0.05),SY(fy));
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(SX(fx),SY(fy), r*sc, Math.PI*1.06, Math.PI*0.06+Math.PI, false); // 绕定滑轮上方（右半）
+    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(SX(fx+r),SY(fy)); ctx.lineTo(SX(fx+r+0.35),SY(handY)); ctx.stroke();
+    // 滑轮轮子
+    [[fx,fy],[mx,my]].forEach(([cx2,cy2])=>{
+        ctx.fillStyle='#334155'; ctx.beginPath(); ctx.arc(SX(cx2),SY(cy2),r*sc,0,7); ctx.fill();
+        ctx.strokeStyle=col('metal'); ctx.lineWidth=3; ctx.stroke();
+        ctx.fillStyle=col('metal'); ctx.beginPath(); ctx.arc(SX(cx2),SY(cy2),3.5,0,7); ctx.fill();
+    });
+    // 重物 + G 箭头
+    rectBox(mx-0.55, my-r-1.05, 1.1, 0.75, col('load'), '#0f172a');
+    label(mx, my-r-0.68, 'G', '#0f172a', 'center', 12);
+    arrow(mx, my-r-1.1, mx, my-r-1.1-Math.min(S.G*S.fScale,1.5), 'force', 3, 'G='+fmt(S.G,0)+'N');
+    // 拉力箭头（手）
+    arrow(fx+r+0.35, handY, fx+r+0.35, handY-Math.min(S.F*S.fScale,1.5), 'effort', 3, 'F='+fmt(S.F,1)+'N');
+    // 提升高度标注
+    if (S.h>0.01) dimLine(mx+0.95, S.myBase, mx+0.95, my, 'h='+fmt(S.h,2)+'m');
+    label(fx, fy-0.62, 'n='+S.n, '#94a3b8', 'center', 12);
+}
+
+// ---- 5) 电路图 ----
+function wire(path, color=col('wire'), lw=2.5){
+    ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.lineJoin='round';
+    ctx.beginPath(); path.forEach((p,i)=> i?ctx.lineTo(SX(p[0]),SY(p[1])):ctx.moveTo(SX(p[0]),SY(p[1]))); ctx.stroke();
+}
+function flowDots(path, speed, nDots, color){
+    // 沿折线按弧长均匀布点，动画时钟推进（speed=0 则不动）
+    const segs=[]; let total=0;
+    for (let i=1;i<path.length;i++){ const d=Math.hypot(path[i][0]-path[i-1][0], path[i][1]-path[i-1][1]); segs.push(d); total+=d; }
+    if (total<0.01) return;
+    if (!nDots) nDots=Math.max(2, Math.round(total*1.6));
+    ctx.fillStyle=color;
+    for (let k=0;k<nDots;k++){
+        let d=(((speed*animT) + k*total/nDots) % total + total) % total;
+        for (let i=0;i<segs.length;i++){
+            if (d<=segs[i]||i===segs.length-1){
+                const f=segs[i]>0?d/segs[i]:0;
+                const x=path[i][0]+(path[i+1][0]-path[i][0])*f, y=path[i][1]+(path[i+1][1]-path[i][1])*f;
+                ctx.beginPath(); ctx.arc(SX(x),SY(y),3.2,0,7); ctx.fill(); break;
+            }
+            d-=segs[i];
+        }
+    }
+}
+function symBattery(x,y,vertical){     // 电池组：长短两横
+    ctx.strokeStyle=col('battery'); ctx.fillStyle=col('battery');
+    if (vertical){
+        ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(SX(x-0.28),SY(y)); ctx.lineTo(SX(x+0.28),SY(y)); ctx.stroke();
+        ctx.lineWidth=6; ctx.beginPath(); ctx.moveTo(SX(x-0.14),SY(y-0.26)); ctx.lineTo(SX(x+0.14),SY(y-0.26)); ctx.stroke();
+    } else {
+        ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(SX(x),SY(y-0.28)); ctx.lineTo(SX(x),SY(y+0.28)); ctx.stroke();
+        ctx.lineWidth=6; ctx.beginPath(); ctx.moveTo(SX(x+0.26),SY(y-0.14)); ctx.lineTo(SX(x+0.26),SY(y+0.14)); ctx.stroke();
+    }
+}
+function symBox(x,y,text,color){       // 电阻/开关等方框元件
+    rectBox(x-0.36, y-0.2, 0.72, 0.4, '#1e293b', color, 2.5);
+    label(x, y, text, color, 'center', 11);
+}
+function symMeter(x,y,letter){         // 电流表/电压表
+    ctx.fillStyle='#0f172a'; ctx.strokeStyle=col('meter'); ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.arc(SX(x),SY(y),0.3*sc,0,7); ctx.fill(); ctx.stroke();
+    label(x, y, letter, col('meter'), 'center', 13);
+}
+function drawCircuit(S){
+    const X0=1.2, X1=8.3, Y0=1.2, Y1=4.9;
+    const par = S.layout==='parallel', single = S.layout==='single';
+    const parts=[], flows=[];                        // parts: 静态线；flows: 带电流点的线
+    // 主回路左半：电池→开关→上角
+    if (!par && !single){
+        parts.push([[X0,Y1],[3.4,Y1]]); parts.push([[4.1,Y1],[5.3,Y1]]); parts.push([[6.0,Y1],[X1,Y1]]);
+        parts.push([[X1,Y1],[X1,Y0]]); parts.push([[X1,Y0],[X0,Y0],[X0,3.0]]);
+        symBox(3.75,Y1,'R₁='+fmt(S.R1,1)+'Ω',col('battery'));
+        symBox(5.65,Y1,'R₂='+fmt(S.R2,1)+'Ω',col('battery'));
+        symMeter(X1,3.0,'A');
+        // 电压表并联在 R1 两端
+        parts.push([[3.05,Y1],[3.05,3.35]]); parts.push([[3.05,3.35],[4.45,3.35]]); parts.push([[4.45,3.35],[4.45,Y1]]);
+        symMeter(3.75,3.35,'V');
+        flows.push({path:[[X0,3.0],[X0,Y1],[3.4,Y1]], I:S.I});
+        flows.push({path:[[4.1,Y1],[5.3,Y1]], I:S.I});
+        flows.push({path:[[6.0,Y1],[X1,Y1],[X1,Y0],[X0,Y0]], I:S.I});
+    } else if (single){
+        // 单电阻：电池、开关、电阻、电流表；电压表并联在 R 两端
+        parts.push([[X0,Y1],[3.6,Y1]]); parts.push([[5.4,Y1],[X1,Y1]]);
+        parts.push([[X1,Y1],[X1,Y0]]); parts.push([[X1,Y0],[X0,Y0],[X0,3.0]]);
+        symBox(4.5,Y1,'R='+fmt(S.R1,1)+'Ω',col('battery'));
+        symMeter(X1,3.0,'A');
+        parts.push([[3.25,Y1],[3.25,3.35]]); parts.push([[3.25,3.35],[5.75,3.35]]); parts.push([[5.75,3.35],[5.75,Y1]]);
+        symMeter(4.5,3.35,'V');
+        flows.push({path:[[X0,3.0],[X0,Y1],[3.6,Y1]], I:S.I});
+        flows.push({path:[[5.4,Y1],[X1,Y1],[X1,Y0],[X0,Y0]], I:S.I});
+    } else {
+        // 并联：上下两支路
+        parts.push([[X0,Y1],[2.6,Y1]]);
+        parts.push([[2.6,Y1],[2.6,3.45]]); parts.push([[2.6,3.45],[6.6,3.45]]); parts.push([[6.6,3.45],[6.6,Y1]]);
+        parts.push([[6.6,Y1],[X1,Y1]]); parts.push([[X1,Y1],[X1,Y0]]); parts.push([[X1,Y0],[X0,Y0],[X0,3.0]]);
+        symBox(4.6,Y1,'L₁='+fmt(S.R1,1)+'Ω',col('battery'));
+        symBox(4.6,3.45,'L₂='+fmt(S.R2,1)+'Ω',col('battery'));
+        symMeter(X1,3.0,'A');
+        flows.push({path:[[2.6,Y1],[6.6,Y1]], I:S.I1});
+        flows.push({path:[[2.6,Y1],[2.6,3.45],[6.6,3.45],[6.6,Y1]], I:S.I2});
+        flows.push({path:[[X0,Y1],[2.6,Y1]], I:S.I});
+        flows.push({path:[[6.6,Y1],[X1,Y1],[X1,Y0],[X0,Y0],[X0,3.0]], I:S.I});
+    }
+    parts.forEach(p=>wire(p));
+    const kf = isFinite(S.kflow) ? S.kflow : 1.5;
+    flows.forEach(fl=>{ wire(fl.path); flowDots(fl.path, (isFinite(fl.I)?fl.I:0)*kf, 6, col('current')); });
+    symBattery(X0,3.0,true);
+    rectBox(X0-0.2,1.85,0.4,0.3,'#1e293b',col('good'),2.5);   // 开关（闭合）
+    label(X0+0.75,2.0,'S',col('good'),'start',11);
+    label((X0+X1)/2, Y0-0.35, par?'并联电路':(single?'单电阻电路':'串联电路'), '#64748b', 'center', 12);
+}
+
+// ===================== 渲染主入口 =====================

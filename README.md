@@ -67,30 +67,39 @@ python edulab/tools/check_skills.py            # 差异即失败
 python edulab/tools/check_skills.py --update   # 确认新产物正确后刷新基线
 ```
 
-### Family A 模板：改骨架，别改产物
+### 模板家族：改骨架，别改产物
 
-`edu-analytic-geometry` / `edu-plane-geometry` / `edu-function-derivative` 三个技能
-的 `template/board.html` 原本是三份 90% 相同的文件（约 1600 行重复），现在由
-**共享骨架 + 各自片段**组装而成：
+六个技能的 `template/board.html` 原本是「复制一份再各自改」的产物，重复率很高、
+改一处要同步多处。现在它们按家族由**共享骨架 + 各自片段**组装而成：
+
+| 家族 | 成员 | 差异形状 |
+|---|---|---|
+| `geom-fn` | 解析几何 / 平面几何 / 函数与导数 | 20 个槽位，差异全是「在若干位置插入自己的块」 |
+| `seq-phys` | 数列与三角 / 初中物理 / 高中物理 | 8 个槽位：head/tail 共用，只有场景函数与 `switch` 的 case 不同 |
 
 ```
-edulab/shared/board/shell.html          唯一骨架，槽位写成独占一行的 {{slot:name}}
-edulab/shared/board/parts/<name>.html   该槽位的 base 版本（= analytic 的内容）
-<技能>/template/parts/<name>.html         该技能自己的版本；不存在则用 base 版本
+edulab/shared/board/<家族>/shell.html         唯一骨架，槽位写成独占一行的 {{slot:name}}
+edulab/shared/board/<家族>/parts/<name>.html  该槽位的 base 版本
+<技能>/template/parts/<name>.html             该技能自己的版本；不存在则用 base 版本
 ```
 
 解析规则刻意做成零配置：**自己的片段优先，缺失就回退到 base 版本**。
-所以 `analytic-geometry` 是 base，一个片段文件都不需要。改这三个技能的模板时：
+所以每个家族的 base 技能（`geom-fn` 的 analytic-geometry、`seq-phys` 的
+math-sequences）一个片段文件都不需要。改模板时：
 
 ```bash
-# 改 shared/board/shell.html 或某个 parts/<name>.html，然后：
-python edulab/tools/compose_templates.py          # 重新组装三份 board.html
+# 改 shared/board/<家族>/shell.html 或某个 parts/<name>.html，然后：
+python edulab/tools/compose_templates.py          # 重新组装六份 board.html
 python edulab/tools/compose_templates.py --check   # 只校验是否与骨架一致
 ```
 
 组装产物**提交进仓库**，所以技能仍然自包含（`generate.py` 只读自己目录下的
 `template/`，不依赖 `shared/board/`）；漂移由 `compose --check` 与
-`check_skills.py` 一起拦住。
+`check_skills.py` 一起拦住。组装器还会检查**孤儿片段**：技能若带 `template/parts/`
+却不在任何家族里，会直接报错而不是让片段被静默忽略。
+
+维护量由 3904 行降到 2014 行（−48.4%），六个产物逐字节不变。
+新增同族技能时，把 shell 复制一份到自己目录、在 `FAMILIES` 里登记、按需补片段即可。
 
 成品按需重新生成：
 

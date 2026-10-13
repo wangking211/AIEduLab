@@ -60,12 +60,12 @@ def main(argv):
     names = skill_names()
     print(f"技能 {len(names)} 个：{', '.join(names)}\n")
 
-    # 0) 模板一致性：Family A 的 board.html 必须与共享骨架 + 各自片段一致
+    # 0) 模板一致性：各家族的 board.html 必须与共享骨架 + 各自片段一致
     import subprocess as _sp
     r = _sp.run([sys.executable, str(HERE / "compose_templates.py"), "--check"],
                 capture_output=True, text=True, encoding="utf-8", errors="replace")
     tpl_ok = r.returncode == 0
-    print(f"  {'✓' if tpl_ok else '✗'} 模板一致性（shared/board 骨架 + 片段）")
+    print(f"  {'✓' if tpl_ok else '✗'} 模板一致性（shared/board 各家族骨架 + 片段）")
     if not tpl_ok:
         for ln in (r.stdout or "").splitlines()[-4:]:
             print(f"      {ln}")
