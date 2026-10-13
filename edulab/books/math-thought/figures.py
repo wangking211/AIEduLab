@@ -13,6 +13,7 @@ figures.py — 《数学思想：从计数到无穷》的插图定义。
 """
 import json
 import math
+import random
 from fractions import Fraction
 
 # 纸感主题的语义色（与 viz.js 的 THEMES.paper 保持一致）
@@ -825,6 +826,332 @@ def fig_riemann():
             "layers": layers, "steps": steps}
 
 
+# =====================================================================
+# ---- 第 5 章插图：随机 —— 从命运到概率 ----
+# =====================================================================
+def _coin_flips(n, seed=20261015):
+    """真实抛硬币（固定种子，可复现）：返回 0/1 序列，1 = 正面。"""
+    rng = random.Random(seed)
+    return [1 if rng.random() < 0.5 else 0 for _ in range(n)]
+
+
+def _galton(rows, balls, npaths=4, seed=20261014):
+    """真实高尔顿板模拟：返回 (每格计数, 前 npaths 颗球的逐行位置)。
+
+    球的 x 坐标用半格为单位：过完第 i 排后 x = (已向右次数 - i/2)。
+    最后一排走完 x 落在 [-rows/2, rows/2]，正好是各落点的中心。
+    """
+    rng = random.Random(seed)
+    counts = [0] * (rows + 1)
+    paths = []
+    for b in range(balls):
+        r, xs = 0, [0.0]
+        for i in range(1, rows + 1):
+            if rng.random() < 0.5:
+                r += 1
+            xs.append((2 * r - i) / 2.0)
+        counts[int(round(xs[-1] + rows / 2.0))] += 1
+        if b < npaths:
+            paths.append(xs)
+    return counts, paths
+
+
+def fig_dice():
+    """古典概型：36 种等可能的结果 → 两骰之和的分布。
+
+    左：6×6 结果网格（点 = 一种结果，数字 = 两骰之和，颜色 = 离 7 的远近）。
+    右：按「和」分组的柱状图——等可能的结果，聚出不等的和。
+    """
+    gx, gy = 0.9, 1.0
+    sums = {}
+    for i in range(6):
+        for j in range(6):
+            s = (i + 1) + (j + 1)
+            sums[s] = sums.get(s, 0) + 1
+    counts = [sums[s] for s in range(2, 13)]          # [1,2,3,4,5,6,5,4,3,2,1]
+    total = sum(counts)
+    ramp = {0: "#b45309", 1: "#c2410c", 2: "#ca8a04", 3: "#a16207", 4: "#78716c", 5: "#a8a29e"}
+
+    layers = []
+    # 结果网格
+    dots = [{"x": i * gx, "y": j * gy, "r": 7, "fill": ramp[min(abs((i + 1) + (j + 1) - 7), 5)],
+             "label": str((i + 1) + (j + 1))} for i in range(6) for j in range(6)]
+    layers.append({"geom": "point", "when": "k >= 1", "data": dots, "labelColor": INK, "labelSize": 9,
+                   "r": 7})
+    # 柱状图
+    bars = [{"x": 8.2 + k * 1.1, "y": counts[k], "w": 0.78, "fill": ACCENT} for k in range(11)]
+    layers.append({"geom": "bar", "when": "k >= 2", "data": bars})
+    layers.append({"geom": "line", "when": "k >= 2", "data": [[7.5, 0], [19.9, 0]],
+                   "stroke": INK, "width": 1.6})
+    for c in range(7):                                 # 纵轴刻度
+        layers.append({"geom": "line", "when": "k >= 2", "data": [[7.5, c], [7.85, c]],
+                       "stroke": RULE, "width": 1.2})
+        layers.append({"geom": "text", "when": "k >= 2", "x": 7.3, "y": c, "text": str(c),
+                       "align": "right", "size": 8.5, "color": DIM, "dy": 0, "weight": "normal"})
+    for k in range(11):                                # 横轴：两骰之和
+        layers.append({"geom": "text", "when": "k >= 2", "x": 8.2 + k * 1.1, "y": -0.55,
+                       "text": str(2 + k), "align": "center", "size": 9.5, "color": DIM,
+                       "dy": 0, "weight": "normal"})
+    # 标题与注记
+    layers += [
+        {"geom": "text", "when": "k >= 1", "x": 0.0, "y": 6.35, "text": "36 种等可能的结果",
+         "align": "left", "size": 11.5, "color": INK, "dy": 0},
+        {"geom": "text", "when": "k >= 1", "x": 0.0, "y": 5.8, "text": "数字 = 两骰之和",
+         "align": "left", "size": 9.5, "color": DIM, "dy": 0, "weight": "normal"},
+        {"geom": "text", "when": "k >= 2", "x": 8.2, "y": 6.35, "text": "两骰之和的分布",
+         "align": "left", "size": 11.5, "color": INK, "dy": 0},
+        {"geom": "text", "when": "k >= 2", "x": 8.2, "y": 5.8, "text": "纵轴 = 出现次数",
+         "align": "left", "size": 9.5, "color": DIM, "dy": 0, "weight": "normal"},
+        {"geom": "text", "when": "k >= 3", "x": 13.7, "y": 6.5, "text": "最多：6 次",
+         "align": "center", "size": 10, "color": ACCENT, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": 0.0, "y": -1.3,
+         "text": "每种结果概率都是 1/36，但「和」不同：", "align": "left", "size": 10,
+         "color": INK, "dy": 0, "weight": "normal"},
+        {"geom": "text", "when": "k >= 3", "x": 0.0, "y": -1.95,
+         "text": "和 = 7 有 6 种 → 1/6；和 = 2 或 12 各 1 种 → 1/36", "align": "left",
+         "size": 10, "color": INK, "dy": 0, "weight": "normal"},
+    ]
+    steps = [
+        {"k": 1, "note": "抛出两颗骰子，共有 6×6 = 36 种结果。每一种出现的可能性完全相同——这是「古典概型」的全部前提。"},
+        {"k": 2, "note": "把 36 种结果按「两骰之和」分组计数：和 = 7 的组合最多，两端最少。等可能的结果，聚出了不等的和。"},
+        {"k": 3, "note": f"概率 = 有利结果数 ÷ 总结果数 = 6/36 = 1/6（和 7）。这套算法（拉普拉斯）简单有力——但它要求你能断定哪些结果「等可能」，而这往往是直觉，不是数学。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [-0.9, 20.4], "yRange": [-2.3, 7.0],
+                                     "pad": {"l": 20, "r": 16, "b": 30, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
+def fig_galton():
+    """高尔顿钉板：每一步都随机，总体却是确定的钟形（真实模拟，固定种子）。"""
+    rows, balls = 8, 200
+    counts, paths = _galton(rows, balls, seed=2502)   # 该种子下模拟柱形与理论曲线贴合最紧
+    mx = max(counts)
+    base, hmax = -11.4, 3.4
+
+    def path_pts(xs):
+        land = xs[-1]
+        return ([[0.0, 0.6]] + [[xs[i], -float(i)] for i in range(rows + 1)]
+                + [[land, -float(rows) - 1.0], [land, base]])
+
+    layers = []
+    # 钉子
+    pegs = [{"x": (2 * j - i) / 2.0, "y": -float(i), "r": 2.6, "fill": DIM}
+            for i in range(rows) for j in range(i + 1)]
+    layers.append({"geom": "point", "when": "k >= 1", "data": pegs, "r": 2.6})
+    # 第一颗球的真实路径；第 2 步再补几颗（更淡），衬出「路径各不相同」
+    layers.append({"geom": "line", "data": path_pts(paths[0]), "stroke": ACCENT, "width": 2.2})
+    for p in paths[1:]:
+        layers.append({"geom": "line", "when": "k >= 2", "data": path_pts(p),
+                       "stroke": "#d8b48c", "width": 1.3})
+    layers.append({"geom": "point", "data": [{"x": paths[0][-1], "y": base, "r": 5, "fill": ACCENT}],
+                   "fill": ACCENT})
+    # 落格与柱状图
+    layers.append({"geom": "line", "when": "k >= 3", "data": [[-4.6, base], [4.6, base]],
+                   "stroke": INK, "width": 1.6})
+    layers.append({"geom": "bar", "when": "k >= 3", "baseline": base, "data": [
+        {"x": R - rows / 2.0, "y": base + hmax * counts[R] / mx, "w": 0.82, "fill": ACCENT}
+        for R in range(rows + 1)]})
+    # 理论二项分布（缩放到同一高度）
+    pmf = [math.comb(rows, R) / 2.0 ** rows for R in range(rows + 1)]
+    pmx = max(pmf)
+    layers.append({"geom": "line", "when": "k >= 4", "stroke": TEAL, "width": 2.4, "dash": True,
+                   "data": [[R - rows / 2.0, base + hmax * pmf[R] / pmx] for R in range(rows + 1)]})
+    # 标注
+    layers += [
+        {"geom": "text", "x": 0.0, "y": 1.05, "text": "每一步都随机", "align": "center",
+         "size": 11, "color": ACCENT, "dy": 0},
+        {"geom": "text", "when": "k >= 1", "x": -9.6, "y": -3.0,
+         "text": "钉子：\n每撞一颗，\n各一半概率\n向左 / 向右", "align": "left", "size": 10.5,
+         "color": DIM, "dy": 0, "weight": "normal"},
+        {"geom": "text", "when": "k >= 3", "x": -9.6, "y": -9.0,
+         "text": f"{balls} 颗球\n落点堆积", "align": "left", "size": 10.5,
+         "color": ACCENT, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": 9.6, "y": -9.0,
+         "text": "中间最多\n两端极少", "align": "right", "size": 10.5,
+         "color": INK, "dy": 0, "weight": "normal"},
+        {"geom": "text", "when": "k >= 4", "x": 9.6, "y": -4.0,
+         "text": "理论曲线：\n二项分布 B(8, ½)", "align": "right", "size": 10.5,
+         "color": TEAL, "dy": 0},
+    ]
+    steps = [
+        {"k": 1, "note": "一颗球从顶端落下。每撞到一颗钉子，就以 1/2 的概率向左或向右——它的路径完全不可预测。"},
+        {"k": 2, "note": "再放几颗球。每颗都经历 8 次随机选择，走的路径各不相同，落点也散开——但散得有章法。"},
+        {"k": 3, "note": f"放下 {balls} 颗球。每颗球的路径都不相同，可落点却自动堆成了中间高、两端低的「钟形」——随机性里长出了秩序。"},
+        {"k": 4, "note": "叠上理论曲线（二项分布 B(8, ½)）：模拟的柱形与它几乎重合。这就是伯努利大数定律的雏形——单次不可预测，海量却可计算。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [-11.0, 11.0], "yRange": [-11.8, 0.7],
+                                     "pad": {"l": 18, "r": 18, "b": 18, "t": 18}},
+            "layers": layers, "steps": steps}
+
+
+def fig_lln():
+    """大数定律：抛硬币的频率收敛到 1/2（真实模拟，固定种子）。"""
+    flips = 500
+    seq = _coin_flips(flips)
+    runs, h = [], 0
+    for n, x in enumerate(seq, 1):
+        h += x
+        runs.append([float(n), h / n])
+
+    def upto(lo, hi):
+        return [p for p in runs if lo <= p[0] <= hi]
+
+    layers = [
+        {"geom": "axis", "xRange": [0, 520], "yRange": [0, 1], "xlab": "抛掷次数 n",
+         "ylab": "正面频率", "xticks": [0, 100, 200, 300, 400, 500],
+         "yticks": [0, 0.25, 0.5, 0.75, 1]},
+        {"geom": "region", "x": [0, 520], "y": [0.45, 0.55], "fill": "#e4efe7", "outline": False},
+        {"geom": "line", "data": [[0, 0.5], [520, 0.5]], "stroke": BAD, "width": 1.6, "dash": True},
+        # 三段折线：随步展开
+        {"geom": "line", "when": "k >= 1", "data": upto(1, 20), "stroke": ACCENT, "width": 1.8},
+        {"geom": "line", "when": "k >= 2", "data": upto(20, 120), "stroke": ACCENT, "width": 1.8},
+        {"geom": "line", "when": "k >= 3", "data": upto(120, flips), "stroke": ACCENT, "width": 1.8},
+        {"geom": "text", "x": 505, "y": 0.5, "text": "0.5", "align": "left", "size": 10,
+         "color": BAD, "dy": -12},
+    ]
+    # |正 − 反| 的期望 ≈ √(2n/π) ≈ 0.8√n。用期望而非单次实测值：
+    # 单次涨落会让三元组非单调，那是噪声不是规律。
+    typical = [math.sqrt(2 * n / math.pi) for n in (20, 100, flips)]
+    layers += [
+        {"geom": "text", "x": 30, "y": 0.93, "text": f"前 20 次：频率乱跳（{runs[19][1]:.2f}）",
+         "align": "left", "size": 10.5, "color": ACCENT, "dy": 0},
+        {"geom": "text", "when": "k >= 2", "x": 130, "y": 0.10,
+         "text": f"100 次：≈ 0.5（{runs[99][1]:.2f}）", "align": "left", "size": 10.5,
+         "color": ACCENT, "dy": 0, "weight": "normal"},
+        {"geom": "text", "when": "k >= 3", "x": 300, "y": 0.80,
+         "text": f"{flips} 次：贴住 0.5（{h / flips:.3f}）", "align": "left", "size": 10.5,
+         "color": GOOD, "dy": 0},
+        {"geom": "text", "when": "k >= 4", "x": 300, "y": 0.22,
+         "text": f"|正 − 反| 典型 ≈ 0.8√n：{typical[0]:.1f} → {typical[1]:.1f} → {typical[2]:.1f}（在变大）",
+         "align": "left", "size": 10.5, "color": BAD, "dy": 0},
+    ]
+    steps = [
+        {"k": 1, "note": "抛 20 次硬币。频率忽上忽下，甚至可能连续几个正面——此时「概率 = 1/2」看不出任何约束力。"},
+        {"k": 2, "note": "抛到 100 次：曲线明显向 0.5 收拢。伯努利 1713 年证明：只要独立同分布，频率几乎必然收敛到概率。"},
+        {"k": 3, "note": f"抛满 {flips} 次，频率几乎贴住 0.5（实际 {h / flips:.3f}）。这就是大数定律——它是「概率」第一次可以被测量的依据。"},
+        {"k": 4, "note": f"一个反直觉的细节：频率在收敛，正面与反面的**典型差距**却在变大——|正 − 反| 的期望约等于 0.8√n，n = 20 / 100 / {flips} 时分别约为 {typical[0]:.1f} / {typical[1]:.1f} / {typical[2]:.1f}。收敛的是比例，不是差距。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [0, 520], "yRange": [0, 1],
+                                     "pad": {"l": 44, "r": 16, "b": 30, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
+def fig_bertrand():
+    """伯特兰悖论：同一个「随机弦」，三种「等可能」给出三个答案。"""
+    def chord_from_d(theta, d):
+        """给定法向角 theta 与到圆心距离 d，返回弦的两个端点。"""
+        nx, ny = math.cos(theta), math.sin(theta)
+        t = math.sqrt(max(0.0, 1.0 - d * d))
+        return [[d * nx - t * -ny, d * ny - t * nx], [d * nx + t * -ny, d * ny + t * nx]]
+
+    rng = random.Random(20261016)
+    # 方法一：圆周上随机取两个端点
+    m1 = []
+    for _ in range(5):
+        a1, a2 = rng.uniform(0, 2 * math.pi), rng.uniform(0, 2 * math.pi)
+        m1.append([[math.cos(a1), math.sin(a1)], [math.cos(a2), math.sin(a2)]])
+    # 方法二：随机取一条半径，再在半径上随机取一点作垂足
+    m2 = [chord_from_d(rng.uniform(0, 2 * math.pi), rng.random()) for _ in range(5)]
+    # 方法三：在圆盘内均匀随机取一点作中点
+    m3 = []
+    while len(m3) < 5:
+        px, py = rng.uniform(-1, 1), rng.uniform(-1, 1)
+        if px * px + py * py <= 1:
+            m3.append(chord_from_d(math.atan2(py, px), math.hypot(px, py)))
+
+    circle = [[math.cos(2 * math.pi * i / 96), math.sin(2 * math.pi * i / 96)] for i in range(97)]
+    inner = [[0.5 * math.cos(2 * math.pi * i / 72), 0.5 * math.sin(2 * math.pi * i / 72)]
+             for i in range(73)]
+    tri = [[0.0, 1.0], [-math.sqrt(3) / 2, -0.5], [math.sqrt(3) / 2, -0.5], [0.0, 1.0]]
+
+    layers = [
+        {"geom": "line", "data": circle, "stroke": INK, "width": 2.0},
+        {"geom": "line", "data": inner, "stroke": BAD, "width": 1.4, "dash": True},
+        {"geom": "line", "data": tri, "stroke": DIM, "width": 1.4, "dash": True},
+        {"geom": "text", "x": 0.0, "y": 1.16, "text": "分界圈 r = ½", "align": "center",
+         "size": 9.5, "color": BAD, "dy": 0, "weight": "normal"},
+    ]
+    for i, seg in enumerate(m1):
+        layers.append({"geom": "line", "when": "k == 2", "data": seg, "stroke": ACCENT, "width": 1.6})
+    for i, seg in enumerate(m2):
+        layers.append({"geom": "line", "when": "k == 3", "data": seg, "stroke": ACCENT2, "width": 1.6})
+    for i, seg in enumerate(m3):
+        layers.append({"geom": "line", "when": "k == 4", "data": seg, "stroke": TEAL, "width": 1.6})
+    layers += [
+        {"geom": "text", "x": -3.0, "y": 1.05, "text": "同一个圆，同一条问题：", "align": "left",
+         "size": 11, "color": INK, "dy": 0},
+        {"geom": "text", "x": -3.0, "y": 0.75, "text": "随机画一条弦，", "align": "left",
+         "size": 11, "color": INK, "dy": 0, "weight": "normal"},
+        {"geom": "text", "x": -3.0, "y": 0.45, "text": "它比内接正三角形", "align": "left",
+         "size": 11, "color": INK, "dy": 0, "weight": "normal"},
+        {"geom": "text", "x": -3.0, "y": 0.15, "text": "的边更长的概率？", "align": "left",
+         "size": 11, "color": INK, "dy": 0, "weight": "normal"},
+        {"geom": "text", "when": "k >= 2", "x": 3.0, "y": 0.75, "text": "① 随机取两端点 → 1/3",
+         "align": "right", "size": 11, "color": ACCENT, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": 3.0, "y": 0.35, "text": "② 随机取半径上的点 → 1/2",
+         "align": "right", "size": 11, "color": ACCENT2, "dy": 0},
+        {"geom": "text", "when": "k >= 4", "x": 3.0, "y": -0.05, "text": "③ 随机取圆盘内一点 → 1/4",
+         "align": "right", "size": 11, "color": TEAL, "dy": 0},
+        {"geom": "text", "when": "k >= 5", "x": -3.0, "y": -0.95,
+         "text": "三种随机化都「无偏」，答案却各不相同 ——", "align": "left", "size": 10.5,
+         "color": BAD, "dy": 0},
+        {"geom": "text", "when": "k >= 5", "x": -3.0, "y": -1.2,
+         "text": "「等可能」在没有定义之前，只是直觉。", "align": "left", "size": 10.5,
+         "color": BAD, "dy": 0, "weight": "normal"},
+    ]
+    steps = [
+        {"k": 1, "note": "在圆里「随机」画一条弦，问它比内接正三角形的边更长的概率——听上去毫无歧义。"},
+        {"k": 2, "note": "① 先随机取两个端点，再连线。算得概率 = 1/3。够自然吧？"},
+        {"k": 3, "note": "② 先随机取一条半径，再在半径上随机取一点作垂足。同一问题的答案变成了 1/2。"},
+        {"k": 4, "note": "③ 先在圆盘内均匀随机取一点作中点。答案又变成了 1/4。"},
+        {"k": 5, "note": "三种做法都没有偏心，却给出三个答案。歧义不在推理，而在「随机」二字——连续情形下，没有一个天然的「等可能」。概率亟需一个不依赖直觉的定义。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [-3.1, 3.1], "yRange": [-1.35, 1.35],
+                                     "pad": {"l": 16, "r": 16, "b": 16, "t": 16},
+                                     "equalAspect": True},
+            "layers": layers, "steps": steps}
+
+
+def fig_axioms():
+    """柯尔莫哥洛夫公理化：概率 = 定义在事件域上的测度。"""
+    layers = [
+        {"geom": "region", "x": [0.6, 9.4], "y": [2.2, 5.6], "fill": "#f7f4ef",
+         "outline": True, "stroke": INK, "width": 1.8},
+        {"geom": "region", "when": "k >= 2", "x": [1.4, 4.2], "y": [2.7, 5.1],
+         "fill": "#e4efe7", "outline": True, "stroke": GOOD, "width": 1.6},
+        {"geom": "region", "when": "k >= 3", "x": [5.2, 8.6], "y": [2.7, 5.1],
+         "fill": "#ece7f7", "outline": True, "stroke": ACCENT2, "width": 1.6},
+        {"geom": "text", "x": 0.85, "y": 5.3, "text": "Ω  （样本空间）", "align": "left",
+         "size": 11, "color": INK, "dy": 0},
+        {"geom": "text", "when": "k >= 2", "x": 2.8, "y": 3.9, "text": "A", "align": "center",
+         "size": 15, "color": GOOD, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": 6.9, "y": 3.9, "text": "B", "align": "center",
+         "size": 15, "color": ACCENT2, "dy": 0},
+        # 三条公理
+        {"geom": "text", "when": "k >= 1", "x": 0.6, "y": 1.5,
+         "text": "① 非负：  P(A) ≥ 0", "align": "left", "size": 11, "color": INK, "dy": 0,
+         "weight": "normal"},
+        {"geom": "text", "when": "k >= 2", "x": 0.6, "y": 1.0,
+         "text": "② 归一：  P(Ω) = 1", "align": "left", "size": 11, "color": INK, "dy": 0,
+         "weight": "normal"},
+        {"geom": "text", "when": "k >= 4", "x": 0.6, "y": 0.5,
+         "text": "③ 可加：  A ∩ B = ∅  ⟹  P(A ∪ B) = P(A) + P(B)", "align": "left",
+         "size": 11, "color": INK, "dy": 0, "weight": "normal"},
+        {"geom": "text", "when": "k >= 5", "x": 9.4, "y": 1.0,
+         "text": "概率不再需要「等可能」", "align": "right", "size": 11, "color": TEAL, "dy": 0},
+    ]
+    steps = [
+        {"k": 1, "note": "先规定舞台：Ω 是所有可能结果的集合（样本空间）。公理②说：整个 Ω 的概率是 1——必然事件。"},
+        {"k": 2, "note": "事件 A 就是 Ω 的一个子集。公理①说：任何事件的概率不小于 0——没有「负概率」。"},
+        {"k": 3, "note": "再放入事件 B，让 A 与 B 没有交集：它们不可能同时发生。"},
+        {"k": 4, "note": "公理③（可加性）：互斥事件的概率可以直接相加。三条公理一列，概率就成了纯粹的「测度」。"},
+        {"k": 5, "note": "1933 年柯尔莫哥洛夫完成这一步。从此「等可能」不再是前提而是特例——伯特兰悖论那种歧义被排除在体系之外：你必须先指定测度，才谈得上概率。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [0, 10], "yRange": [0, 6.2],
+                                     "pad": {"l": 16, "r": 16, "b": 16, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
 FIGS = {
     # 第 1 章
     "fig-crisis": fig_crisis,
@@ -846,6 +1173,12 @@ FIGS = {
     "fig-berkeley": fig_berkeley,
     "fig-epsilon-delta": fig_epsilon_delta,
     "fig-riemann": fig_riemann,
+    # 第 5 章
+    "fig-dice": fig_dice,
+    "fig-galton": fig_galton,
+    "fig-lln": fig_lln,
+    "fig-bertrand": fig_bertrand,
+    "fig-axioms": fig_axioms,
 }
 
 
