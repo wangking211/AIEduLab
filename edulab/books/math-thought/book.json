@@ -12,6 +12,9 @@
       "figs": ["fig-zeno", "fig-hilbert", "fig-cardinality"] },
     { "id": "ch03", "num": "03", "title": "证明：从说服自己到说服所有人", "file": "ch03.html",
       "subtitle": "为什么数学是唯一要求「无可辩驳」的学科",
-      "figs": ["fig-euclid", "fig-induction", "fig-godel"] }
+      "figs": ["fig-euclid", "fig-induction", "fig-godel"] },
+    { "id": "ch04", "num": "04", "title": "变化：从静止到连续", "file": "ch04.html",
+      "subtitle": "从「瞬间的速度没有意义」到「用任意小把世界算出来」",
+      "figs": ["fig-instant", "fig-secant", "fig-berkeley", "fig-epsilon-delta", "fig-riemann"] }
   ]
 }

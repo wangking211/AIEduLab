@@ -481,6 +481,350 @@ def fig_godel():
 # =====================================================================
 # 汇总
 # =====================================================================
+# =====================================================================
+# ---- 第 4 章插图：变化 —— 从静止到连续 ----
+# =====================================================================
+def _clip_seg(p0, p1, xr, yr):
+    """把线段裁到矩形 xr×yr（Liang–Barsky）。
+
+    割线/切线要画成「贯穿全图」的长线，但校验器要求所有坐标都落在 view 内
+    （E5），所以必须先按视窗裁剪，而不是靠渲染端裁。
+    """
+    x0, y0 = p0
+    x1, y1 = p1
+    dx, dy = x1 - x0, y1 - y0
+    t0, t1 = 0.0, 1.0
+    for p, q in ((-dx, x0 - xr[0]), (dx, xr[1] - x0),
+                 (-dy, y0 - yr[0]), (dy, yr[1] - y0)):
+        if p == 0:
+            if q < 0:
+                return None
+            continue
+        r = q / p
+        if p < 0:
+            if r > t1:
+                return None
+            if r > t0:
+                t0 = r
+        else:
+            if r < t0:
+                return None
+            if r < t1:
+                t1 = r
+    return [[x0 + t0 * dx, y0 + t0 * dy], [x0 + t1 * dx, y0 + t1 * dy]]
+
+
+def fig_instant():
+    """瞬时速度的危机：把 Δt 收到 0，Δs 与 Δt 同时归零，比值成了 0/0。
+
+    画法：路程—时间曲线 s = t²，逐步缩短 Δt，每步画一个**斜率三角形**
+    （水平虚线 = Δt，竖直虚线 = Δs，斜边 = 割线）。三角形越缩越小，
+    最后一步给出 0/0 的结论。
+    """
+    t0 = 1.15
+    hs = [0.90, 0.45, 0.225, 0.1125]
+    s = lambda t: t * t                      # noqa: E731
+    XMIN, XMAX, YMIN, YMAX = -0.35, 2.75, 0.0, 5.60
+    s0 = s(t0)
+
+    layers = [
+        {"geom": "axis", "xRange": [XMIN, XMAX], "yRange": [YMIN, YMAX],
+         "xlab": "时间 t", "ylab": "路程 s", "xticks": [0, 1, 2], "yticks": [0, 1, 2, 3, 4]},
+        {"geom": "line", "fn": "x*x", "from": [0.0, 2.30], "stroke": INK, "width": 2.6},
+        {"geom": "point", "data": [{"x": t0, "y": s0, "r": 6.5, "fill": INK}], "fill": INK},
+        {"geom": "text", "x": t0, "y": s0, "text": "t₀", "align": "left", "size": 11,
+         "color": INK, "dx": 13, "dy": -15, "weight": "normal"},
+    ]
+    for i, h in enumerate(hs):
+        k = i + 1
+        col = ACCENT if i % 2 == 0 else ACCENT2
+        x2, y2 = t0 + h, s(t0 + h)
+        layers += [
+            # Δt：水平虚线（四步共起点、逐次变短 → 肉眼可见地「被吃掉」）
+            {"geom": "line", "when": f"k >= {k}", "data": [[t0, s0], [x2, s0]],
+             "stroke": col, "width": 2.0, "dash": True},
+            # Δs：竖直虚线
+            {"geom": "line", "when": f"k >= {k}", "data": [[x2, s0], [x2, y2]],
+             "stroke": col, "width": 2.0, "dash": True},
+            # 割线
+            {"geom": "line", "when": f"k >= {k}", "data": [[t0, s0], [x2, y2]],
+             "stroke": col, "width": 2.4},
+            {"geom": "point", "when": f"k >= {k}",
+             "data": [{"x": x2, "y": y2, "r": 4.5, "fill": col}], "fill": col},
+        ]
+    # 左上角（曲线与割线都到不了）放读数列
+    layers.append({"geom": "text", "x": -0.24, "y": 5.15, "text": "逐步缩小 Δt：",
+                   "align": "left", "size": 10.5, "color": DIM, "dy": 0, "weight": "normal"})
+    for i, h in enumerate(hs):
+        col = ACCENT if i % 2 == 0 else ACCENT2
+        layers.append({"geom": "text", "when": f"k >= {i + 1}",
+                       "x": -0.24, "y": 4.67 - 0.48 * i, "text": f"Δt = {h:g}",
+                       "align": "left", "size": 10, "color": col, "dy": 0, "weight": "normal"})
+    layers += [
+        {"geom": "text", "when": "k >= 5", "x": -0.24, "y": 2.55,
+         "text": "Δt → 0 时，Δs 也 → 0", "align": "left", "size": 12.5, "color": BAD, "dy": 0},
+        {"geom": "text", "when": "k >= 5", "x": -0.24, "y": 1.95,
+         "text": "Δs / Δt = 0 / 0", "align": "left", "size": 15, "color": BAD,
+         "dy": 0, "weight": "bold"},
+    ]
+    steps = [
+        {"k": 1, "note": "取一个时刻 t₀，再取它右边一点点的 t₀+Δt。两点连一条割线——它的斜率就是这一段的平均速度。"},
+        {"k": 2, "note": "把 Δt 缩短一半。三角形变小，但斜边的**倾斜程度几乎没变**。"},
+        {"k": 3, "note": "再缩一半。Δt 与 Δs 都在变小，可斜率稳稳地指向同一个方向。"},
+        {"k": 4, "note": "继续缩。到这一步，三角形已经小得快看不见了，斜率却依然明确。"},
+        {"k": 5, "note": "若真让 Δt = 0：Δs 也等于 0，式子变成 0/0 ——分子分母同时消失，比值无从谈起。这就是「瞬间的速度」字面上的荒谬。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [XMIN, XMAX], "yRange": [YMIN, YMAX],
+                                     "pad": {"l": 46, "r": 16, "b": 34, "t": 14}},
+            "layers": layers, "steps": steps}
+
+
+def fig_secant():
+    """牛顿—莱布尼茨的答案：别盯着瞬间，盯住瞬间的**邻域**。
+
+    画法：曲线 y = x² 与定点 A(1,1)，四条割线（Δt 依次减半）绕 A 旋转，
+    最后落到切线上；斜率读数 2+Δt → 2。
+    """
+    f = lambda x: x * x                      # noqa: E731
+    XMIN, XMAX, YMIN, YMAX = -0.35, 2.60, -1.80, 6.00
+    XR, YR = [XMIN, XMAX], [YMIN, YMAX]
+    a = 1.0
+    fa = f(a)
+    hs = [0.9, 0.5, 0.25, 0.1]
+
+    layers = [
+        {"geom": "axis", "xRange": XR, "yRange": YR,
+         "xlab": "x", "ylab": "y", "xticks": [0, 1, 2], "yticks": [0, 1, 2, 3, 4, 5]},
+        {"geom": "line", "fn": "x*x", "from": [0.0, 2.42], "stroke": INK, "width": 2.6},
+        {"geom": "text", "x": 1.95, "y": 5.15, "text": "y = x²", "align": "left",
+         "size": 11.5, "color": INK, "dy": 0, "weight": "normal"},
+    ]
+    # 割线：过 A(1,1)，斜率 m = 2 + Δt（对 y = x² 恰好如此）
+    for i, h in enumerate(hs):
+        k = i + 1
+        m = 2 + h
+        seg = _clip_seg((a - 1.6, fa + m * -1.6), (a + 2.2, fa + m * 2.2), XR, YR)
+        col = ACCENT if i % 2 == 0 else ACCENT2
+        layers += [
+            {"geom": "line", "when": f"k >= {k}", "data": seg, "stroke": col, "width": 2.2},
+            {"geom": "point", "when": f"k >= {k}",
+             "data": [{"x": a + h, "y": f(a + h), "r": 4.5, "fill": col}], "fill": col},
+        ]
+    # 切线（最后一步，画在最上层）
+    mt = 2.0
+    tan = _clip_seg((a - 1.6, fa + mt * -1.6), (a + 2.2, fa + mt * 2.2), XR, YR)
+    layers += [
+        {"geom": "line", "when": "k >= 5", "data": tan, "stroke": TEAL, "width": 3.0},
+        {"geom": "point", "data": [{"x": a, "y": fa, "r": 7.0, "fill": INK}], "fill": INK},
+        {"geom": "text", "x": a, "y": fa, "text": "A (1, 1)", "align": "right",
+         "size": 11, "color": INK, "dx": -14, "dy": 21},
+        # 切线标注：放在「所有线都在上方」的右下空区（x>1.1 且 y<0.9）
+        {"geom": "line", "when": "k >= 5", "data": [[1.48, 0.72], [1.48, fa + mt * 0.48]],
+         "stroke": TEAL, "width": 1.4, "dash": True},
+        {"geom": "text", "when": "k >= 5", "x": 1.30, "y": 0.42,
+         "text": "切线 y = 2x − 1", "align": "left", "size": 11.5, "color": TEAL, "dy": 0},
+    ]
+    # 左上空区放斜率读数
+    layers.append({"geom": "text", "x": -0.26, "y": 5.60, "text": "斜率 →",
+                   "align": "left", "size": 10.5, "color": DIM, "dy": 0, "weight": "normal"})
+    for i, h in enumerate(hs):
+        col = ACCENT if i % 2 == 0 else ACCENT2
+        layers.append({"geom": "text", "when": f"k >= {i + 1}",
+                       "x": -0.26, "y": 5.05 - 0.55 * i,
+                       "text": f"Δt = {h:g}  →  {2 + h:g}",
+                       "align": "left", "size": 10, "color": col, "dy": 0, "weight": "normal"})
+    layers.append({"geom": "text", "when": "k >= 5", "x": -0.26, "y": 2.85,
+                   "text": "Δt = 0  →  2", "align": "left", "size": 11.5,
+                   "color": TEAL, "dy": 0, "weight": "bold"})
+    steps = [
+        {"k": 1, "note": "先别问「瞬间」。取 A 右边一大步 Δt = 0.9，算这段的平均变化率：斜率 2.9。"},
+        {"k": 2, "note": "Δt 减到 0.5，斜率 2.5。割线绕着 A 往下压。"},
+        {"k": 3, "note": "Δt = 0.25，斜率 2.25。已经在贴近了。"},
+        {"k": 4, "note": "Δt = 0.1，斜率 2.1。割线几乎就是那条切线。"},
+        {"k": 5, "note": "斜率 = 2 + Δt，趋势清清楚楚：Δt → 0 时它 → 2。**这就是导数**——不靠「瞬时」这个含糊词，靠邻域的趋势。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": XR, "yRange": YR,
+                                     "pad": {"l": 52, "r": 16, "b": 34, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
+def fig_berkeley():
+    """贝克莱主教 1734 年的反击：那个 h 必须同时「≠ 0」和「= 0」。
+
+    画法：三行算式 + 两条互相矛盾的批注 + 一个「h 段 vs 塌缩成一点」的对照。
+    """
+    XMIN, XMAX, YMIN, YMAX = -0.30, 6.90, -1.35, 3.90
+    XR, YR = [XMIN, XMAX], [YMIN, YMAX]
+    PAD = {"l": 16, "r": 16, "b": 24, "t": 16}
+
+    layers = [
+        {"geom": "text", "when": "k >= 1", "x": -0.20, "y": 3.45,
+         "text": "v = [ f(a+h) − f(a) ] / h", "align": "left", "size": 15, "color": INK, "dy": 0},
+        {"geom": "text", "when": "k >= 2", "x": -0.20, "y": 2.55,
+         "text": "= [ (a+h)² − a² ] / h = 2a + h", "align": "left", "size": 15,
+         "color": INK, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": -0.20, "y": 1.65,
+         "text": "= 2a", "align": "left", "size": 15, "color": INK, "dy": 0, "weight": "bold"},
+        # 两条互相打架的批注
+        {"geom": "text", "when": "k >= 2", "x": 6.80, "y": 3.45,
+         "text": "h 在分母上 ⟹ h ≠ 0", "align": "right", "size": 12, "color": GOOD, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": 6.80, "y": 1.65,
+         "text": "要 h 消失 ⟹ h = 0", "align": "right", "size": 12, "color": BAD, "dy": 0},
+        # 对照图：一个有长度的 h  vs  塌缩成一点
+        {"geom": "line", "when": "k >= 4", "data": [[1.40, 0.55], [3.00, 0.55]],
+         "stroke": INK, "width": 3.2},
+        {"geom": "point", "when": "k >= 4",
+         "data": [{"x": 1.40, "y": 0.55, "r": 5, "fill": INK},
+                  {"x": 3.00, "y": 0.55, "r": 5, "fill": INK}], "fill": INK},
+        {"geom": "text", "when": "k >= 4", "x": 2.20, "y": 0.90, "text": "h",
+         "align": "center", "size": 12.5, "color": INK, "dy": 0, "weight": "normal"},
+        {"geom": "text", "when": "k >= 4", "x": 2.20, "y": 0.05,
+         "text": "有长度，才除得下去", "align": "center", "size": 11,
+         "color": GOOD, "dy": 0, "weight": "normal"},
+        {"geom": "point", "when": "k >= 5", "data": [{"x": 4.90, "y": 0.55, "r": 7, "fill": BAD}],
+         "fill": BAD},
+        {"geom": "text", "when": "k >= 5", "x": 4.90, "y": 0.05,
+         "text": "h = 0 才会消失", "align": "center", "size": 11, "color": BAD,
+         "dy": 0, "weight": "normal"},
+        # 「矛盾」另起一行（W1 只认世界坐标，靠 dy 上下分层会被判重叠）
+        {"geom": "text", "when": "k >= 5", "x": 3.95, "y": 1.35, "text": "⟹ 矛盾",
+         "align": "center", "size": 13, "color": BAD, "dy": 0, "weight": "bold"},
+        # 贝克莱原话
+        {"geom": "text", "when": "k >= 6", "x": -0.20, "y": -0.55,
+         "text": "「这些量在被除掉之前还活着，除掉之后便成了消逝量的鬼魂。」",
+         "align": "left", "size": 11.5, "color": DIM, "dy": 0, "weight": "normal"},
+        {"geom": "text", "when": "k >= 6", "x": -0.20, "y": -1.02,
+         "text": "—— 贝克莱主教《分析学家》1734",
+         "align": "left", "size": 10.5, "color": DIM, "dy": 0, "weight": "normal"},
+    ]
+    steps = [
+        {"k": 1, "note": "这是求速度的标准式子。乍看毫无问题——直到你追问每一步的合法性。"},
+        {"k": 2, "note": "第二步把分子展开、约掉一个 h。**可 h 在分母上，约之前必须保证 h ≠ 0。**"},
+        {"k": 3, "note": "最后令 h = 0 得到 2a。**但刚才不是说 h ≠ 0 吗？** 要它消失，就得等于 0。"},
+        {"k": 4, "note": "h 有长度的那一刻，除法成立——但结论还没来。"},
+        {"k": 5, "note": "h = 0 的那一刻，结论成立。同一个 h，被要求同时取两个相反的值。"},
+        {"k": 6, "note": "1734 年贝克莱挖出的正是这个洞。微积分算得又快又对，却说不清**为什么对**——它缺的是「极限」的严格定义。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": XR, "yRange": YR, "pad": PAD},
+            "layers": layers, "steps": steps}
+
+
+def fig_epsilon_delta():
+    """ε-δ 修复：不再说「h 是无穷小」，改说「你要多准，我就能给多窄」。
+
+    画法：y = x² 在 x=1 处。对手挑一个容差 ε（水平带），我回一个 δ（竖直带），
+    两带的交方框里曲线必须整个落进 ε 带。
+    """
+    f = lambda x: x * x                      # noqa: E731
+    XMIN, XMAX, YMIN, YMAX = -0.40, 2.70, -1.30, 5.50
+    XR, YR = [XMIN, XMAX], [YMIN, YMAX]
+    a, L = 1.0, 1.0
+    eps = 0.7
+    delta = math.sqrt(1.0 + eps) - 1.0       # 使 (1+δ)² = 1+ε，上沿恰好贴住
+    lo_e, hi_e = L - eps, L + eps
+    lo_d, hi_d = a - delta, a + delta
+
+    layers = [
+        {"geom": "axis", "xRange": XR, "yRange": YR,
+         "xlab": "x", "ylab": "f(x)", "xticks": [0, 1, 2], "yticks": [0, 1, 2, 3, 4, 5]},
+        # ε 水平带
+        {"geom": "region", "when": "k >= 2", "x": [0.0, 2.34], "y": [lo_e, hi_e],
+         "fill": "#e4efe7", "outline": False},
+        # δ 竖直带（画在 ε 带之上，交叠处让位给它 —— 下面的交方框会重新点亮）
+        {"geom": "region", "when": "k >= 3", "x": [lo_d, hi_d], "y": [-1.18, 4.00],
+         "fill": "#ece7f7", "outline": False},
+        {"geom": "line", "when": "k >= 2", "data": [[-0.35, lo_e], [2.65, lo_e]],
+         "stroke": GOOD, "width": 1.8, "dash": True},
+        {"geom": "line", "when": "k >= 2", "data": [[-0.35, hi_e], [2.65, hi_e]],
+         "stroke": GOOD, "width": 1.8, "dash": True},
+        {"geom": "line", "when": "k >= 3", "data": [[lo_d, -1.18], [lo_d, 4.00]],
+         "stroke": ACCENT2, "width": 1.8, "dash": True},
+        {"geom": "line", "when": "k >= 3", "data": [[hi_d, -1.18], [hi_d, 4.00]],
+         "stroke": ACCENT2, "width": 1.8, "dash": True},
+        # 交方框：曲线必须整个落在里面才合格
+        {"geom": "region", "when": "k >= 4", "x": [lo_d, hi_d], "y": [lo_e, hi_e],
+         "fill": "#ffffff", "outline": True, "stroke": BAD, "width": 2.0, "dash": True},
+        {"geom": "line", "fn": "x*x", "from": [0.0, 2.34], "stroke": INK, "width": 2.6},
+        {"geom": "point", "data": [{"x": a, "y": L, "r": 7.0, "fill": INK}], "fill": INK},
+        {"geom": "text", "x": -0.33, "y": 1.00, "text": "± ε", "align": "left",
+         "size": 12, "color": GOOD, "dy": 0, "weight": "bold"},
+        {"geom": "text", "when": "k >= 3", "x": 1.00, "y": -0.88, "text": "δ",
+         "align": "center", "size": 12, "color": ACCENT2, "dy": 0, "weight": "bold"},
+        {"geom": "text", "x": 1.55, "y": 1.00, "text": "f(1) = 1", "align": "left",
+         "size": 10.5, "color": INK, "dy": 0, "weight": "normal"},
+        {"geom": "text", "when": "k >= 5", "x": -0.33, "y": 5.05,
+         "text": "∀ε > 0  ∃δ > 0 ： |x − 1| < δ ⟹ |f(x) − 1| < ε",
+         "align": "left", "size": 13, "color": TEAL, "dy": 0},
+    ]
+    steps = [
+        {"k": 1, "note": "先看要逼近的点：x = 1 处 f(1) = 1。"},
+        {"k": 2, "note": "对手先出题——挑一个容差 ε，说「你的输出离 1 不许超过这么多」。绿色水平带就是他的底线。"},
+        {"k": 3, "note": "我再回题——给出一个 δ，把 x 限制在 1 附近的紫色竖带里。δ 是**我给的**，可以比 ε 小。"},
+        {"k": 4, "note": "两带的交方框：只要曲线在这个框里从左穿到右**全程不越出绿带**，这一轮就算我赢。"},
+        {"k": 5, "note": "把话说成「无论你挑多小的 ε，我总能给出一个 δ 顶住」——**这就是极限的定义**。没有无穷小，只有任意小；没有「鬼魂」，只有可检验的挑战与应战。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": XR, "yRange": YR,
+                                     "pad": {"l": 46, "r": 16, "b": 34, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
+def fig_riemann():
+    """从「斜率」到「面积」：无穷多条无穷细的矩形，和是有限的。
+
+    画法：y = x²/4 + 1/2 在 [0,3] 上的左端点矩形和，n = 1/2/4/8 逐次替换
+    （互斥显示，用 k == N），右栏读数全部由 Python 现算。
+    """
+    f = lambda x: x * x / 4.0 + 0.5          # noqa: E731
+    XMIN, XMAX, YMIN, YMAX = -0.30, 3.40, -1.10, 3.70
+    XR, YR = [XMIN, XMAX], [YMIN, YMAX]
+    A, B = 0.0, 3.0
+    exact = (B ** 3 - A ** 3) / 12.0 + 0.5 * (B - A)   # ∫ x²/4 + 1/2 = 3.75
+
+    layers = [
+        {"geom": "axis", "xRange": XR, "yRange": YR,
+         "xlab": "x", "ylab": "f(x)", "xticks": [0, 1, 2, 3], "yticks": [0, 1, 2, 3]},
+    ]
+    # 先画矩形、再画曲线 —— 顺序反了曲线会被填充盖掉
+    for i, n in enumerate((1, 2, 4, 8)):
+        k = i + 2                            # n=1 → 第 2 步
+        d = (B - A) / n
+        for j in range(n):
+            xl = A + j * d
+            layers.append({"geom": "region", "when": f"k == {k}",
+                           "x": [xl, xl + d], "y": [0.0, f(xl)],
+                           "fill": "#f7e8d6",
+                           "outline": True, "stroke": ACCENT, "width": 1.2})
+    layers += [
+        {"geom": "line", "fn": "x*x/4 + 0.5", "from": [0.0, 3.0], "stroke": INK, "width": 2.6},
+        {"geom": "text", "x": 2.10, "y": 3.40, "text": "f(x) = x²/4 + 1/2",
+         "align": "left", "size": 11.5, "color": INK, "dy": 0, "weight": "normal"},
+    ]
+    # 右移后的读数列（左上角空区）
+    layers.append({"geom": "text", "x": -0.22, "y": 3.40, "text": "矩形面积之和 →",
+                   "align": "left", "size": 10.5, "color": DIM, "dy": 0, "weight": "normal"})
+    for i, n in enumerate((1, 2, 4, 8)):
+        d = (B - A) / n
+        total = sum(f(A + j * d) * d for j in range(n))
+        layers.append({"geom": "text", "when": f"k >= {i + 2}",
+                       "x": -0.22, "y": 2.95 - 0.45 * i,
+                       "text": f"n = {n} → {total:.3f}",
+                       "align": "left", "size": 10, "color": ACCENT, "dy": 0,
+                       "weight": "normal"})
+    layers.append({"geom": "text", "when": "k >= 5", "x": -0.22, "y": 1.00,
+                   "text": f"极限 = {exact:.3f}", "align": "left", "size": 12,
+                   "color": GOOD, "dy": 0, "weight": "bold"})
+    steps = [
+        {"k": 1, "note": "要求曲线下的面积——曲线是弯的，没有现成公式。"},
+        {"k": 2, "note": "用 1 个矩形顶替它。误差大得离谱：左端点取值 0.5，整个矩形只有 1.500，而真值是 3.750。"},
+        {"k": 3, "note": "切成 2 块。和跳到 2.344，缺口明显缩小。"},
+        {"k": 4, "note": "切成 4 块，和 2.977。每块顶端和曲线之间只剩一个小台阶。"},
+        {"k": 5, "note": "8 块时和为 3.346，极限 3.750。**分得越细，误差越小**——「无穷多条无穷细的矩形」不是一个比喻，它的和是一个确定的数。这就是定积分。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": XR, "yRange": YR,
+                                     "pad": {"l": 46, "r": 16, "b": 34, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
 FIGS = {
     # 第 1 章
     "fig-crisis": fig_crisis,
@@ -496,6 +840,12 @@ FIGS = {
     "fig-euclid": fig_euclid,
     "fig-induction": fig_induction,
     "fig-godel": fig_godel,
+    # 第 4 章
+    "fig-instant": fig_instant,
+    "fig-secant": fig_secant,
+    "fig-berkeley": fig_berkeley,
+    "fig-epsilon-delta": fig_epsilon_delta,
+    "fig-riemann": fig_riemann,
 }
 
 
