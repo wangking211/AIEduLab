@@ -13,6 +13,11 @@ build/
 .agents/skills/
 .agents/shared/
 
+# ---- 视频技能的共享素材副本（真源是 edulab/shared/video/）----
+# 字体由浏览器按 index.html 的相对路径加载，必须留在 template/fonts/ 下，
+# 所以只存一份真源、按技能同步副本；副本不入库（省掉三份 3.3 MB 的重复）。
+edulab/skills/*/template/fonts/
+
 # ---- 运行时数据（bridge.py 的问答与补丁日志）----
 _live/
 

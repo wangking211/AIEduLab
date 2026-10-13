@@ -13,11 +13,13 @@ AIEduLab/
 │   │   │   ├── grammar.md    写图契约（agent 读它生成新图）
 │   │   │   ├── state.md      改图/补丁/实时通道契约（agent 读它改已有图）
 │   │   │   └── page.html     书页模板（阅读流 + 内嵌图 + 步骤控件 + 问答面板）
-│   │   └── skillkit.py     ★ 技能共用运行时：统一 CLI / 渲染 / 校验 / 目录页
-│   │   └── board/          ★ 模板骨架（geom-fn / seq-phys 两家族）+ base 片段
+│   │   ├── skillkit.py     ★ 技能共用运行时：统一 CLI / 渲染 / 校验 / 目录页
+│   │   ├── board/          ★ 模板骨架（geom-fn / seq-phys 两家族）+ base 片段
+│   │   └── video/          ★ 视频技能共享素材真源（中文字体；副本不入库）
 │   ├── tools/
 │   │   ├── check_skills.py     技能闸门：可运行 + 可复现（跨哈希种子）+ 与基线一致
-│   │   └── compose_templates.py 用「共享骨架 + 各自片段」组装 template/board.html
+│   │   ├── compose_templates.py 用「共享骨架 + 各自片段」组装 template/board.html
+│   │   └── sync_video_assets.py 把 shared/video 真源同步进各视频技能的 template/
 │   ├── books/math-thought/ 第一本书《数学思想：从计数到无穷》（3 章 11 图）
 │   ├── skills/             13 个学科技能（数理化生 + 初高中物理/几何 + 视频 + CS）
 │   └── demos/ out/         手写 HTML 演示
@@ -35,6 +37,10 @@ AIEduLab/
 - `_live/` —— `bridge.py` 的问答与补丁日志（运行时数据）
 - `.agents/skills/` —— 技能的本地安装副本。**真源只有 `edulab/skills/` 一份**，
   避免 11MB 的逐字节重复；副本仅存在于本地，供技能加载器发现
+- `edulab/skills/*/template/fonts/` —— 视频技能的字体副本。真源是
+  `edulab/shared/video/fonts/`（全仓一份），副本由 `sync_video_assets.py` 同步，
+  省掉 3.3MB 的三份重复。字体**不能**移出技能目录：浏览器按 `index.html` 的相对
+  路径加载它们，且加载失败是静默降级（退回系统字体），所以闸门会逐字节校验副本
 - `__pycache__/`、`node_modules/`、编辑器与系统文件
 
 ## 安装技能（本地）
@@ -55,7 +61,12 @@ Copy-Item "edulab\shared" ".agents\shared" -Recurse -Force
 Get-ChildItem "edulab\skills" -Directory | ForEach-Object {
   Copy-Item $_.FullName ".agents\skills\$($_.Name)" -Recurse -Force
 }
+python edulab/tools/sync_video_assets.py      # 补上视频技能的字体副本（克隆后默认没有）
 ```
+
+最后一步是必需的：视频技能的字体副本不入库（省掉 3.3MB 三份重复），
+克隆下来是空的，必须从 `edulab/shared/video/` 真源同步一份。缺了它，
+渲染时会**静默退回系统字体**——不报错，只是成片风格不对。
 
 `skills-lock.json` 记录已安装技能的内容哈希。注意：现有条目是**安装当时的快照**，
 若之后修改过技能源码，哈希不会再对得上 —— 它只作记录，不参与技能加载。

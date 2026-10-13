@@ -81,6 +81,17 @@ def main(argv):
     if not tpl_ok:
         for ln in (r.stdout or "").splitlines()[-4:]:
             print(f"      {ln}")
+
+    # 0.5) 视频技能的共享素材（字体等）必须与真源逐字节一致。
+    # 这些副本不入库，所以必须由闸门保证「齐全且没被改坏」——字体加载失败是
+    # 静默降级（退回系统字体），光看渲染结果很难发现。
+    r = _sp.run([sys.executable, str(HERE / "sync_video_assets.py"), "--check"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+    assets_ok = r.returncode == 0
+    print(f"  {'✓' if assets_ok else '✗'} 视频共享素材（与 shared/video 真源一致）")
+    if not assets_ok:
+        for ln in (r.stdout or "").splitlines()[-4:]:
+            print(f"      {ln}")
     print()
 
     baseline = {}
@@ -130,7 +141,7 @@ def main(argv):
                             encoding="utf-8")
         print(f"✓ 基线已刷新：{BASELINE.relative_to(ROOT).as_posix()}（{len(fresh)} 个技能）")
         return 0
-    if failures or not tpl_ok:
+    if failures or not tpl_ok or not assets_ok:
         if failures:
             print(f"✗ {len(failures)} 项未通过")
             for s, why, tail in failures:
@@ -139,9 +150,12 @@ def main(argv):
                     print(f"      | {ln}")
         if not tpl_ok:
             print("✗ 模板与共享骨架不一致")
-        print("\n  若确认新产物正确，用 `--update` 刷新基线；模板用 compose_templates.py 重新组装。")
+        if not assets_ok:
+            print("✗ 视频技能的共享素材与真源不一致")
+        print("\n  若确认新产物正确，用 `--update` 刷新基线；"
+              "模板用 compose_templates.py、素材用 sync_video_assets.py 重新组装。")
         return 1
-    print(f"✓ 全部 {len(items)} 项：可运行、可复现、与基线一致；模板与骨架一致")
+    print(f"✓ 全部 {len(items)} 项：可运行、可复现、与基线一致；模板与素材均与真源一致")
     return 0
 
 
