@@ -1545,6 +1545,353 @@ def fig_curvature():
             "layers": layers, "steps": steps}
 
 
+# ================= 第 7 章：群与对称助手 =================
+
+def _rot(p, deg, c=(0.0, 0.0)):
+    """把点 p 绕 c 逆时针旋转 deg 度。"""
+    a = math.radians(deg)
+    dx, dy = p[0] - c[0], p[1] - c[1]
+    return (c[0] + dx * math.cos(a) - dy * math.sin(a),
+            c[1] + dx * math.sin(a) + dy * math.cos(a))
+
+
+def _reflect(p, axis_deg, c=(0.0, 0.0)):
+    """把点 p 关于「过 c、方位角 axis_deg」的直线作镜像。"""
+    a = math.radians(axis_deg)
+    dx, dy = p[0] - c[0], p[1] - c[1]
+    u = dx * math.cos(a) + dy * math.sin(a)          # 沿轴分量（镜像时保持）
+    v = -dx * math.sin(a) + dy * math.cos(a)         # 垂直分量（镜像时反号）
+    return (c[0] + u * math.cos(a) + v * math.sin(a),
+            c[1] + u * math.sin(a) - v * math.cos(a))
+
+
+def _perm_mul(g, h):
+    """从左到右复合置换：先做 g，再做 h。"""
+    return tuple(h[g[i]] for i in range(len(g)))
+
+
+def _d3():
+    """正三角形的对称群 D3（同构于 S3）：6 个元素的名字、置换、凯莱表。
+
+    顶点编号 0/1/2 = A/B/C，置换 p 满足 p[i] = 顶点 i 的像。
+    r = 逆时针转 120°，s = 关于过 A 的轴对折。
+    """
+    els = [("e", (0, 1, 2)), ("r", (1, 2, 0)), ("r²", (2, 0, 1)), ("s", (0, 2, 1)),
+           ("sr", _perm_mul((0, 2, 1), (1, 2, 0))),        # 先 s 再 r
+           ("sr²", _perm_mul((0, 2, 1), (2, 0, 1)))]       # 先 s 再 r²
+    names = [n for n, _ in els]
+    perms = [p for _, p in els]
+    assert len(set(perms)) == 6, "D3 的 6 个元素必须互不相同"
+    tbl = [[names[perms.index(_perm_mul(g, h))] for h in perms] for g in perms]
+    return names, perms, tbl
+
+
+def _nth_roots(n):
+    """x^n = 1 的 n 个根（单位圆上的正 n 边形顶点）。"""
+    return [[math.cos(2 * math.pi * k / n), math.sin(2 * math.pi * k / n)]
+            for k in range(n)]
+
+
+def _cubic_roots():
+    """x³ − 2 = 0 的三个根：α = ∛2，β = αω，γ = αω²（ω = e^{2πi/3}）。"""
+    al = 2 ** (1 / 3)
+    wr, wi = -0.5, math.sqrt(3) / 2
+    return (al, 0.0), (al * wr, al * wi), (al * wr, -al * wi)
+
+
+def fig_roots():
+    """x^n = 1 的根等分单位圆 —— 解方程其实是在画正 n 边形。"""
+    xr, yr = (-3.4, 3.4), (-1.3, 1.3)
+    SUP = {1: "", 2: "²", 3: "³", 4: "⁴"}
+    LAB_R = {3: 1.12, 4: 1.22, 5: 1.32}    # 各步标签半径错开，见下方注释
+    layers = [
+        {"geom": "line", "data": _clip_seg((-1.18, 0), (1.18, 0), xr, yr),
+         "stroke": DIM, "width": 1.2},
+        {"geom": "line", "data": _clip_seg((0, -1.18), (0, 1.18), xr, yr),
+         "stroke": DIM, "width": 1.2},
+        {"geom": "line", "data": _circle(0, 0, 1), "stroke": RULE, "width": 1.4, "dash": True},
+        {"geom": "text", "x": 1.30, "y": -0.18, "text": "Re", "align": "left",
+         "size": 10, "color": DIM, "dy": 0},
+        {"geom": "text", "x": 0.12, "y": 1.26, "text": "Im", "align": "left",
+         "size": 10, "color": DIM, "dy": 0},
+    ]
+    for n, cond in ((3, "k == 1"), (4, "k == 2"), (5, "k >= 3")):
+        pts = _nth_roots(n)
+        lr = LAB_R[n]                      # 三个 n 的标签半径错开，避免互相压字
+        layers.append({"geom": "line", "when": cond, "data": pts + [pts[0]],
+                       "stroke": ACCENT, "width": 2.2})
+        layers.append({"geom": "point", "when": cond,
+                       "data": [{"x": x, "y": y} for x, y in pts], "r": 5.5, "fill": ACCENT})
+        for k, (x, y) in enumerate(pts):
+            a = math.atan2(y, x)
+            lab = "1" if k == 0 else ("ζ" if k == 1 else f"ζ{SUP[k]}")
+            layers.append({"geom": "text", "when": cond,
+                           "x": lr * math.cos(a), "y": lr * math.sin(a),
+                           "text": lab, "align": "center", "size": 11, "color": ACCENT, "dy": 0})
+    for a in (90, 162, 234, 306, 378):
+        seg = _clip_seg((-1.06 * math.cos(math.radians(a)), -1.06 * math.sin(math.radians(a))),
+                        (1.06 * math.cos(math.radians(a)), 1.06 * math.sin(math.radians(a))),
+                        xr, yr)
+        if seg:
+            layers.append({"geom": "line", "when": "k >= 4", "data": seg,
+                           "stroke": TEAL, "width": 1.4, "dash": True})
+    layers += [
+        {"geom": "text", "when": "k >= 1", "x": -1.62, "y": 1.05, "text": "n 个根等分单位圆",
+         "align": "right", "size": 11, "color": DIM, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": -1.62, "y": -1.05, "text": "方程 x⁵ = 1",
+         "align": "right", "size": 12, "color": INK, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": 1.50, "y": 1.05, "text": "根 = 正五边形的顶点",
+         "align": "left", "size": 11, "color": INK, "dy": 0},
+        {"geom": "text", "when": "k >= 4", "x": 1.50, "y": 0.55, "text": "5 条对称轴",
+         "align": "left", "size": 11, "color": TEAL, "dy": 0},
+        {"geom": "text", "when": "k >= 5", "x": 1.50, "y": -0.55,
+         "text": "旋转 5 + 反射 5 = 10 个操作", "align": "left", "size": 11,
+         "color": ACCENT, "dy": 0},
+    ]
+    steps = [
+        {"k": 1, "note": "解 x³ − 1 = 0。三个根不是随便三个点，它们把单位圆三等分——一个正三角形。"},
+        {"k": 2, "note": "解 x⁴ − 1 = 0，得到正方形；xⁿ = 1 的根永远是正 n 边形的顶点。"},
+        {"k": 3, "note": "解 x⁵ − 1 = 0，得到正五边形。注意：根不是散落的点，而是<b>成团</b>的、带着对称的。"},
+        {"k": 4, "note": "正五边形有 5 条对称轴：每条穿过一个顶点与它的对边中点。对折后图形与原来完全重合。"},
+        {"k": 5, "note": "再加上 5 个旋转（0°、72°、144°、216°、288°），一共 10 个对称操作。<b>方程自带对称性</b>——伽罗瓦的全部工作，就是把这个对称性算出来。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": list(xr), "yRange": list(yr),
+                                     "pad": {"l": 16, "r": 16, "b": 16, "t": 16},
+                                     "equalAspect": True},
+            "layers": layers, "steps": steps}
+
+
+def fig_symmetry():
+    """正三角形的 6 个对称操作 —— 一个物体的全部对称构成一个群。"""
+    R = 0.40
+    V = [_rot((0.0, R), 120 * k) for k in range(3)]      # A/B/C 三个顶点
+    OPS = [("e", lambda p: p, "k >= 1", -2.45, 0.72),
+           ("r（转 120°）", lambda p: _rot(p, 120), "k >= 2", 0.0, 0.72),
+           ("r²（转 240°）", lambda p: _rot(p, 240), "k >= 2", 2.45, 0.72),
+           ("s_A（过 A 对折）", lambda p: _reflect(p, 90), "k >= 3", -2.45, -0.78),
+           ("s_B（过 B 对折）", lambda p: _reflect(p, 210), "k >= 3", 0.0, -0.78),
+           ("s_C（过 C 对折）", lambda p: _reflect(p, 330), "k >= 3", 2.45, -0.78)]
+    layers = []
+    for name, f, cond, cx, cy in OPS:
+        tv = [[cx + p[0], cy + p[1]] for p in V]
+        layers.append({"geom": "line", "when": cond, "data": tv + [tv[0]],
+                       "stroke": DIM, "width": 1.6})
+        layers.append({"geom": "point", "when": cond,
+                       "data": [{"x": p[0], "y": p[1]} for p in tv], "r": 3, "fill": INK})
+        for lab, v in zip("ABC", V):
+            q = f(v)
+            layers.append({"geom": "text", "when": cond, "x": cx + q[0] * 1.30,
+                           "y": cy + q[1] * 1.30, "text": lab, "align": "center",
+                           "size": 11, "color": ACCENT, "dy": 0})
+        layers.append({"geom": "text", "when": cond, "x": cx, "y": cy + 0.70,
+                       "text": name, "align": "center", "size": 10.5, "color": INK, "dy": 0})
+    layers += [
+        {"geom": "text", "when": "k >= 4", "x": 0.0, "y": -1.45,
+         "text": "封闭：任意两个操作复合，仍然是这 6 个之一", "align": "center",
+         "size": 11, "color": GOOD, "dy": 0},
+        {"geom": "text", "when": "k >= 5", "x": 0.0, "y": -1.80,
+         "text": "有单位元、每个操作都能撤销 —— 这就是群 D₃（≅ S₃）",
+         "align": "center", "size": 11, "color": ACCENT, "dy": 0},
+    ]
+    steps = [
+        {"k": 1, "note": "什么都不做，也是一种操作：恒等 e。三角形原封不动。"},
+        {"k": 2, "note": "再加两个旋转：转 120° 和转 240°。三个顶点 A、B、C 循环了一圈，图形却与原来重合。"},
+        {"k": 3, "note": "还有三个「对折」：分别沿过 A、过 B、过 C 的高对折。注意每个反射只交换两个顶点、固定第三个——这与旋转的循环完全不同。"},
+        {"k": 4, "note": "一共 6 个操作，不多不少。<b>封闭</b>：随便复合两个，结果一定还是这 6 个里的某一个，绝不会跑出去。"},
+        {"k": 5, "note": "恒等 e 是单位元；每个操作都有逆（转 120° 的逆是转 240°，对折的逆是它自己）。这四条性质——封闭、结合、有单位、有逆——就是<b>群</b>的定义。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [-3.6, 3.6], "yRange": [-2.1, 1.5],
+                                     "pad": {"l": 16, "r": 16, "b": 16, "t": 16},
+                                     "equalAspect": True},
+            "layers": layers, "steps": steps}
+
+
+def fig_cayley():
+    """凯莱表：把 D3 的乘法写成 6×6 的表，四条公理一目了然。"""
+    names, _, tbl = _d3()
+    CW = 0.44
+    ORIGIN = (0.9, 0.45)
+    idx = {n: i for i, n in enumerate(names)}
+
+    def matrix(hl, cond, fill):
+        return {"geom": "matrix", "when": cond, "values": tbl, "rows": 6, "cols": 6,
+                "cellW": CW, "cellH": CW, "origin": list(ORIGIN),
+                "highlight": hl, "hlFill": fill, "hlEdge": fill,
+                "colHeaders": names, "rowHeaders": names, "fontSize": 11}
+
+    layers = [
+        matrix([], "k == 1", GOOD),
+        matrix([[0, c] for c in range(6)] + [[r, 0] for r in range(1, 6)],
+               "k == 2", GOOD),
+        matrix([[idx["r"], c] for c in range(6)], "k == 3", ACCENT),
+        matrix([[idx["s"], idx["r"]], [idx["r"], idx["s"]]], "k >= 4", BAD),
+        {"geom": "text", "when": "k >= 1", "x": 4.4, "y": 3.35,
+         "text": "正三角形的对称群 D₃（≅ S₃）：6 个元素", "align": "left", "size": 11,
+         "color": INK, "dy": 0, "weight": "bold"},
+        {"geom": "text", "when": "k >= 2", "x": 4.4, "y": 2.55,
+         "text": "第一行 / 第一列 = 单位元 e 原样照抄", "align": "left", "size": 11,
+         "color": GOOD, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": 4.4, "y": 1.55,
+         "text": "每一行都是 6 个元素的重排", "align": "left", "size": 11,
+         "color": ACCENT, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": 4.4, "y": 1.20,
+         "text": "所以每个元素都有逆 ✓", "align": "left", "size": 11,
+         "color": ACCENT, "dy": 0},
+        {"geom": "text", "when": "k >= 4", "x": 4.4, "y": 0.60,
+         "text": "s·r = sr，而 r·s = sr²", "align": "left", "size": 12,
+         "color": BAD, "dy": 0, "weight": "bold"},
+        {"geom": "text", "when": "k >= 4", "x": 4.4, "y": 0.25,
+         "text": "顺序一换，结果就不同 ⇒ 不交换", "align": "left", "size": 11,
+         "color": BAD, "dy": 0},
+        {"geom": "text", "when": "k >= 5", "x": 0.9, "y": 3.35,
+         "text": "结合律在表上看不出来，但它确实成立", "align": "left", "size": 10.5,
+         "color": DIM, "dy": 0},
+    ]
+    steps = [
+        {"k": 1, "note": "把群的乘法写成一张表：行是「先做的操作」，列是「后做的操作」，格子里是复合的结果。6 行 6 列，密密麻麻 36 格。"},
+        {"k": 2, "note": "第一行和第一列与表头一模一样——那就是单位元 e：先做 e 或后做 e，都等于什么都没做。<b>群必有单位元。</b>"},
+        {"k": 3, "note": "任取一行（这里是 r 那一行），6 个元素<b>恰好各出现一次</b>，一个不漏、一个不重。既然 e 在这一行里出现，就说明每个元素都有逆。<b>群必有逆元。</b>"},
+        {"k": 4, "note": "看这两格：先 s 后 r 得到 sr，先 r 后 s 却得到 sr²。<b>顺序不同，结果不同</b>——这个群不交换。乘法表把这件事变成了一件可以指给人看的小事。"},
+        {"k": 5, "note": "表里看不出结合律 (ab)c = a(bc)，但它成立。于是「封闭、结合、有单位、有逆」四条，就是群的全部公理——我们已经不再关心这些操作对三角形做了什么，只关心这张表。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [-0.2, 8.0], "yRange": [0, 3.6],
+                                     "pad": {"l": 16, "r": 16, "b": 16, "t": 16},
+                                     "equalAspect": True},
+            "layers": layers, "steps": steps}
+
+
+def fig_galois():
+    """x³ − 2 的根与它的伽罗瓦群：系数只看得见根的对称性。"""
+    A, B, C = _cubic_roots()
+    SC, CX = 0.9, -2.0
+
+    def tp(p):
+        return [CX + SC * p[0], SC * p[1]]
+
+    edges = [tp(A), tp(B), tp(C), tp(A)]
+    layers = [
+        {"geom": "line", "data": _clip_seg((-3.9, 0), (-0.3, 0), (-4.2, 4.2), (-1.7, 1.7)),
+         "stroke": DIM, "width": 1.2},
+        {"geom": "line", "data": _clip_seg((CX, -1.35), (CX, 1.35), (-4.2, 4.2), (-1.7, 1.7)),
+         "stroke": DIM, "width": 1.2},
+        {"geom": "text", "x": -3.85, "y": 1.45, "text": "x³ − 2 = 0", "align": "left",
+         "size": 14, "color": INK, "dy": 0, "weight": "bold"},
+        {"geom": "point", "data": [tp(A)], "r": 6, "fill": ACCENT},
+        {"geom": "text", "x": tp(A)[0], "y": -0.22, "text": "α = ∛2", "align": "center",
+         "size": 11, "color": ACCENT, "dy": 0},
+    ]
+    layers += [
+        {"geom": "line", "when": "k >= 2", "data": edges, "stroke": ACCENT2, "width": 2.0},
+        {"geom": "point", "when": "k >= 2", "data": [tp(B), tp(C)], "r": 6, "fill": ACCENT2},
+        {"geom": "text", "when": "k >= 2", "x": tp(B)[0], "y": 1.16, "text": "β",
+         "align": "center", "size": 12, "color": ACCENT2, "dy": 0},
+        {"geom": "text", "when": "k >= 2", "x": tp(C)[0], "y": -1.16, "text": "γ",
+         "align": "center", "size": 12, "color": ACCENT2, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": 0.7, "y": 1.30, "text": "系数 = 根的对称函数",
+         "align": "left", "size": 12, "color": INK, "dy": 0, "weight": "bold"},
+        {"geom": "text", "when": "k >= 3", "x": 0.7, "y": 0.95, "text": "e₁ = α + β + γ = 0",
+         "align": "left", "size": 11, "color": INK, "dy": 0, "weight": "normal"},
+        {"geom": "text", "when": "k >= 3", "x": 0.7, "y": 0.62,
+         "text": "e₂ = αβ + αγ + βγ = 0", "align": "left", "size": 11, "color": INK,
+         "dy": 0, "weight": "normal"},
+        {"geom": "text", "when": "k >= 3", "x": 0.7, "y": 0.29, "text": "e₃ = αβγ = 2",
+         "align": "left", "size": 11, "color": INK, "dy": 0, "weight": "normal"},
+        {"geom": "text", "when": "k >= 3", "x": 0.7, "y": -0.05,
+         "text": "⇒ 方程就是 x³ − 2 = 0", "align": "left", "size": 11, "color": DIM, "dy": 0},
+        {"geom": "line", "when": "k >= 4",
+         "data": _ray_arc(tp(B)[0], (tp(B)[1] + tp(C)[1]) / 2, 0.30, 90, 270),
+         "stroke": ACCENT2, "width": 2.0, "dash": True},
+        {"geom": "text", "when": "k >= 4", "x": 0.7, "y": -0.70,
+         "text": "把 β、γ 的名字对调，三个数纹丝不动 ✓", "align": "left", "size": 11,
+         "color": GOOD, "dy": 0},
+        {"geom": "text", "when": "k >= 5", "x": 0.7, "y": -1.10,
+         "text": "系数只看得见「能怎么换」", "align": "left", "size": 11, "color": INK,
+         "dy": 0, "weight": "bold"},
+        {"geom": "text", "when": "k >= 5", "x": 0.7, "y": -1.45,
+         "text": "伽罗瓦群 = S₃（6 个置换）", "align": "left", "size": 11,
+         "color": ACCENT, "dy": 0},
+    ]
+    steps = [
+        {"k": 1, "note": "解 x³ − 2 = 0。第一个根是实数 α = ∛2 ≈ 1.260，就落在实轴上。"},
+        {"k": 2, "note": "另外两个根是 β = αω 与 γ = αω²（ω 是三次单位根）。三点连起来是一个正三角形——又是<b>成团</b>的。"},
+        {"k": 3, "note": "三次方程的三个系数，恰好就是根的三个<b>对称函数</b>：和 = 0，两两积之和 = 0，乘积 = 2。系数是把三个根「搅在一起」得到的，它抹掉了谁是谁。"},
+        {"k": 4, "note": "把 β 和 γ 的名字对调——这是根的一个<b>置换</b>。可三个对称函数一个数都没变：系数根本分不清 β 和 γ。"},
+        {"k": 5, "note": "三次方程的根有 3! = 6 种编号方式，而系数对这 6 种完全无感。<b>方程能看见的，不是根本身，而是根的对称性</b>——这个对称群（这里是 S₃）就是伽罗瓦群。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [-4.2, 4.2], "yRange": [-1.7, 1.7],
+                                     "pad": {"l": 16, "r": 16, "b": 16, "t": 16},
+                                     "equalAspect": True},
+            "layers": layers, "steps": steps}
+
+
+def fig_tower():
+    """可解塔：三次、四次修得通，五次断在 A₅。"""
+    fact = math.factorial
+    COLS = [-2.9, 0.0, 2.9]
+    CW_, CH_ = 2.1, 1.0
+    # 每一列从上往下的盒子（最上面是 S_n）
+    TOWERS = {
+        0: [("S₃", fact(3)), ("A₃", fact(3) // 2), ("{e}", 1)],
+        1: [("S₄", fact(4)), ("A₄", fact(4) // 2), ("V₄", 4), ("{e}", 1)],
+        2: [("S₅", fact(5)), ("A₅", fact(5) // 2), ("{e}", 1)],
+    }
+    QUOT = {0: [2, 3], 1: [2, 3, 4], 2: [2, None]}   # None = 塔断了
+    layers, nodes = [], []
+
+    def slot(i, n):
+        """第 i 个盒子（i=0 是最上面那个，自上而下）的世界 y 范围。"""
+        y0 = 0.3 + (n - 1 - i) * 1.62
+        return y0, y0 + CH_
+
+    for col, items in TOWERS.items():
+        n = len(items)
+        for i, (nm, order) in enumerate(items):
+            y0, _ = slot(i, n)
+            nodes.append({"id": f"c{col}{i}", "x": COLS[col] - CW_ / 2, "y": y0,
+                          "w": CW_, "h": CH_, "label": nm, "sub": f"阶 {order}",
+                          "edge": INK, "fill": "#ffffff", "on": True})
+        for j in range(n - 1):
+            q = QUOT[col][j]                      # 第 j 级商群的阶
+            gy = (slot(j, n)[0] + slot(j + 1, n)[1]) / 2   # 两盒缝隙的中线
+            if q is None:                         # 塔断：画一条虚线断口，不画箭头
+                layers.append({"geom": "line", "when": f"k >= {col + 1}",
+                               "data": [[COLS[col], slot(j, n)[0]],
+                                        [COLS[col], slot(j + 1, n)[1]]],
+                               "stroke": BAD, "width": 2.2, "dash": True})
+            else:
+                layers.append({"geom": "arrow", "when": f"k >= {col + 1}", "nodes": nodes,
+                               "width": 1.8, "stroke": GOOD,
+                               "data": [{"from": f"c{col}{j}", "to": f"c{col}{j + 1}",
+                                         "dir": "v", "color": GOOD, "width": 1.8}]})
+            layers.append({"geom": "text", "when": f"k >= {col + 1}",
+                           "x": COLS[col] + 0.78, "y": gy,
+                           "text": f"商 {q}" if q else "✗ 断了", "align": "left",
+                           "size": 11, "color": GOOD if q else BAD, "dy": 0,
+                           "weight": "bold"})
+        layers.append({"geom": "text", "when": f"k >= {col + 1}", "x": COLS[col],
+                       "y": 6.72, "text": f"n = {col + 3}", "align": "center",
+                       "size": 12, "color": INK, "dy": 0, "weight": "bold"})
+    layers += [
+        {"geom": "card", "when": "k >= 1", "data": nodes},
+        {"geom": "text", "when": "k >= 4", "x": 0.0, "y": -0.45,
+         "text": "A₅ 是 60 阶的非交换单群：没有任何非平凡正规子群",
+         "align": "center", "size": 11, "color": BAD, "dy": 0, "weight": "bold"},
+        {"geom": "text", "when": "k >= 5", "x": 0.0, "y": -1.15,
+         "text": "有根式解 ⟺ 这座塔能一路修到底（每一级的商都是交换群）",
+         "align": "center", "size": 11.5, "color": ACCENT, "dy": 0, "weight": "bold"},
+    ]
+    steps = [
+        {"k": 1, "note": "三次方程：S₃ 有两个子层 A₃ 与 {e}，商的阶是 2 和 3——都是素数，因此都是循环群、当然交换。塔修通了，三次方程有根式解。"},
+        {"k": 2, "note": "四次方程：塔有四级，商的阶 2、3、4，全是交换群。<b>塔又通了</b>——这就是卡尔达诺与费拉里找到的四次公式。"},
+        {"k": 3, "note": "五次方程：S₅ 到 A₅ 这一级没问题，商的阶是 2，交换。看起来又能一路修下去。"},
+        {"k": 4, "note": "<b>然后就断了。</b>A₅ 是 60 阶的非交换单群：它没有任何非平凡的正规子群，所以从 A₅ 到 {e} 之间修不出任何一级。塔断在这里。"},
+        {"k": 5, "note": "伽罗瓦的判据：一个方程有根式解，当且仅当它的伽罗瓦群「可解」——也就是这座塔能修到底。S₃、S₄ 可解，<b>S₅ 不可解</b>。于是阿贝尔与鲁菲尼的断言有了真正的解释：五次方程不是还没找到公式，而是<b>根本没有</b>根式公式。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [-4.2, 4.2], "yRange": [-1.7, 7.6],
+                                     "pad": {"l": 16, "r": 16, "b": 16, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
 FIGS = {
     # 第 1 章
     "fig-crisis": fig_crisis,
@@ -1578,6 +1925,12 @@ FIGS = {
     "fig-sphere": fig_sphere,
     "fig-poincare": fig_poincare,
     "fig-curvature": fig_curvature,
+    # 第 7 章
+    "fig-roots": fig_roots,
+    "fig-symmetry": fig_symmetry,
+    "fig-cayley": fig_cayley,
+    "fig-galois": fig_galois,
+    "fig-tower": fig_tower,
 }
 
 

@@ -21,6 +21,9 @@
       "figs": ["fig-dice", "fig-galton", "fig-lln", "fig-bertrand", "fig-axioms"] },
     { "id": "ch06", "num": "06", "title": "空间：从平直到弯曲", "file": "ch06.html",
       "subtitle": "从「公理是唯一真理」到「几何只是曲率的选择」",
-      "figs": ["fig-fifth", "fig-hyperbolic", "fig-sphere", "fig-poincare", "fig-curvature"] }
+      "figs": ["fig-fifth", "fig-hyperbolic", "fig-sphere", "fig-poincare", "fig-curvature"] },
+    { "id": "ch07", "num": "07", "title": "结构：从解方程到对称", "file": "ch07.html",
+      "subtitle": "从「解是什么」到「解能怎么换」",
+      "figs": ["fig-roots", "fig-symmetry", "fig-cayley", "fig-galois", "fig-tower"] }
   ]
 }
