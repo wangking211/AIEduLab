@@ -1152,6 +1152,399 @@ def fig_axioms():
             "layers": layers, "steps": steps}
 
 
+# ================= 第 6 章：空间几何助手 =================
+
+def _disk_geo(P, Q):
+    """庞加莱圆盘内 P→Q 的测地线：与单位圆正交的圆。
+    P、Q 与原点共线时返回 (None, None) —— 那时测地线是一条直线（弦）。"""
+    if abs(P[0] * Q[1] - P[1] * Q[0]) < 1e-12:
+        return None, None
+    c1 = (1 + P[0] ** 2 + P[1] ** 2) / 2
+    c2 = (1 + Q[0] ** 2 + Q[1] ** 2) / 2
+    det = P[0] * Q[1] - P[1] * Q[0]
+    Mx = (c1 * Q[1] - P[1] * c2) / det
+    My = (P[0] * c2 - c1 * Q[0]) / det
+    r2 = Mx * Mx + My * My - 1                      # 正交条件 |M|² = 1 + ρ²
+    return ((Mx, My), math.sqrt(r2)) if r2 > 0 else (None, None)
+
+
+def _disk_arc(P, Q, n=40):
+    """P→Q 的测地线折线：落在单位圆盘内的那段圆弧（退化时是弦）。"""
+    M, rho = _disk_geo(P, Q)
+    if M is None:
+        return [[P[0], P[1]], [Q[0], Q[1]]]
+    a0 = math.atan2(P[1] - M[1], P[0] - M[0])
+    a1 = math.atan2(Q[1] - M[1], Q[0] - M[0])
+    d = (a1 - a0 + math.pi) % (2 * math.pi) - math.pi
+    for sgn in (1, -1):
+        pts, ok = [], True
+        for k in range(n + 1):
+            t = a0 + sgn * d * k / n
+            x, y = M[0] + rho * math.cos(t), M[1] + rho * math.sin(t)
+            if x * x + y * y > 1 + 1e-7:            # 只留盘内那一段
+                ok = False
+                break
+            pts.append([x, y])
+        if ok:
+            return pts
+    return [[P[0], P[1]], [Q[0], Q[1]]]
+
+
+def _disk_tan(P, Q):
+    """测地线在 P 处、指向 Q 的单位切向。"""
+    M, _ = _disk_geo(P, Q)
+    if M is None:
+        dx, dy = Q[0] - P[0], Q[1] - P[1]
+        n = math.hypot(dx, dy)
+        return (dx / n, dy / n)
+    tx, ty = -(P[1] - M[1]), P[0] - M[0]
+    if (Q[0] - P[0]) * tx + (Q[1] - P[1]) * ty < 0:
+        tx, ty = -tx, -ty
+    n = math.hypot(tx, ty)
+    return (tx / n, ty / n)
+
+
+def _dir_deg(P, Q):
+    u = _disk_tan(P, Q)
+    return math.degrees(math.atan2(u[1], u[0])) % 360
+
+
+def _ang_deg(u, v):
+    return math.degrees(math.acos(max(-1.0, min(1.0, u[0] * v[0] + u[1] * v[1]))))
+
+
+def _disk_angles(A, B, C):
+    """圆盘模型共形 ⇒ 三角形内角就是两条测地线切向的欧氏夹角。"""
+    return (_ang_deg(_disk_tan(A, B), _disk_tan(A, C)),
+            _ang_deg(_disk_tan(B, A), _disk_tan(B, C)),
+            _ang_deg(_disk_tan(C, A), _disk_tan(C, B)))
+
+
+def _circle(cx, cy, r, n=72):
+    """闭合圆折线。"""
+    return [[cx + r * math.cos(2 * math.pi * k / n),
+             cy + r * math.sin(2 * math.pi * k / n)] for k in range(n + 1)]
+
+
+def _ray_arc(cx, cy, r, a0, a1, n=20):
+    """极坐标圆弧折线（角度制，可跨 0°）。"""
+    return [[cx + r * math.cos(math.radians(a0 + (a1 - a0) * k / n)),
+             cy + r * math.sin(math.radians(a0 + (a1 - a0) * k / n))]
+            for k in range(n + 1)]
+
+
+def _disk_family(m, n=44):
+    """过 P=(0,0.5) 的测地线族：圆心 (m,1.25)、半径 √(m²+0.5625)，与单位圆正交。
+    |m|<1 不与 x 轴直径相交（平行），|m|=1 与之相切于边界（极限平行）。"""
+    Mx, My = m, 1.25
+    rho = math.sqrt(m * m + 0.5625)
+    d = math.hypot(Mx, My)
+    base = math.atan2(My, Mx) + math.pi            # 指向圆盘中心的方向
+    half = math.acos(max(-1.0, min(1.0, (d * d + rho * rho - 1) / (2 * d * rho))))
+    e0, e1 = base - half, base + half
+    return [[Mx + rho * math.cos(e0 + (e1 - e0) * k / n),
+             My + rho * math.sin(e0 + (e1 - e0) * k / n)] for k in range(n + 1)]
+
+
+def _polar(lat_deg, lon_deg, rot=45.0):
+    """极地俯视投影：纬度给半径，经度给方位角（整体再转 rot 度）。"""
+    r = math.cos(math.radians(lat_deg))
+    a = math.radians(lon_deg + rot)
+    return (r * math.cos(a), r * math.sin(a))
+
+
+def fig_fifth():
+    """第五公设（Playfair）：过直线外一点，恰有一条平行线。"""
+    xr, yr = (-1.35, 6.5), (-0.95, 3.3)
+    P, PY = (2.0, 1.5), 1.5
+    slopes = [0.6, 1.0, -1.0, -0.6]
+    layers = [
+        {"geom": "line", "data": [[xr[0], 0], [xr[1], 0]], "stroke": INK, "width": 2.8},
+        {"geom": "point", "data": [{"x": P[0], "y": P[1]}], "r": 5.5, "fill": INK},
+        {"geom": "text", "x": 6.35, "y": -0.45, "text": "直线 L", "align": "right",
+         "size": 12, "color": INK, "dy": 0},
+        {"geom": "text", "x": 2.22, "y": 1.72, "text": "点 P", "align": "left",
+         "size": 12, "color": INK, "dy": 0},
+    ]
+    for s in slopes:
+        seg = _clip_seg((P[0] - 200, P[1] - 200 * s), (P[0] + 200, P[1] + 200 * s), xr, yr)
+        if seg:
+            layers.append({"geom": "line", "when": "k >= 2", "data": seg,
+                           "stroke": DIM, "width": 1.7})
+    layers += [
+        {"geom": "point", "when": "k >= 3",
+         "data": [{"x": P[0] - P[1] / s, "y": 0} for s in slopes], "r": 4.5, "fill": GOOD},
+        {"geom": "text", "when": "k >= 2", "x": 1.0, "y": 3.0, "text": "过 P 的直线，都撞上 L",
+         "align": "left", "size": 11, "color": DIM, "dy": 0},
+        {"geom": "line", "when": "k >= 4", "data": [[xr[0], PY], [xr[1], PY]],
+         "stroke": ACCENT, "width": 2.2, "dash": True},
+        {"geom": "text", "when": "k >= 4", "x": -1.25, "y": 1.78,
+         "text": "唯一与 L 不相交的直线（平行）", "align": "left", "size": 11,
+         "color": ACCENT, "dy": 0},
+        {"geom": "text", "when": "k >= 5", "x": 2.5, "y": -0.78,
+         "text": "两千多年里，人们一直想把它证明出来", "align": "center", "size": 11,
+         "color": INK, "dy": 0},
+    ]
+    steps = [
+        {"k": 1, "note": "先摆好舞台：一条直线 L，和它外面的一点 P。欧几里得前四条公设都短得像废话，第五条却啰嗦得可疑。"},
+        {"k": 2, "note": "过 P 显然可以画无数条直线——随便转个角度就是一条。"},
+        {"k": 3, "note": "只要角度不是零，这些直线迟早都会撞上 L（绿点是交点）。"},
+        {"k": 4, "note": "只有水平的那一条例外：它与 L 永远不相交。这就是「平行公设」——普莱菲尔把它说成：过直线外一点，恰有一条平行线。"},
+        {"k": 5, "note": "「恰有一条」听上去天经地义，可它在两千多年里被反复尝试证明：假设第五公设不成立，期望推出矛盾，结果每次都卡在某一步——而那一步，恰好偷偷用回了第五公设本身。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": list(xr), "yRange": list(yr),
+                                     "pad": {"l": 16, "r": 16, "b": 18, "t": 18}},
+            "layers": layers, "steps": steps}
+
+
+def fig_hyperbolic():
+    """双曲几何：过直线外一点，有无穷多条平行线（庞加莱圆盘）。"""
+    layers = [
+        {"geom": "line", "data": _circle(0, 0, 1), "stroke": DIM, "width": 1.6, "dash": True},
+        {"geom": "line", "when": "k >= 1", "data": [[-1, 0], [1, 0]], "stroke": INK, "width": 2.8},
+        {"geom": "point", "when": "k >= 1", "data": [{"x": 0, "y": 0.5}], "r": 5.5, "fill": INK},
+        {"geom": "text", "when": "k >= 1", "x": -1.25, "y": -0.20, "text": "L",
+         "align": "right", "size": 12, "color": INK, "dy": 0},
+        {"geom": "text", "when": "k >= 1", "x": 0.14, "y": 0.60, "text": "P",
+         "align": "left", "size": 12, "color": INK, "dy": 0},
+    ]
+    for m in (2.0, 1.4, -1.4, -2.0):
+        layers.append({"geom": "line", "when": "k >= 2", "data": _disk_family(m),
+                       "stroke": DIM, "width": 1.7})
+    layers.append({"geom": "point", "when": "k >= 3",
+                   "data": [{"x": m - math.copysign(math.sqrt(m * m - 1), m), "y": 0}
+                            for m in (2.0, 1.4, -1.4, -2.0)], "r": 4, "fill": GOOD})
+    for m in (-0.8, -0.4, 0.0, 0.4, 0.8):
+        layers.append({"geom": "line", "when": "k >= 3", "data": _disk_family(m),
+                       "stroke": ACCENT, "width": 2.2})
+    for m in (-1.0, 1.0):
+        layers.append({"geom": "line", "when": "k >= 4", "data": _disk_family(m),
+                       "stroke": TEAL, "width": 1.8, "dash": True})
+    layers += [
+        {"geom": "text", "when": "k >= 1", "x": -1.42, "y": 1.00, "text": "圆周 = 无穷远",
+         "align": "right", "size": 11, "color": DIM, "dy": 0},
+        {"geom": "text", "when": "k >= 2", "x": -1.42, "y": -0.70, "text": "这些都会撞上 L",
+         "align": "right", "size": 11, "color": DIM, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": -1.42, "y": -1.08, "text": "这一族一条都不撞",
+         "align": "right", "size": 11, "color": ACCENT, "dy": 0},
+        {"geom": "text", "when": "k >= 4", "x": 1.42, "y": -0.70, "text": "这两条与边界相切",
+         "align": "left", "size": 11, "color": TEAL, "dy": 0},
+        {"geom": "text", "when": "k >= 5", "x": 1.42, "y": 1.00, "text": "过 P 有无穷多条平行线",
+         "align": "left", "size": 12, "color": ACCENT, "dy": 0},
+    ]
+    steps = [
+        {"k": 1, "note": "整个圆盘就是一份完整的双曲平面：圆周不是墙，而是「无穷远」——走一辈子也走不到。L 是盘里的一条直线，P 是它外面的一点。"},
+        {"k": 2, "note": "过 P 画直线。盘里的「直线」不是随意直线，而是与圆周正交的圆弧或直径。这几条显然会与 L 相交。"},
+        {"k": 3, "note": "绿点标出交点：它们确实都撞上了 L。但别急着下结论。"},
+        {"k": 4, "note": "再画一组：这一族圆弧虽然也从 P 出发，却始终停在 L 的同一侧，永不相交。另有两条恰好与圆周相切于一点——它们是「极限平行线」。"},
+        {"k": 5, "note": "结论令人震惊：在双曲几何里，过直线外一点可以有无穷多条平行线。公理五被推翻了，可整个体系却处处自洽、毫无矛盾。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [-3.0, 3.0], "yRange": [-1.3, 1.3],
+                                     "pad": {"l": 16, "r": 16, "b": 16, "t": 16},
+                                     "equalAspect": True},
+            "layers": layers, "steps": steps}
+
+
+def fig_sphere():
+    """球面几何：八分之一球面三角形，内角和 270°，角盈 90°。"""
+    vr, vl = _polar(0, 0), _polar(0, 90)
+    layers = [
+        {"geom": "line", "data": _circle(0, 0, 1), "stroke": INK, "width": 2.4},
+        {"geom": "line", "data": _circle(0, 0, math.cos(math.radians(30))),
+         "stroke": DIM, "width": 1.1},
+        {"geom": "line", "data": _circle(0, 0, math.cos(math.radians(60))),
+         "stroke": DIM, "width": 1.1},
+    ]
+    for a in range(0, 360, 45):
+        layers.append({"geom": "line",
+                       "data": [[0, 0], [math.cos(math.radians(a)), math.sin(math.radians(a))]],
+                       "stroke": DIM, "width": 1.0})
+    layers.append({"geom": "line", "when": "k >= 2",
+                   "data": [[0.0, 0.0], list(vr)] + _ray_arc(0, 0, 1, 45, 135)[1:] + [[0.0, 0.0]],
+                   "stroke": ACCENT, "width": 2.8})
+    layers += [
+        {"geom": "point", "when": "k >= 2",
+         "data": [{"x": 0, "y": 0}, {"x": vr[0], "y": vr[1]}, {"x": vl[0], "y": vl[1]}],
+         "r": 4.5, "fill": INK},
+        {"geom": "text", "when": "k >= 1", "x": -1.55, "y": 1.05, "text": "从北极上空俯视",
+         "align": "right", "size": 11, "color": INK, "dy": 0},
+        {"geom": "text", "when": "k >= 1", "x": -1.55, "y": 0.55, "text": "最外圈 = 赤道",
+         "align": "right", "size": 10.5, "color": DIM, "dy": 0},
+        {"geom": "text", "when": "k >= 1", "x": -1.55, "y": 0.10, "text": "同心圆 = 纬线",
+         "align": "right", "size": 10.5, "color": DIM, "dy": 0},
+        {"geom": "text", "when": "k >= 1", "x": -1.55, "y": -0.35, "text": "放射线 = 经线",
+         "align": "right", "size": 10.5, "color": DIM, "dy": 0},
+        {"geom": "text", "when": "k >= 2", "x": 1.55, "y": 1.05, "text": "八分之一球面",
+         "align": "left", "size": 11, "color": ACCENT, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": 1.55, "y": 0.55, "text": "三个角各 90°",
+         "align": "left", "size": 11, "color": INK, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": 1.55, "y": 0.10, "text": "内角和 = 270°",
+         "align": "left", "size": 12, "color": INK, "dy": 0, "weight": "bold"},
+        {"geom": "text", "when": "k >= 3", "x": 1.55, "y": -0.35, "text": "多出的 90° 叫角盈",
+         "align": "left", "size": 11, "color": GOOD, "dy": 0},
+        {"geom": "text", "when": "k >= 4", "x": 0.0, "y": -1.22, "text": "角盈 = 球面面积 / R²",
+         "align": "center", "size": 11, "color": INK, "dy": 0},
+    ]
+    for cx, cy, r, a0, a1 in ((0.0, 0.0, 0.26, 45, 135), (vr[0], vr[1], 0.19, 135, 225),
+                              (vl[0], vl[1], 0.19, 315, 45)):
+        layers.append({"geom": "line", "when": "k >= 3", "data": _ray_arc(cx, cy, r, a0, a1),
+                       "stroke": GOOD, "width": 1.8})
+    layers += [
+        {"geom": "text", "when": "k >= 3", "x": 0.0, "y": 0.36, "text": "90°",
+         "align": "center", "size": 11, "color": GOOD, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": vr[0] - 0.32, "y": vr[1], "text": "90°",
+         "align": "center", "size": 11, "color": GOOD, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": vl[0] + 0.32, "y": vl[1], "text": "90°",
+         "align": "center", "size": 11, "color": GOOD, "dy": 0},
+    ]
+    steps = [
+        {"k": 1, "note": "这是从北极上空俯视的地球仪。最外圈是赤道，同心圆是纬线，放射状直线是经线——注意它们在北极汇于一点。"},
+        {"k": 2, "note": "取北半球的八分之一：两条经线（λ=0° 与 λ=90°）与赤道的一段弧，围出一个球面三角形。它的顶点是北极和赤道上的两点。"},
+        {"k": 3, "note": "三个角都是直角：两条经线在北极正交，经线与赤道处处正交，两段经线在北极也正交。内角和 = 90° × 3 = 270°，比平面多出整整 90°！"},
+        {"k": 4, "note": "这多出来的部分叫「角盈」，而且它有精确的公式：角盈 = 球面面积 / R²。这个八分之一球面面积正好是 4πR²/8 = πR²/2，除以 R² 得 π，正是 90°。曲面越弯，同样的三角形越「胖」。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [-3.4, 3.4], "yRange": [-1.4, 1.4],
+                                     "pad": {"l": 16, "r": 16, "b": 16, "t": 16},
+                                     "equalAspect": True},
+            "layers": layers, "steps": steps}
+
+
+def fig_poincare():
+    """庞加莱圆盘：测地线三角形的内角和小于 180°。"""
+    A, B, C = (-0.5, 0.0), (0.5, 0.0), (0.0, 0.4)
+    aa, ab, ac = _disk_angles(A, B, C)
+    tot = aa + ab + ac
+    layers = [
+        {"geom": "line", "data": _circle(0, 0, 1), "stroke": DIM, "width": 1.6, "dash": True},
+        {"geom": "text", "when": "k >= 1", "x": -1.42, "y": 1.00, "text": "圆周 = 无穷远",
+         "align": "right", "size": 11, "color": DIM, "dy": 0},
+        {"geom": "text", "when": "k >= 1", "x": -1.42, "y": -1.05, "text": "有些「直线」是圆弧",
+         "align": "right", "size": 11, "color": ACCENT, "dy": 0},
+    ]
+    for (P, Q) in ((A, B), (B, C), (C, A)):
+        layers.append({"geom": "line", "when": "k >= 2", "data": _disk_arc(P, Q),
+                       "stroke": ACCENT, "width": 2.6})
+    layers.append({"geom": "point", "when": "k >= 2",
+                   "data": [{"x": p[0], "y": p[1]} for p in (A, B, C)], "r": 5, "fill": INK})
+    marks = ((A, 0.13, 0.0, _dir_deg(A, C)), (B, 0.13, _dir_deg(B, C), 180.0),
+             (C, 0.13, _dir_deg(C, A), _dir_deg(C, B)))
+    for (P, r, a0, a1) in marks:
+        layers.append({"geom": "line", "when": "k >= 3", "data": _ray_arc(P[0], P[1], r, a0, a1),
+                       "stroke": GOOD, "width": 1.8})
+    for (P, r, a0, a1), txt in zip(marks, (f"{aa:.2f}°", f"{ab:.2f}°", f"{ac:.2f}°")):
+        mid = math.radians(a0 + ((a1 - a0) % 360) / 2)
+        layers.append({"geom": "text", "when": "k >= 3",
+                       "x": P[0] + 0.26 * math.cos(mid), "y": P[1] + 0.26 * math.sin(mid),
+                       "text": txt, "align": "center", "size": 11, "color": GOOD, "dy": 0})
+    layers += [
+        {"geom": "text", "when": "k >= 4", "x": 1.42, "y": 0.70, "text": "内角和",
+         "align": "left", "size": 11, "color": INK, "dy": 0},
+        {"geom": "text", "when": "k >= 4", "x": 1.42, "y": 0.40,
+         "text": f"= {tot:.2f}°", "align": "left", "size": 13, "color": INK, "dy": 0,
+         "weight": "bold"},
+        {"geom": "text", "when": "k >= 4", "x": 1.42, "y": 0.00,
+         "text": f"少了 {180 - tot:.2f}°", "align": "left", "size": 11, "color": BAD, "dy": 0},
+        {"geom": "text", "when": "k >= 5", "x": 1.42, "y": -0.90, "text": "三角形天生更「瘦」",
+         "align": "left", "size": 11, "color": INK, "dy": 0},
+    ]
+    steps = [
+        {"k": 1, "note": "还是那个庞加莱圆盘：圆周是无穷远，谁也到不了。所以盘里其实没有「边界上的点」。"},
+        {"k": 2, "note": "取三个点，用测地线连起来。注意底边穿过圆心，所以是直的；另外两条是与圆周正交的圆弧，向内弓起——三角形因此比看上去「瘦」。"},
+        {"k": 3, "note": "庞加莱度量是共形的：在同一点上，双曲角就等于图上量到的欧氏角。逐个量出来：三个角分别是 {:.2f}°、{:.2f}°、{:.2f}°。".format(aa, ab, ac)},
+        {"k": 4, "note": "三个数严格相加：{:.2f} + {:.2f} + {:.2f} = {:.2f}°，比 180° 少了 {:.2f}°。这一差额叫「角亏」，不是测量误差，而是负曲率空间的必然结果。".format(aa, ab, ac, tot, 180 - tot)},
+        {"k": 5, "note": "同一套三角形，在球面上内角和超过 180°，在平面上正好 180°，在双曲面上却不足 180°。空间的弯曲程度，直接决定了三角形的形状。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [-3.0, 3.0], "yRange": [-1.3, 1.3],
+                                     "pad": {"l": 16, "r": 16, "b": 16, "t": 16},
+                                     "equalAspect": True},
+            "layers": layers, "steps": steps}
+
+
+def fig_curvature():
+    """三种曲率并置：同一个三角形顶点，内角和各不相同；角盈 = 曲率 × 面积。"""
+    A, B, C = (-0.5, 0.0), (0.5, 0.0), (0.0, 0.4)
+    aa, ab, ac = _disk_angles(A, B, C)
+    hyp_tot = aa + ab + ac
+    flat_a = math.degrees(math.atan2(0.4, 0.5))
+    S, CY, PX = 0.95, 0.05, (-2.55, 0.0, 2.55)
+
+    def tp(i, p):
+        return [PX[i] + S * p[0], CY + S * p[1]]
+
+    vr, vl = _polar(0, 0), _polar(0, 90)
+    layers = [
+        {"geom": "line", "data": _circle(PX[0], CY, S), "stroke": DIM, "width": 1.4, "dash": True},
+        {"geom": "line", "data": _circle(PX[2], CY, S), "stroke": INK, "width": 1.6},
+        {"geom": "line", "data": _circle(PX[2], CY, S * math.cos(math.radians(30))),
+         "stroke": DIM, "width": 0.9},
+    ]
+    for (P, Q) in ((A, B), (B, C), (C, A)):
+        layers.append({"geom": "line", "data": [tp(0, p) for p in _disk_arc(P, Q)],
+                       "stroke": BAD, "width": 2.6})
+    for (P, Q) in ((A, B), (B, C), (C, A)):
+        layers.append({"geom": "line", "data": [tp(1, P), tp(1, Q)], "stroke": INK, "width": 2.6})
+    layers.append({"geom": "line",
+                   "data": [tp(2, p) for p in ([0.0, 0.0], list(vr))] +
+                           [[PX[2] + S * math.cos(math.radians(t)), CY + S * math.sin(math.radians(t))]
+                            for t in (60, 90, 120)] +
+                           [tp(2, list(vl)), [PX[2], CY]],
+                   "stroke": GOOD, "width": 2.6})
+    layers.append({"geom": "point",
+                   "data": [tp(0, p) for p in (A, B, C)] + [tp(1, p) for p in (A, B, C)],
+                   "r": 4, "fill": INK})
+    layers.append({"geom": "point",
+                   "data": [[PX[2], CY], tp(2, list(vr)), tp(2, list(vl))], "r": 4, "fill": INK})
+    # 左下角标记：负曲率 27.3° / 平坦 38.7° / 正曲率 90°（k>=2）
+    layers.append({"geom": "line", "when": "k >= 2",
+                   "data": _ray_arc(PX[0] + S * A[0], CY, S * 0.20, 0, aa),
+                   "stroke": BAD, "width": 2.0})
+    layers.append({"geom": "line", "when": "k >= 2",
+                   "data": _ray_arc(PX[1] + S * A[0], CY, S * 0.20, 0, flat_a),
+                   "stroke": INK, "width": 2.0})
+    layers.append({"geom": "line", "when": "k >= 2",
+                   "data": _ray_arc(PX[2] + S * vl[0], CY + S * vl[1], S * 0.20, 315, 45),
+                   "stroke": GOOD, "width": 2.0})
+    layers += [
+        {"geom": "text", "x": 0.0, "y": 1.45, "text": "角盈 = 曲率 × 面积", "align": "center",
+         "size": 12, "color": INK, "dy": 0, "weight": "bold", "when": "k >= 4"},
+        {"geom": "text", "when": "k >= 5", "x": PX[0], "y": 1.22, "text": "角亏 45.24°",
+         "align": "center", "size": 11, "color": BAD, "dy": 0},
+        {"geom": "text", "when": "k >= 5", "x": PX[1], "y": 1.22, "text": "角盈 0.00°",
+         "align": "center", "size": 11, "color": INK, "dy": 0},
+        {"geom": "text", "when": "k >= 5", "x": PX[2], "y": 1.22, "text": "角盈 90.00°",
+         "align": "center", "size": 11, "color": GOOD, "dy": 0},
+        {"geom": "text", "x": PX[0], "y": -1.05, "text": "K < 0   负曲率", "align": "center",
+         "size": 11, "color": BAD, "dy": 0},
+        {"geom": "text", "x": PX[1], "y": -1.05, "text": "K = 0   平坦", "align": "center",
+         "size": 11, "color": INK, "dy": 0},
+        {"geom": "text", "x": PX[2], "y": -1.05, "text": "K > 0   正曲率", "align": "center",
+         "size": 11, "color": GOOD, "dy": 0},
+        {"geom": "text", "when": "k >= 2", "x": PX[0], "y": -1.27, "text": f"左下角 {aa:.1f}°",
+         "align": "center", "size": 11, "color": BAD, "dy": 0},
+        {"geom": "text", "when": "k >= 2", "x": PX[1], "y": -1.27, "text": f"左下角 {flat_a:.1f}°",
+         "align": "center", "size": 11, "color": INK, "dy": 0},
+        {"geom": "text", "when": "k >= 2", "x": PX[2], "y": -1.27, "text": "左下角 90.0°",
+         "align": "center", "size": 11, "color": GOOD, "dy": 0},
+        {"geom": "text", "when": "k >= 3", "x": PX[0], "y": -1.47, "text": f"内角和 = {hyp_tot:.1f}°",
+         "align": "center", "size": 12, "color": BAD, "dy": 0, "weight": "bold"},
+        {"geom": "text", "when": "k >= 3", "x": PX[1], "y": -1.47, "text": "内角和 = 180.0°",
+         "align": "center", "size": 12, "color": INK, "dy": 0, "weight": "bold"},
+        {"geom": "text", "when": "k >= 3", "x": PX[2], "y": -1.47, "text": "内角和 = 270.0°",
+         "align": "center", "size": 12, "color": GOOD, "dy": 0, "weight": "bold"},
+    ]
+    steps = [
+        {"k": 1, "note": "把三个三角形并排放在一起，顶点位置完全相同：左图是双曲圆盘里的测地线三角形，中图是平面上的直线三角形，右图是球面上的八分之一球面。"},
+        {"k": 2, "note": "先只看左下角这一个角：负曲率里它是 {:.1f}°，平坦里是 {:.1f}°，正曲率里是 90.0°。同一个「角」，随空间的弯曲而收缩或膨胀。".format(aa, flat_a)},
+        {"k": 3, "note": "把三个角加起来：{:.1f}° / 180.0° / 270.0°。左图少了 {:.1f}°（角亏），右图多了 90.0°（角盈）。".format(hyp_tot, 180 - hyp_tot)},
+        {"k": 4, "note": "高斯—博内定理把这件事写成一句话：角盈 = 曲率 × 面积。三角形内角和，是一把量曲率的尺子。"},
+        {"k": 5, "note": "代入各自的面积与曲率：球面 K=+1、面积 π/2 ⇒ 角盈 90.00°；双曲面 K=−1、面积 {:.3f} ⇒ 角亏 45.24°；平坦 K=0，两者皆为零。三种几何于是统一成一族。".format(math.pi - math.radians(hyp_tot))},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [-3.6, 3.6], "yRange": [-1.55, 1.55],
+                                     "pad": {"l": 16, "r": 16, "b": 16, "t": 16},
+                                     "equalAspect": True},
+            "layers": layers, "steps": steps}
+
+
 FIGS = {
     # 第 1 章
     "fig-crisis": fig_crisis,
@@ -1179,6 +1572,12 @@ FIGS = {
     "fig-lln": fig_lln,
     "fig-bertrand": fig_bertrand,
     "fig-axioms": fig_axioms,
+    # 第 6 章
+    "fig-fifth": fig_fifth,
+    "fig-hyperbolic": fig_hyperbolic,
+    "fig-sphere": fig_sphere,
+    "fig-poincare": fig_poincare,
+    "fig-curvature": fig_curvature,
 }
 
 

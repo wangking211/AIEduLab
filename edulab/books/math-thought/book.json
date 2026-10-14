@@ -18,6 +18,9 @@
       "figs": ["fig-instant", "fig-secant", "fig-berkeley", "fig-epsilon-delta", "fig-riemann"] },
     { "id": "ch05", "num": "05", "title": "随机：从命运到概率", "file": "ch05.html",
       "subtitle": "从「偶然无法计算」到「偶然有自己的定律」",
-      "figs": ["fig-dice", "fig-galton", "fig-lln", "fig-bertrand", "fig-axioms"] }
+      "figs": ["fig-dice", "fig-galton", "fig-lln", "fig-bertrand", "fig-axioms"] },
+    { "id": "ch06", "num": "06", "title": "空间：从平直到弯曲", "file": "ch06.html",
+      "subtitle": "从「公理是唯一真理」到「几何只是曲率的选择」",
+      "figs": ["fig-fifth", "fig-hyperbolic", "fig-sphere", "fig-poincare", "fig-curvature"] }
   ]
 }
