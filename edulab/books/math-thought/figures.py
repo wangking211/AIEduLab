@@ -1399,8 +1399,8 @@ def fig_sphere():
     ]
     steps = [
         {"k": 1, "note": "这是从北极上空俯视的地球仪。最外圈是赤道，同心圆是纬线，放射状直线是经线——注意它们在北极汇于一点。"},
-        {"k": 2, "note": "取北半球的八分之一：两条经线（λ=0° 与 λ=90°）与赤道的一段弧，围出一个球面三角形。它的顶点是北极和赤道上的两点。"},
-        {"k": 3, "note": "三个角都是直角：两条经线在北极正交，经线与赤道处处正交，两段经线在北极也正交。内角和 = 90° × 3 = 270°，比平面多出整整 90°！"},
+        {"k": 2, "note": "取整个球面的八分之一（两条经线相隔 90°，正好是北半球的四分之一）：两条经线与赤道的一段弧，围出一个球面三角形。它的顶点是北极和赤道上的两点。"},
+        {"k": 3, "note": "三个角都是直角：北极那一个是两条经线张开的 90°（等于它们的经度差），赤道上两端各是经线与赤道正交的 90°。内角和 = 90° × 3 = 270°，比平面多出整整 90°！"},
         {"k": 4, "note": "这多出来的部分叫「角盈」，而且它有精确的公式：角盈 = 球面面积 / R²。这个八分之一球面面积正好是 4πR²/8 = πR²/2，除以 R² 得 π，正是 90°。曲面越弯，同样的三角形越「胖」。"},
     ]
     return {"theme": PAPER, "view": {"xRange": [-3.4, 3.4], "yRange": [-1.4, 1.4],
@@ -1466,6 +1466,11 @@ def fig_curvature():
     aa, ab, ac = _disk_angles(A, B, C)
     hyp_tot = aa + ab + ac
     flat_a = math.degrees(math.atan2(0.4, 0.5))
+    # 三种几何的内角和与角盈/角亏全部现算，图上一个数字都不许手写
+    sph_a = 90.0                       # 球面三角形的任一角：北极 + 赤道上相隔 90° 的两点
+    flat_tot, sph_tot = 180.0, 270.0   # 平面内角和；球面三个角都是直角
+    hyp_gap, flat_gap, sph_gap = flat_tot - hyp_tot, flat_tot - 180.0, sph_tot - 180.0
+    hyp_area = math.pi - math.radians(hyp_tot)   # K = −1 时的双曲面积
     S, CY, PX = 0.95, 0.05, (-2.55, 0.0, 2.55)
 
     def tp(i, p):
@@ -1507,11 +1512,11 @@ def fig_curvature():
     layers += [
         {"geom": "text", "x": 0.0, "y": 1.45, "text": "角盈 = 曲率 × 面积", "align": "center",
          "size": 12, "color": INK, "dy": 0, "weight": "bold", "when": "k >= 4"},
-        {"geom": "text", "when": "k >= 5", "x": PX[0], "y": 1.22, "text": "角亏 45.24°",
+        {"geom": "text", "when": "k >= 5", "x": PX[0], "y": 1.22, "text": f"角亏 {hyp_gap:.2f}°",
          "align": "center", "size": 11, "color": BAD, "dy": 0},
-        {"geom": "text", "when": "k >= 5", "x": PX[1], "y": 1.22, "text": "角盈 0.00°",
+        {"geom": "text", "when": "k >= 5", "x": PX[1], "y": 1.22, "text": f"角盈 {flat_gap:.2f}°",
          "align": "center", "size": 11, "color": INK, "dy": 0},
-        {"geom": "text", "when": "k >= 5", "x": PX[2], "y": 1.22, "text": "角盈 90.00°",
+        {"geom": "text", "when": "k >= 5", "x": PX[2], "y": 1.22, "text": f"角盈 {sph_gap:.2f}°",
          "align": "center", "size": 11, "color": GOOD, "dy": 0},
         {"geom": "text", "x": PX[0], "y": -1.05, "text": "K < 0   负曲率", "align": "center",
          "size": 11, "color": BAD, "dy": 0},
@@ -1523,21 +1528,21 @@ def fig_curvature():
          "align": "center", "size": 11, "color": BAD, "dy": 0},
         {"geom": "text", "when": "k >= 2", "x": PX[1], "y": -1.27, "text": f"左下角 {flat_a:.1f}°",
          "align": "center", "size": 11, "color": INK, "dy": 0},
-        {"geom": "text", "when": "k >= 2", "x": PX[2], "y": -1.27, "text": "左下角 90.0°",
+        {"geom": "text", "when": "k >= 2", "x": PX[2], "y": -1.27, "text": f"左下角 {sph_a:.1f}°",
          "align": "center", "size": 11, "color": GOOD, "dy": 0},
         {"geom": "text", "when": "k >= 3", "x": PX[0], "y": -1.47, "text": f"内角和 = {hyp_tot:.1f}°",
          "align": "center", "size": 12, "color": BAD, "dy": 0, "weight": "bold"},
-        {"geom": "text", "when": "k >= 3", "x": PX[1], "y": -1.47, "text": "内角和 = 180.0°",
+        {"geom": "text", "when": "k >= 3", "x": PX[1], "y": -1.47, "text": f"内角和 = {flat_tot:.1f}°",
          "align": "center", "size": 12, "color": INK, "dy": 0, "weight": "bold"},
-        {"geom": "text", "when": "k >= 3", "x": PX[2], "y": -1.47, "text": "内角和 = 270.0°",
+        {"geom": "text", "when": "k >= 3", "x": PX[2], "y": -1.47, "text": f"内角和 = {sph_tot:.1f}°",
          "align": "center", "size": 12, "color": GOOD, "dy": 0, "weight": "bold"},
     ]
     steps = [
         {"k": 1, "note": "把三个三角形并排放在一起，顶点位置完全相同：左图是双曲圆盘里的测地线三角形，中图是平面上的直线三角形，右图是球面上的八分之一球面。"},
-        {"k": 2, "note": "先只看左下角这一个角：负曲率里它是 {:.1f}°，平坦里是 {:.1f}°，正曲率里是 90.0°。同一个「角」，随空间的弯曲而收缩或膨胀。".format(aa, flat_a)},
-        {"k": 3, "note": "把三个角加起来：{:.1f}° / 180.0° / 270.0°。左图少了 {:.1f}°（角亏），右图多了 90.0°（角盈）。".format(hyp_tot, 180 - hyp_tot)},
+        {"k": 2, "note": "先只看左下角这一个角：负曲率里它是 {:.1f}°，平坦里是 {:.1f}°，正曲率里是 {:.1f}°。同一个「角」，随空间的弯曲而收缩或膨胀。".format(aa, flat_a, sph_a)},
+        {"k": 3, "note": "把三个角加起来：{:.1f}° / {:.1f}° / {:.1f}°。左图少了 {:.1f}°（角亏），右图多了 {:.1f}°（角盈）。".format(hyp_tot, flat_tot, sph_tot, hyp_gap, sph_gap)},
         {"k": 4, "note": "高斯—博内定理把这件事写成一句话：角盈 = 曲率 × 面积。三角形内角和，是一把量曲率的尺子。"},
-        {"k": 5, "note": "代入各自的面积与曲率：球面 K=+1、面积 π/2 ⇒ 角盈 90.00°；双曲面 K=−1、面积 {:.3f} ⇒ 角亏 45.24°；平坦 K=0，两者皆为零。三种几何于是统一成一族。".format(math.pi - math.radians(hyp_tot))},
+        {"k": 5, "note": "代入各自的面积与曲率：球面 K=+1、面积 π/2 ⇒ 角盈 {:.2f}°；双曲面 K=−1、面积 {:.3f} ⇒ 角亏 {:.2f}°；平坦 K=0，两者皆为零。三种几何于是统一成一族。".format(sph_gap, hyp_area, hyp_gap)},
     ]
     return {"theme": PAPER, "view": {"xRange": [-3.6, 3.6], "yRange": [-1.55, 1.55],
                                      "pad": {"l": 16, "r": 16, "b": 16, "t": 16},
@@ -1628,9 +1633,12 @@ def fig_roots():
             layers.append({"geom": "text", "when": cond,
                            "x": lr * math.cos(a), "y": lr * math.sin(a),
                            "text": lab, "align": "center", "size": 11, "color": ACCENT, "dy": 0})
-    for a in (90, 162, 234, 306, 378):
-        seg = _clip_seg((-1.06 * math.cos(math.radians(a)), -1.06 * math.sin(math.radians(a))),
-                        (1.06 * math.cos(math.radians(a)), 1.06 * math.sin(math.radians(a))),
+    # 正五边形的 5 条对称轴：奇数边时每条轴都过「一个顶点 + 它的对边中点」，
+    # 因此轴的方向与顶点方向完全相同。角度直接从根现算，绝不另写一组数。
+    for vx, vy in _nth_roots(5):
+        a = math.atan2(vy, vx)
+        seg = _clip_seg((-1.06 * math.cos(a), -1.06 * math.sin(a)),
+                        (1.06 * math.cos(a), 1.06 * math.sin(a)),
                         xr, yr)
         if seg:
             layers.append({"geom": "line", "when": "k >= 4", "data": seg,
