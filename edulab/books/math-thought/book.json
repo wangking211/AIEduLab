@@ -1,8 +1,8 @@
 {
   "title": "数学思想：从计数到无穷",
-  "subtitle": "每一次数系的扩张，都源于一次「方程无解」的危机",
+  "subtitle": "从「1 加 1 等于 2」，到「有些问题永远没有算法」",
   "author": "图解数学思想史 · 第一册",
-  "edition": "v1 · 样章",
+  "edition": "v1",
   "chapters": [
     { "id": "ch01", "num": "01", "title": "数：从计数到无穷", "file": "ch01.html",
       "subtitle": "每一次数系的扩张，都源于一次「方程无解」的危机",
@@ -24,6 +24,9 @@
       "figs": ["fig-fifth", "fig-hyperbolic", "fig-sphere", "fig-poincare", "fig-curvature"] },
     { "id": "ch07", "num": "07", "title": "结构：从解方程到对称", "file": "ch07.html",
       "subtitle": "从「解是什么」到「解能怎么换」",
-      "figs": ["fig-roots", "fig-symmetry", "fig-cayley", "fig-galois", "fig-tower"] }
+      "figs": ["fig-roots", "fig-symmetry", "fig-cayley", "fig-galois", "fig-tower"] },
+    { "id": "ch08", "num": "08", "title": "计算：从机械到可计算", "file": "ch08.html",
+      "subtitle": "从「一步一步照做」到「有些问题永远没有算法」",
+      "figs": ["fig-machine", "fig-universal", "fig-halting", "fig-bb", "fig-layers"] }
   ]
 }

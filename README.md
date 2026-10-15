@@ -20,7 +20,7 @@ AIEduLab/
 │   │   ├── check_skills.py     技能闸门：可运行 + 可复现（跨哈希种子）+ 与基线一致
 │   │   ├── compose_templates.py 用「共享骨架 + 各自片段」组装 template/board.html
 │   │   └── sync_video_assets.py 把 shared/video 真源同步进各视频技能的 template/
-│   ├── books/math-thought/ 第一本书《数学思想：从计数到无穷》（7 章 31 图）
+│   ├── books/math-thought/ 第一本书《数学思想：从计数到无穷》（8 章 36 图）
 │   ├── skills/             13 个学科技能（数理化生 + 初高中物理/几何 + 视频 + CS）
 │   └── demos/ out/         手写 HTML 演示
 ├── .agents/skills/         技能安装副本（**本地目录，不进版本库**；真源是 edulab/skills/）
@@ -121,7 +121,7 @@ python edulab/tools/compose_templates.py --check   # 只校验是否与骨架一
 
 ```bash
 python edulab/books/math-thought/build.py     # 出书（校验不通过会中止）
-python edulab/books/math-thought/check.py     # 31 张图 0 错 0 警
+python edulab/books/math-thought/check.py     # 36 张图 0 错 0 警
 python edulab/books/math-thought/test_gates.py# 坏补丁闸门回归（双链路）
 python edulab/shared/viz/vizkit.py selftest   # 校验器自测
 python edulab/shared/viz/bridge.py serve --port 8810   # 起实时通道

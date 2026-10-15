@@ -1934,9 +1934,653 @@ FIGS = {
 }
 
 
+# =====================================================================
+# 第 8 章插图：计算 —— 从机械到可计算
+# =====================================================================
+# 字母表 A：0^n1^n 判定器（空白、0、1、划掉记号 X）
+MA_SYM = ["_", "0", "1", "X"]
+MA_SI = {s: i for i, s in enumerate(MA_SYM)}
+MA_BLANK = "_"
+
+# 字母表 B：停机矩阵。空白放在最后，于是「编码里的数字 k」喂到纸带上
+# 读到的正是符号 k —— 机器因此可以直接「见 2 就停」。
+MB_SYM = ["0", "1", "2", "_"]
+MB_SI = {s: i for i, s in enumerate(MB_SYM)}
+MB_BLANK = "_"
+QHALT = "qh"
+
+
+def _tm_run(delta, tape_init, start, halt, blank, max_steps=10000):
+    """真跑一台图灵机。返回 (快照列表, 终态)，快照是 (纸带字典, 读写头, 状态)。
+
+    纸带用「绝对位置 → 符号」的字典表示，往左补空白不会让整条带子错位。
+    """
+    tape = {i: ch for i, ch in enumerate(tape_init)}
+    head, state = 0, start
+    snaps = [(dict(tape), head, state)]
+    for _ in range(max_steps):
+        if state in halt:
+            return snaps, "halt"
+        sym = tape.get(head, blank)
+        if (state, sym) not in delta:
+            return snaps, "stuck"          # 规则表没写这一条：机器停在这里
+        ns, nsym, dr = delta[(state, sym)]
+        tape[head] = nsym
+        head += 1 if dr == "R" else -1
+        state = ns
+        snaps.append((dict(tape), head, state))
+    return snaps, ("halt" if state in halt else "limit")
+
+
+def _encode(states, delta, si):
+    """转移表 → 定长数字串：每个转移 5 位（态 符 态 符 向）。"""
+    sti = {s: i for i, s in enumerate(states)}
+    rows = sorted((sti[a], si[b], sti[c], si[d], 1 if dr == "R" else 0)
+                  for (a, b), (c, d, dr) in delta.items())
+    return "".join("%d%d%d%d%d" % r for r in rows)
+
+
+def _decode(code, states, sym):
+    """数字串 → 转移表（往返必须还原，图上会当场校验）。"""
+    inv = {k: v for k, v in enumerate(states)}
+    delta = {}
+    for i in range(0, len(code), 5):
+        a, b, c, d, e = (int(ch) for ch in code[i:i + 5])
+        delta[(inv[a], sym[b])] = (inv[c], sym[d], "R" if e else "L")
+    return delta
+
+
+def _rule(key, delta):
+    a, b = key
+    c, d, dr = delta[key]
+    return "%s,%s → %s,%s %s" % (a, b, c, d, "▶" if dr == "R" else "◀")
+
+
+def _halts(delta, tape_init, start, halt, blank, max_steps=400):
+    """判定机器在给定输入上是否停机。
+
+    返回 (会停机?, 步数, 依据)。永不停机的结论来自「配置重复」——确定性机器
+    只要回到同一个（状态 + 以读写头为原点的纸带），此后就必然无限重复。
+    """
+    tape = {i: ch for i, ch in enumerate(tape_init)}
+    head, state, steps = 0, start, 0
+    seen = set()
+    while steps < max_steps:
+        if state in halt:
+            return True, steps, "到达停机态"
+        cfg = (state, tuple(sorted((p - head, s) for p, s in tape.items())))
+        if cfg in seen:
+            return False, steps, "配置重复"
+        seen.add(cfg)
+        sym = tape.get(head, blank)
+        if (state, sym) not in delta:
+            return True, steps, "规则未写 → 停住"
+        ns, nsym, dr = delta[(state, sym)]
+        tape[head] = nsym
+        head += 1 if dr == "R" else -1
+        state = ns
+        steps += 1
+    return None, steps, "步数上限"
+
+
+# ---- 判定 0^n 1^n 的图灵机 ----
+MQ_STATES = ["q0", "q1", "q2", "qc", "qa", "qr"]
+MQ_HALTS = {"qa", "qr"}
+MQ_DELTA = {
+    ("q0", "X"): ("q0", "X", "R"), ("q0", "0"): ("q1", "X", "R"),
+    ("q0", "1"): ("qr", "1", "R"), ("q0", MA_BLANK): ("qc", MA_BLANK, "R"),
+    ("q1", "0"): ("q1", "0", "R"), ("q1", "1"): ("q2", "X", "L"),
+    ("q1", "X"): ("q1", "X", "R"), ("q1", MA_BLANK): ("qr", MA_BLANK, "R"),
+    ("q2", "0"): ("q2", "0", "L"), ("q2", "1"): ("q2", "1", "L"),
+    ("q2", "X"): ("q2", "X", "L"), ("q2", MA_BLANK): ("q0", MA_BLANK, "R"),
+    ("qc", "X"): ("qc", "X", "R"), ("qc", MA_BLANK): ("qa", MA_BLANK, "R"),
+    ("qc", "0"): ("qr", "0", "R"), ("qc", "1"): ("qr", "1", "R"),
+}
+MQ_ROWS = [("q0", "X"), ("q0", "0"), ("q0", "1"), ("q0", MA_BLANK),
+           ("q1", "0"), ("q1", "1"), ("q1", "X"), ("q1", MA_BLANK),
+           ("q2", "0"), ("q2", "1"), ("q2", "X"), ("q2", MA_BLANK),
+           ("qc", "X"), ("qc", MA_BLANK), ("qc", "0"), ("qc", "1")]
+assert sorted(MQ_ROWS) == sorted(MQ_DELTA)
+
+
+def fig_machine():
+    """判定 0^n1^n 的图灵机真跑一遍：纸带 + 空间-时间轨迹 + 转移表逐条高亮。"""
+    snaps, status = _tm_run(MQ_DELTA, "0011", "q0", MQ_HALTS, MA_BLANK)
+    assert status == "halt" and snaps[-1][2] == "qa", "0011 必须被接受"
+    heads = [h for _t, h, _s in snaps]
+    keys = set()
+    for t, _h, _s in snaps:
+        keys |= set(t)
+    lo = min(min(heads), min(keys)) - 1
+    hi = max(max(heads), max(keys)) + 1
+    n = len(snaps) - 1
+    ncell = hi - lo + 1
+
+    CW = 0.95                      # 纸带格子边长（世界单位，equalAspect 下是正方形）
+    TX, TY = 0.55, 7.95            # 纸带左下角
+    SY0, SY1 = 6.55, 1.25          # 空间-时间图：第 0 步在上，第 n 步在下
+    DX, DY = 11.0, 9.35            # 转移表左上角
+
+    def cellx(col):
+        return TX + (col + 0.5) * CW
+
+    def stepty(t):
+        return SY0 - t * (SY0 - SY1) / n
+
+    layers = [
+        {"geom": "text", "x": TX, "y": 9.72, "text": "纸带（输入 0011）· □ 是空白",
+         "align": "left", "size": 10.5, "color": DIM, "weight": "normal"},
+        {"geom": "text", "x": DX, "y": 9.72, "text": "转移表 δ —— 机器的全部内脏（16 条规则）",
+         "align": "left", "size": 10.5, "color": DIM, "weight": "normal"},
+        {"geom": "text", "x": TX, "y": 7.02, "text": "读写头走过的路（上=第 0 步，下=第 %d 步）" % n,
+         "align": "left", "size": 10.5, "color": DIM, "weight": "normal"},
+    ]
+    steps = []
+
+    for t, (tape, head, state) in enumerate(snaps):
+        vals = [["□" if tape.get(p, MA_BLANK) == MA_BLANK else tape.get(p, MA_BLANK)
+                 for p in range(lo, hi + 1)]]
+        col = head - lo
+        layers.append({"geom": "matrix", "when": f"k == {t}", "rows": 1, "cols": ncell,
+                       "cellW": CW, "cellH": CW, "origin": [TX, TY], "values": vals,
+                       "highlight": [[0, col]], "hlFill": "#b45309",
+                       "hlEdge": "#7c3a05", "cellFill": "#ffffff",
+                       "cellEdge": "#e7e0d5", "textColor": "#1f1b16"})
+        layers.append({"geom": "point", "when": f"k == {t}",
+                       "data": [{"x": cellx(col), "y": 7.42, "r": 6, "fill": "#b45309"}]})
+        sym = tape.get(head, MA_BLANK)
+        ri = MQ_ROWS.index((state, sym)) if (state, sym) in MQ_ROWS else -1
+        rule = _rule((state, sym), MQ_DELTA) if ri >= 0 else "停机：状态 %s" % state
+        # 读数窗用 matrix：文字居中画在格子里，不会被 W1 判成「同一水平带重叠」
+        layers.append({"geom": "matrix", "when": f"k == {t}", "rows": 1, "cols": 2,
+                       "cellW": 2.9, "cellH": 0.72, "origin": [DX, 0.32],
+                       "values": [["当前状态 %s" % state, "第 %d / %d 步" % (t, n)]],
+                       "cellFill": "#fffbeb", "cellEdge": "#b45309",
+                       "textColor": "#1f1b16"})
+        if ri >= 0:
+            yrow = DY - 0.30 - ri * 0.50
+            layers.append({"geom": "region", "when": f"k == {t}",
+                           "x": [DX - 0.18, DX + 9.4], "y": [yrow - 0.22, yrow + 0.22],
+                           "fill": "#fde9d0", "outline": True, "stroke": "#b45309"})
+        # 空间-时间轨迹：这一条是真正逐帧增长的部分
+        if t > 0:
+            layers.append({"geom": "line", "when": f"k >= {t}",
+                           "data": [[cellx(heads[t - 1]), stepty(t - 1)],
+                                    [cellx(head), stepty(t)]],
+                           "stroke": "#6d28d9", "width": 1.6})
+        layers.append({"geom": "point", "when": f"k == {t}",
+                       "data": [{"x": cellx(head), "y": stepty(t), "r": 4.5,
+                                 "fill": "#6d28d9"}]})
+        note = ("划掉一个 0，去配对" if (state, sym) == ("q0", "0")
+                else "划掉一个 1，配成一对" if (state, sym) == ("q1", "1")
+                else "回到最左端" if state == "q2"
+                else "检查是否还剩没配对的" if state == "qc"
+                else "起步" if t == 0 else "")
+        steps.append({"k": t, "note": note or ("第 %d 步：%s" % (t, rule))})
+
+    for i in range(ncell):
+        layers.append({"geom": "text", "x": cellx(i), "y": TY + CW + 0.16,
+                       "text": str(lo + i), "align": "center", "size": 9,
+                       "color": DIM, "weight": "normal"})
+    for i, k in enumerate(MQ_ROWS):
+        layers.append({"geom": "text", "x": DX, "y": DY - 0.30 - i * 0.50,
+                       "text": _rule(k, MQ_DELTA), "align": "left", "size": 10,
+                       "color": INK, "weight": "normal"})
+    layers.append({"geom": "text", "when": f"k >= {n}", "x": TX, "y": 0.32,
+                   "text": "停在接受态 qa —— 输入 0011 属于 L = {0ⁿ1ⁿ}，共 %d 步" % n,
+                   "align": "left", "size": 11.5, "color": GOOD})
+    return {"theme": PAPER,
+            "view": {"xRange": [0, 20.6], "yRange": [0, 10], "equalAspect": True,
+                     "pad": {"l": 16, "r": 16, "b": 10, "t": 10}},
+            "layers": layers, "steps": steps}
+
+
+# ---- 停机矩阵用的四台真机 ----
+def _p0():
+    """见 2 就停机；找不到就一路左退，在纸带左端来回摆。"""
+    d = {("q0", "2"): (QHALT, "2", "R"), ("q0", MB_BLANK): ("q1", MB_BLANK, "L"),
+         ("q1", MB_BLANK): ("q2", MB_BLANK, "R"), ("q2", MB_BLANK): ("q1", MB_BLANK, "R")}
+    for s in ("0", "1"):
+        d[("q0", s)] = ("q0", s, "R")
+    for s in MB_SYM:
+        d[("q1", s)] = ("q2", s, "L")
+    for s in ("0", "1", "2"):
+        d[("q2", s)] = ("q2", s, "L")
+    return d
+
+
+def _p1():
+    """一路向右扫到空白就停机（无条件停机）。"""
+    d = {("q0", s): ("q0", s, "R") for s in ("0", "1", "2")}
+    d[("q0", MB_BLANK)] = (QHALT, MB_BLANK, "L")
+    return d
+
+
+def _p2():
+    """原地摆动：两个状态来回走，永不指向停机态。"""
+    d = {}
+    for s in MB_SYM:
+        d[("q0", s)] = ("q1", s, "L")
+        d[("q1", s)] = ("q0", s, "R")
+    return d
+
+
+def _p3():
+    """「见 2 就不停」：一路右扫，见到 2 就转入原地摆动；一路没见到 2，扫到空白就停机。
+
+    值得盯住的一点：它必须有一条针对符号 2 的规则，于是它自己的编码里
+    必然出现数字 2 —— 它读自己的编码时，一定找得到那个 2。
+    转入摆动之后配置立刻重复，所以「永不停」是证明出来的，不是跑够步数猜的。
+    """
+    WIGGLE, BACK = "q1", "q2"
+    d = {("q0", "2"): (WIGGLE, "2", "L"), ("q0", MB_BLANK): (QHALT, MB_BLANK, "L")}
+    for s in ("0", "1"):
+        d[("q0", s)] = ("q0", s, "R")
+    for s in MB_SYM:
+        d[(WIGGLE, s)] = (BACK, s, "L")     # 向左退一格
+        d[(BACK, s)] = (WIGGLE, s, "R")     # 再向右回一格 —— 配置就此重复
+    return d
+
+
+HALTING = [("见 2 就停", _p0, ["q0", "q1", "q2", QHALT]),
+           ("扫到底就停", _p1, ["q0", QHALT]),
+           ("原地摆动", _p2, ["q0", "q1"]),
+           ("见 2 就不停", _p3, ["q0", "q1", "q2", QHALT])]
+
+
+# ---- 忙碌海狸 ----
+def _bb_prog(prog, n_states, limit=100000):
+    """真跑一台二符号图灵机。prog[2*state + sym] = (写, 移动, 下一状态)。
+
+    返回 (纸带字符串, 1 的个数, 步数, 是否停机)。
+    """
+    tape, head, state, steps = {}, 0, 0, 0
+    while steps < limit and state < n_states:
+        w, m, ns = prog[2 * state + (1 if tape.get(head, 0) else 0)]
+        tape[head] = w
+        head += m
+        state = ns
+        steps += 1
+    lo, hi = min(tape), max(tape)
+    return ("".join(str(tape.get(k, 0)) for k in range(lo, hi + 1)),
+            sum(tape.values()), steps, state >= n_states)
+
+
+def _bb_enum(n_states, step_limit):
+    """穷举全部 n 状态二符号机，返回 (Σ, T, 获胜机, 最长机, 台数, 会停机台数)。"""
+    opts = [(w, m, q) for w in (0, 1) for m in (-1, 1) for q in range(n_states + 1)]
+    nopt = len(opts)
+    total = nopt ** (2 * n_states)
+    best, longest, champ, longp, halted = -1, -1, None, None, 0
+    for code in range(total):
+        c, prog = code, [None] * (2 * n_states)
+        for i in range(2 * n_states):
+            prog[i] = opts[c % nopt]
+            c //= nopt
+        tape, head, state, steps = {}, 0, 0, 0
+        while steps < step_limit and state < n_states:
+            w, m, ns = prog[2 * state + (1 if tape.get(head, 0) else 0)]
+            tape[head] = w
+            head += m
+            state = ns
+            steps += 1
+        if state >= n_states:
+            halted += 1
+            ones = sum(tape.values())
+            if ones > best:
+                best, champ = ones, prog[:]
+            if steps > longest:
+                longest, longp = steps, prog[:]
+    return best, longest, champ, longp, total, halted
+
+
+def fig_universal():
+    """通用图灵机：同一串符号既是数据又是程序。"""
+    states = ["q0", QHALT]
+    delta = {("q0", "0"): ("q0", "1", "R"), ("q0", MB_BLANK): (QHALT, MB_BLANK, "R")}
+    code = _encode(states, delta, MB_SI)
+    assert _decode(code, states, MB_SYM) == delta, "编码往返必须还原"
+    snaps, status = _tm_run(delta, "00", "q0", {QHALT}, MB_BLANK)
+    assert status == "halt" and snaps[-1][0].get(0) == "1" and snaps[-1][0].get(1) == "1"
+
+    layers = []
+    steps = []
+
+    # 上：被模拟机器 M 的转移表
+    layers += [
+        {"geom": "text", "x": 0.6, "y": 9.55, "text": "被模拟的机器 M：把 0 改写成 1，走到空白就停机",
+         "align": "left", "size": 11, "color": INK},
+        {"geom": "text", "x": 0.6, "y": 8.95, "text": "q0,0 → q0,1 ▶", "align": "left",
+         "size": 11, "color": INK, "weight": "normal"},
+        {"geom": "text", "x": 0.6, "y": 8.45, "text": "q0,□ → qh,□ ▶", "align": "left",
+         "size": 11, "color": INK, "weight": "normal"},
+    ]
+
+    # 中：编码规则 + 现场编出来的 E(M)
+    layers.append({"geom": "text", "when": "k >= 1", "x": 0.6, "y": 7.75,
+                   "text": "编码规则：每个转移固定写成 5 位数字（态 符 态 符 向）",
+                   "align": "left", "size": 11, "color": INK})
+    layers.append({"geom": "text", "when": "k >= 1", "x": 0.6, "y": 7.25,
+                   "text": "q0,0 → q0,1 ▶   编成   0 0 0 1 1",
+                   "align": "left", "size": 10.5, "color": ACCENT2, "weight": "normal"})
+    layers.append({"geom": "text", "when": "k >= 1", "x": 0.6, "y": 6.78,
+                   "text": "q0,□ → qh,□ ▶   编成   0 3 1 3 1",
+                   "align": "left", "size": 10.5, "color": ACCENT2, "weight": "normal"})
+    layers.append({"geom": "text", "when": "k >= 2", "x": 0.6, "y": 6.05,
+                   "text": "E(M) = %s   （%d 位；本页现场编出并解码校验过）"
+                           % (" ".join(code), len(code)),
+                   "align": "left", "size": 11, "color": ACCENT})
+
+    # 编码串本身画成一条纸带
+    layers.append({"geom": "matrix", "when": "k >= 2", "rows": 1, "cols": len(code),
+                   "cellW": 0.42, "cellH": 0.42, "origin": [0.6, 5.15],
+                   "values": [list(code)], "cellFill": "#ffffff",
+                   "cellEdge": "#e7e0d5", "textColor": "#1f1b16"})
+    for i, ch in enumerate(code):
+        layers.append({"geom": "text", "when": "k >= 2", "x": 0.6 + (i + 0.5) * 0.42,
+                       "y": 5.72, "text": str(i // 5 + 1) if i % 5 == 0 else "·",
+                       "align": "center", "size": 8.5,
+                       "color": ACCENT if i % 5 == 0 else RULE, "weight": "normal"})
+
+    # 下：通用机 U 读这串数字，照着它办事 —— 真跑一遍
+    layers.append({"geom": "text", "when": "k >= 3", "x": 0.6, "y": 4.42,
+                   "text": "通用机 U 读进 E(M)，照表办事 —— 同一串符号于是既是数据，又是程序",
+                   "align": "left", "size": 11, "color": INK})
+    for t, (tape, head, state) in enumerate(snaps):
+        vals = [list("00□")]
+        if t > 0:
+            vals[0][t - 1] = "1"
+        layers.append({"geom": "matrix", "when": f"k >= {3 + t}", "rows": 1, "cols": 3,
+                       "cellW": 0.55, "cellH": 0.55, "origin": [0.6, 3.15],
+                       "values": vals, "highlight": [[0, min(head, 2)]],
+                       "hlFill": "#b45309", "hlEdge": "#7c3a05",
+                       "cellFill": "#ffffff", "cellEdge": "#e7e0d5",
+                       "textColor": "#1f1b16"})
+    layers.append({"geom": "text", "when": "k >= %d" % (3 + len(snaps)), "x": 0.6,
+                   "y": 2.62, "text": "U 模拟 M 跑完：输入 00 变成 11，然后停机。",
+                   "align": "left", "size": 11.5, "color": GOOD})
+    layers.append({"geom": "text", "when": "k >= 4", "x": 12.5, "y": 3.45,
+                   "text": "E(M) 的每 5 位对应 M 的一条规则。", "align": "left",
+                   "size": 10.5, "color": DIM, "weight": "normal"})
+    layers.append({"geom": "text", "when": "k >= 4", "x": 12.5, "y": 3.0,
+                   "text": "U 不需要「知道」M 是谁，", "align": "left", "size": 10.5,
+                   "color": DIM, "weight": "normal"})
+    layers.append({"geom": "text", "when": "k >= 4", "x": 12.5, "y": 2.55,
+                   "text": "它只需要读这串数字。", "align": "left", "size": 10.5,
+                   "color": DIM, "weight": "normal"})
+    layers.append({"geom": "text", "when": "k >= %d" % (3 + len(snaps)), "x": 12.5,
+                   "y": 1.85, "text": "M 是程序，E(M) 是数据，", "align": "left",
+                   "size": 11, "color": ACCENT2})
+    layers.append({"geom": "text", "when": "k >= %d" % (3 + len(snaps)), "x": 12.5,
+                   "y": 1.4, "text": "而 U 把前者变成后者。", "align": "left",
+                   "size": 11, "color": ACCENT2})
+
+    steps = [{"k": 0, "note": "被模拟的机器 M 只有两条规则"},
+             {"k": 1, "note": "每个转移编成固定 5 位数字"},
+             {"k": 2, "note": "整张转移表变成一串数字 E(M)"},
+             {"k": 3, "note": "通用机 U 把 E(M) 读进自己的纸带"},
+             {"k": 4, "note": "U 照着 E(M) 模拟 M 的每一步"},
+             {"k": 5, "note": "模拟结束：同一串符号既是数据又是程序"}]
+    return {"theme": PAPER,
+            "view": {"xRange": [0, 21.75], "yRange": [0, 10], "equalAspect": True,
+                     "pad": {"l": 16, "r": 16, "b": 10, "t": 10}},
+            "layers": layers, "steps": steps}
+
+
+def fig_halting():
+    """停机矩阵 + 对角线取反。每一格都是真模拟出来的。"""
+    codes = [_encode(st, dl(), MB_SI) for _n, dl, st in HALTING]
+    for c in codes:
+        assert len(c) % 5 == 0
+    # P3「见 2 就不停」之所以一格都不停，是因为四台机器的编码里都带着数字 2 ——
+    # 它自己的那条针对 2 的规则，正是它编码里那个 2 的来源。
+    assert all("2" in c for c in codes), codes
+    kinds, whys = [], []
+    for _nm, dl_, _st in HALTING:
+        dl = dl_()
+        row, wrow = [], []
+        for cj in codes:
+            h, s, why = _halts(dl, [MB_SYM[int(ch)] for ch in cj], "q0", {QHALT},
+                               MB_BLANK, max_steps=2000)
+            assert h is not None, "步数耗尽：这一格必须有确定答案"
+            row.append(("停·%d" % s) if h else "不停")
+            wrow.append(why)
+        kinds.append(row)
+        whys.append(wrow)
+    # 「不停」一律由配置重复证明出来，绝不能是「跑够步数还没停」的猜测
+    assert all(w == "配置重复" for i in (2, 3) for w in whys[i]), whys
+    diag = [kinds[i][i].split("·")[0] for i in range(4)]
+    drow = ["不停" if d == "停" else "停" for d in diag]
+    assert diag == ["停", "停", "不停", "不停"], diag
+    assert drow == ["不停", "不停", "停", "停"], drow
+    # 图上给每一行都写了一句「为什么」，所以整行都得钉死，不能只钉对角线
+    assert [k.split("·")[0] for k in kinds[0]] == ["停"] * 4, kinds[0]
+    assert [k.split("·")[0] for k in kinds[1]] == ["停"] * 4, kinds[1]
+    assert [k.split("·")[0] for k in kinds[2]] == ["不停"] * 4, kinds[2]
+    assert [k.split("·")[0] for k in kinds[3]] == ["不停"] * 4, kinds[3]
+
+    OX, OY, CW, CH = 6.6, 2.45, 3.2, 1.12
+    layers = [
+        {"geom": "text", "x": 0.6, "y": 9.6, "text": "四台真机（每台都只有有限条规则）",
+         "align": "left", "size": 11, "color": INK},
+        {"geom": "text", "x": 0.6, "y": 9.08, "text": "P0「见 2 就停」：一路右扫，见符号 2 就停机；",
+         "align": "left", "size": 10, "color": INK, "weight": "normal"},
+        {"geom": "text", "x": 0.6, "y": 8.70, "text": "     找不到 2，就退回左端来回摆。",
+         "align": "left", "size": 10, "color": INK, "weight": "normal"},
+        {"geom": "text", "x": 0.6, "y": 8.18, "text": "P1「扫到底就停」：一路右扫，见空白就停机。",
+         "align": "left", "size": 10, "color": INK, "weight": "normal"},
+        {"geom": "text", "x": 0.6, "y": 7.66, "text": "P2「原地摆动」：两个状态来回走，压根不看纸带，",
+         "align": "left", "size": 10, "color": INK, "weight": "normal"},
+        {"geom": "text", "x": 0.6, "y": 7.28, "text": "     规则里也没有一条指向停机态。",
+         "align": "left", "size": 10, "color": INK, "weight": "normal"},
+        {"geom": "text", "x": 0.6, "y": 6.76, "text": "P3「见 2 就不停」：见 2 就转入摆动。",
+         "align": "left", "size": 10, "color": INK, "weight": "normal"},
+        {"geom": "text", "x": 0.6, "y": 6.38, "text": "     一路右扫，见空白才停。可它必须有一条",
+         "align": "left", "size": 10, "color": INK, "weight": "normal"},
+        {"geom": "text", "x": 0.6, "y": 6.00, "text": "     针对 2 的规则 —— 于是它的编码里必然",
+         "align": "left", "size": 10, "color": INK, "weight": "normal"},
+        {"geom": "text", "x": 0.6, "y": 5.62, "text": "     带着数字 2：它永远找得到那个 2。",
+         "align": "left", "size": 10, "color": INK, "weight": "normal"},
+        {"geom": "text", "when": "k >= 1", "x": 0.6, "y": 5.0,
+         "text": "每台机器的转移表都编成一串数字，",
+         "align": "left", "size": 10.5, "color": ACCENT2},
+        {"geom": "text", "when": "k >= 1", "x": 0.6, "y": 4.58,
+         "text": "于是另一台机器可以把它读进纸带。",
+         "align": "left", "size": 10.5, "color": ACCENT2},
+    ]
+
+    layers.append({"geom": "matrix", "when": "k >= 2", "rows": 5, "cols": 4,
+                   "cellW": CW, "cellH": CH, "origin": [OX, OY], "values": kinds + [drow],
+                   "colHeaders": ["P%d 的编码" % i for i in range(4)],
+                   "rowHeaders": ["P%d" % i for i in range(4)] + ["D"],
+                   "highlight": [[i, i] for i in range(4)],
+                   "hlFill": "#b45309", "hlEdge": "#7c3a05",
+                   "cellFill": "#ffffff", "cellEdge": "#e7e0d5",
+                   "textColor": "#1f1b16", "fontSize": 10})
+    layers.append({"geom": "text", "when": "k >= 2", "x": OX, "y": 9.34,
+                   "text": "行 = 谁在跑，列 = 读谁的编码；每一格都是本页真模拟出来的。",
+                   "align": "left", "size": 10.5, "color": DIM, "weight": "normal"})
+    layers.append({"geom": "text", "when": "k >= 3", "x": OX, "y": 1.85,
+                   "text": "对角线：P0 读自己的编码 → 停；P1 → 停；P2 → 不停；P3 → 不停。",
+                   "align": "left", "size": 11, "color": ACCENT})
+    layers.append({"geom": "text", "when": "k >= 4", "x": OX, "y": 1.32,
+                   "text": "D 的定义：在 Pₖ 的编码上，D 干的事与对角线相反。",
+                   "align": "left", "size": 11, "color": ACCENT2})
+    layers.append({"geom": "text", "when": "k >= 5", "x": OX, "y": 0.68,
+                   "text": "若 H 存在，D 就是合法机器 → D 有编号 k → D(D) 必须既停又不停。",
+                   "align": "left", "size": 11.5, "color": BAD})
+    steps = [{"k": 0, "note": "四台真机，行为都写在有限条规则里"},
+             {"k": 1, "note": "转移表编成数字串，机器就能互相读"},
+             {"k": 2, "note": "每台机器跑到每台机器的编码上，得到 16 格"},
+             {"k": 3, "note": "看对角线"},
+             {"k": 4, "note": "D 的定义就是取反对角线"},
+             {"k": 5, "note": "D(D) 落进自己挖的坑"}]
+    return {"theme": PAPER,
+            "view": {"xRange": [0, 20.6], "yRange": [0, 10], "equalAspect": True,
+                     "pad": {"l": 16, "r": 16, "b": 10, "t": 10}},
+            "layers": layers, "steps": steps}
+
+
+# Σ(3)、T(3) 的两台获胜机由「穷举全部 16 777 216 台三状态机」得出（本机跑了 29 分钟）；
+# 本页不再重跑那八分钟，改为把它们各真跑一遍当场验证（下面的断言就是验证）。
+# 注意它们是**两台不同的机器**：Σ(3) 那台写出 6 个 1 只用了 11 步；T(3) 那台走了 21 步，
+# 却只写出 4 个 1 —— 「写得多」和「跑得久」是两个目标。
+BB3_SIGMA_PROG = [(1, 1, 1), (1, -1, 2), (1, 1, 2), (1, -1, 3), (1, -1, 0), (0, -1, 1)]
+BB3_T_PROG = [(1, -1, 2), (0, -1, 3), (1, 1, 1), (1, 1, 0), (1, 1, 2), (0, -1, 1)]
+
+
+def fig_bb():
+    """忙碌海狸：现场穷举 64 台与 20 736 台，再真跑两台三状态获胜机。"""
+    sig1, t1, _c1, _l1, tot1, hal1 = _bb_enum(1, 100)
+    assert (sig1, t1, tot1) == (1, 1, 64), (sig1, t1, tot1)
+    sig2, t2, _c2, _l2, tot2, hal2 = _bb_enum(2, 400)
+    assert (sig2, t2, tot2, hal2) == (4, 6, 20736, 9784), (sig2, t2, tot2, hal2)
+
+    tape3, ones3, steps3, hal3 = _bb_prog(BB3_SIGMA_PROG, 3)
+    tape3t, ones3t, steps3t, _h3t = _bb_prog(BB3_T_PROG, 3)
+    assert hal3 and ones3 == 6 and steps3 == 11, (ones3, steps3, hal3)
+    assert hal3 and steps3t == 21 and ones3t == 4, (ones3t, steps3t)
+
+    GX, GY, GC = 0.95, 3.6, 0.62          # 64 台机器的 8×8 网格
+    RX = GX + 6.5                          # 右栏起点
+    OPTS1 = [(w, m, q) for w in (0, 1) for m in (-1, 1) for q in range(2)]
+    vals1, hl1 = [], []
+    for code in range(64):
+        c, prog = code, [None] * 2
+        for i in range(2):
+            prog[i] = OPTS1[c % 8]
+            c //= 8
+        tape, ones, steps, halted = _bb_prog(prog, 1, 100)
+        vals1.append(str(ones) if halted else "·")
+        if halted and (ones == sig1 or steps == t1):
+            hl1.append([code % 8, code // 8])
+
+    layers = [
+        {"geom": "text", "x": GX, "y": 9.6, "text": "穷举的对象：n 个状态、2 个符号的全部图灵机",
+         "align": "left", "size": 11, "color": INK},
+        {"geom": "text", "x": GX, "y": 9.08,
+         "text": "每格规则有 4(n+1) 种选择，共 2n 格 → 总数 4(n+1) 的 2n 次方",
+         "align": "left", "size": 10, "color": DIM, "weight": "normal"},
+        {"geom": "text", "when": "k >= 1", "x": GX, "y": 8.75,
+         "text": "n = 1：全部 64 台，一台不漏地画出来", "align": "left", "size": 11,
+         "color": INK},
+        {"geom": "matrix", "when": "k >= 1", "rows": 8, "cols": 8,
+         "cellW": GC, "cellH": GC, "origin": [GX, GY],
+         "values": [vals1[r * 8:(r + 1) * 8] for r in range(8)],
+         "highlight": hl1, "hlFill": "#15803d", "hlEdge": "#14532d",
+         "cellFill": "#ffffff", "cellEdge": "#e7e0d5", "textColor": "#1f1b16",
+         "fontSize": 9},
+        {"geom": "text", "when": "k >= 1", "x": GX, "y": GY - 0.45,
+         "text": "格子里是停机时写出的 1 的个数；「·」表示永不停机",
+         "align": "left", "size": 10, "color": DIM, "weight": "normal"},
+        {"geom": "text", "when": "k >= 2", "x": RX, "y": 8.4,
+         "text": "Σ(1) = %d 个 1，T(1) = %d 步" % (sig1, t1),
+         "align": "left", "size": 13, "color": GOOD},
+        {"geom": "text", "when": "k >= 2", "x": RX, "y": 7.85,
+         "text": "64 台里有 %d 台会停机" % hal1, "align": "left", "size": 10.5,
+         "color": DIM, "weight": "normal"},
+        {"geom": "text", "when": "k >= 3", "x": RX, "y": 7.0,
+         "text": "n = 2：20 736 台，其中 %d 台会停机" % hal2,
+         "align": "left", "size": 11, "color": INK},
+        {"geom": "text", "when": "k >= 3", "x": RX, "y": 6.42,
+         "text": "Σ(2) = %d 个 1，T(2) = %d 步" % (sig2, t2),
+         "align": "left", "size": 13, "color": GOOD},
+        {"geom": "text", "when": "k >= 4", "x": RX, "y": 5.5,
+         "text": "n = 3：16 777 216 台。写出 1 最多的那台只有 3 个状态、",
+         "align": "left", "size": 11, "color": INK},
+        {"geom": "text", "when": "k >= 4", "x": RX, "y": 5.05,
+         "text": "6 条规则，走 %d 步就停，纸带上正好 %d 个 1（真跑了一遍）：" % (steps3, ones3),
+         "align": "left", "size": 11, "color": INK},
+        {"geom": "matrix", "when": "k >= 4", "rows": 1, "cols": len(tape3),
+         "cellW": 0.45, "cellH": 0.45, "origin": [RX, 4.35],
+         "values": [list(tape3)], "cellFill": "#ffffff", "cellEdge": "#e7e0d5",
+         "textColor": "#15803d"},
+        {"geom": "text", "when": "k >= 5", "x": RX, "y": 3.9,
+         "text": "跑得最久的是另一台：%d 步，却只写出 %d 个 1。" % (steps3t, ones3t),
+         "align": "left", "size": 11, "color": INK},
+        {"geom": "matrix", "when": "k >= 5", "rows": 1, "cols": len(tape3t),
+         "cellW": 0.45, "cellH": 0.45, "origin": [RX, 3.3],
+         "values": [list(tape3t)], "cellFill": "#ffffff", "cellEdge": "#e7e0d5",
+         "textColor": "#6d28d9"},
+        {"geom": "text", "when": "k >= 6", "x": RX, "y": 2.7,
+         "text": "Σ(3) = %d 个 1，T(3) = %d 步；往后 Σ(4) = 13，Σ(5) = 4098，" % (ones3, steps3t),
+         "align": "left", "size": 11, "color": INK},
+        {"geom": "text", "when": "k >= 6", "x": RX, "y": 2.1,
+         "text": "而 T(5) = 47,176,870 步 —— 一台五状态机器要跑这么久。",
+         "align": "left", "size": 11.5, "color": BAD},
+    ]
+    steps = [{"k": 0, "note": "穷举的对象与台数"},
+             {"k": 1, "note": "n = 1 的全部 64 台，一台不漏"},
+             {"k": 2, "note": "Σ(1) = %d，T(1) = %d" % (sig1, t1)},
+             {"k": 3, "note": "n = 2：%d 台，Σ(2) = %d，T(2) = %d" % (tot2, sig2, t2)},
+             {"k": 4, "note": "Σ(3) = 6 的获胜机，真跑一遍"},
+             {"k": 5, "note": "T(3) = 21 的是另一台机器"},
+             {"k": 6, "note": "步数才是真正爆炸的东西"}]
+    return {"theme": PAPER,
+            "view": {"xRange": [0, 21.75], "yRange": [0, 10], "equalAspect": True,
+                     "pad": {"l": 16, "r": 16, "b": 10, "t": 10}},
+            "layers": layers, "steps": steps}
+
+
+def fig_layers():
+    """复杂度与可判定性的层级：越往内越「容易」，最外圈连算法都没有。"""
+    CX, CY = 5.4, 5.15
+    rings = [(4.3, "#7d756a", "递归可枚举", 0), (3.35, "#0f766e", "可判定", 1),
+             (2.35, "#6d28d9", "NP", 2), (1.35, "#b45309", "P", 3)]
+    layers, steps = [], []
+    for r, col, lab, k in rings:
+        layers.append({"geom": "line", "when": f"k >= {k}", "data": _circle(CX, CY, r),
+                       "stroke": col, "width": 1.8})
+        layers.append({"geom": "text", "when": f"k >= {k}", "x": CX,
+                       "y": CY + r * 0.88, "text": lab, "align": "center",
+                       "size": 14 if k == 3 else 12, "color": col})
+    layers += [
+        {"geom": "text", "when": "k >= 0", "x": CX, "y": 0.42,
+         "text": "再往外：不可判定（连「永远等下去」都做不到）",
+         "align": "center", "size": 11, "color": BAD},
+        {"geom": "region", "when": "k >= 4", "x": [CX + 1.85 - 0.3, CX + 1.85 + 0.3],
+         "y": [CY - 0.3, CY + 0.3], "fill": "#ffffff", "outline": True,
+         "stroke": "#b91c1c"},
+        {"geom": "text", "when": "k >= 4", "x": CX + 1.85, "y": CY, "text": "?",
+         "align": "center", "size": 15, "color": "#b91c1c"},
+        {"geom": "text", "when": "k >= 4", "x": CX + 2.55, "y": CY - 0.5,
+         "text": "P = NP ？", "align": "left", "size": 12, "color": BAD},
+    ]
+    rows = [(8.55, "排序 · 最短路 · 线性规划", "P：有快算法", "#b45309"),
+            (7.35, "SAT · 哈密顿回路 · 背包", "NP：答案能快速验证", "#6d28d9"),
+            (6.15, "0ⁿ1ⁿ 的判定", "可判定：算法存在，只是慢", "#0f766e"),
+            (4.95, "停机问题", "递归可枚举：跑不出就永远等", "#7d756a"),
+            (3.75, "程序等价 · Rice 定理", "不可判定：等待也没用", "#b91c1c")]
+    for i, (y, title, sub, col) in enumerate(rows):
+        k = 4 - i if i < 4 else 0
+        layers.append({"geom": "text", "when": f"k >= {k}", "x": 11.0, "y": y,
+                       "text": title, "align": "left", "size": 11.5, "color": col})
+        layers.append({"geom": "text", "when": f"k >= {k}", "x": 11.0, "y": y - 0.42,
+                       "text": sub, "align": "left", "size": 10, "color": DIM,
+                       "weight": "normal"})
+    steps = [{"k": 0, "note": "最外圈：不可判定"},
+             {"k": 1, "note": "递归可枚举：跑不出就永远等"},
+             {"k": 2, "note": "可判定：算法存在，只是慢"},
+             {"k": 3, "note": "NP：答案能快速验证"},
+             {"k": 4, "note": "最内圈 P，以及 P 与 NP 之间那条著名的问号"}]
+    return {"theme": PAPER,
+            "view": {"xRange": [0, 19.575], "yRange": [0, 10], "equalAspect": True,
+                     "pad": {"l": 16, "r": 16, "b": 10, "t": 10}},
+            "layers": layers, "steps": steps}
+
+
+# 第 8 章：这些函数定义在上面的 FIGS 表之后，故在此补注册
+FIGS.update({
+    "fig-machine": fig_machine,
+    "fig-universal": fig_universal,
+    "fig-halting": fig_halting,
+    "fig-bb": fig_bb,
+    "fig-layers": fig_layers,
+})
+
+
 def build(ids=None):
     return {k: FIGS[k]() for k in (ids or FIGS)}
-
 
 if __name__ == "__main__":
     figs = build()
