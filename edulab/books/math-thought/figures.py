@@ -769,6 +769,17 @@ def fig_epsilon_delta():
             "layers": layers, "steps": steps}
 
 
+def riemann_values():
+    """黎曼和那几项 —— 正文与图形共用同一份计算。"""
+    f = lambda x: x * x / 4.0 + 0.5          # noqa: E731
+    A, B = 0.0, 3.0
+    out = {"exact": (B ** 3 - A ** 3) / 12.0 + 0.5 * (B - A)}
+    for n in (1, 2, 4, 8):
+        d = (B - A) / n
+        out[f"n{n}"] = sum(f(A + j * d) * d for j in range(n))
+    return out
+
+
 def fig_riemann():
     """从「斜率」到「面积」：无穷多条无穷细的矩形，和是有限的。
 
@@ -779,7 +790,8 @@ def fig_riemann():
     XMIN, XMAX, YMIN, YMAX = -0.30, 3.40, -1.10, 3.70
     XR, YR = [XMIN, XMAX], [YMIN, YMAX]
     A, B = 0.0, 3.0
-    exact = (B ** 3 - A ** 3) / 12.0 + 0.5 * (B - A)   # ∫ x²/4 + 1/2 = 3.75
+    _v = riemann_values()
+    exact = _v["exact"]                      # ∫ x²/4 + 1/2 = 3.75
 
     layers = [
         {"geom": "axis", "xRange": XR, "yRange": YR,
@@ -816,10 +828,10 @@ def fig_riemann():
                    "color": GOOD, "dy": 0, "weight": "bold"})
     steps = [
         {"k": 1, "note": "要求曲线下的面积——曲线是弯的，没有现成公式。"},
-        {"k": 2, "note": "用 1 个矩形顶替它。误差大得离谱：左端点取值 0.5，整个矩形只有 1.500，而真值是 3.750。"},
-        {"k": 3, "note": "切成 2 块。和跳到 2.344，缺口明显缩小。"},
-        {"k": 4, "note": "切成 4 块，和 2.977。每块顶端和曲线之间只剩一个小台阶。"},
-        {"k": 5, "note": "8 块时和为 3.346，极限 3.750。**分得越细，误差越小**——「无穷多条无穷细的矩形」不是一个比喻，它的和是一个确定的数。这就是定积分。"},
+        {"k": 2, "note": "用 1 个矩形顶替它。误差大得离谱：左端点取值 0.5，整个矩形只有 {:.3f}，而真值是 {:.3f}。".format(_v["n1"], exact)},
+        {"k": 3, "note": "切成 2 块。和跳到 {:.3f}，缺口明显缩小。".format(_v["n2"])},
+        {"k": 4, "note": "切成 4 块，和 {:.3f}。每块顶端和曲线之间只剩一个小台阶。".format(_v["n4"])},
+        {"k": 5, "note": "8 块时和为 {:.3f}，极限 {:.3f}。**分得越细，误差越小**——「无穷多条无穷细的矩形」不是一个比喻，它的和是一个确定的数。这就是定积分。".format(_v["n8"], exact)},
     ]
     return {"theme": PAPER, "view": {"xRange": XR, "yRange": YR,
                                      "pad": {"l": 46, "r": 16, "b": 34, "t": 16}},
@@ -854,6 +866,20 @@ def _galton(rows, balls, npaths=4, seed=20261014):
         if b < npaths:
             paths.append(xs)
     return counts, paths
+
+
+def dice_values():
+    """两颗骰子的点数分布 —— 正文与图形共用。"""
+    sums = {}
+    for i in range(6):
+        for j in range(6):
+            s = (i + 1) + (j + 1)
+            sums[s] = sums.get(s, 0) + 1
+    return {
+        "sides": 6, "total": 6 * 6,
+        "at7": sums[7], "at_mid": 7,
+        "extreme": sums[2], "lo": 2, "hi": 12,
+    }
 
 
 def fig_dice():
@@ -1477,17 +1503,33 @@ def fig_poincare():
             "layers": layers, "steps": steps}
 
 
-def fig_curvature():
-    """三种曲率并置：同一个三角形顶点，内角和各不相同；角盈 = 曲率 × 面积。"""
+def curvature_values():
+    """三种曲率下同一个角的读数 —— 正文与图形共用同一份计算。"""
     A, B, C = (-0.5, 0.0), (0.5, 0.0), (0.0, 0.4)
     aa, ab, ac = _disk_angles(A, B, C)
     hyp_tot = aa + ab + ac
     flat_a = math.degrees(math.atan2(0.4, 0.5))
-    # 三种几何的内角和与角盈/角亏全部现算，图上一个数字都不许手写
     sph_a = 90.0                       # 球面三角形的任一角：北极 + 赤道上相隔 90° 的两点
     flat_tot, sph_tot = 180.0, 270.0   # 平面内角和；球面三个角都是直角
-    hyp_gap, flat_gap, sph_gap = flat_tot - hyp_tot, flat_tot - 180.0, sph_tot - 180.0
-    hyp_area = math.pi - math.radians(hyp_tot)   # K = −1 时的双曲面积
+    return {
+        "hyp_angle": aa, "hyp2": ab, "hyp3": ac,
+        "flat_angle": flat_a, "sph_angle": sph_a,
+        "hyp_tot": hyp_tot, "flat_tot": flat_tot, "sph_tot": sph_tot,
+        "hyp_gap": flat_tot - hyp_tot, "flat_gap": 0.0, "sph_gap": sph_tot - flat_tot,
+        "hyp_area": math.pi - math.radians(hyp_tot),   # K = −1 时的双曲面积
+    }
+
+
+def fig_curvature():
+    """三种曲率并置：同一个三角形顶点，内角和各不相同；角盈 = 曲率 × 面积。"""
+    _v = curvature_values()
+    A, B, C = (-0.5, 0.0), (0.5, 0.0), (0.0, 0.4)
+    # 三种几何的内角和与角盈/角亏全部现算，图上一个数字都不许手写
+    aa, ab, ac = _v["hyp_angle"], _v["hyp2"], _v["hyp3"]
+    flat_a, sph_a = _v["flat_angle"], _v["sph_angle"]
+    hyp_tot, flat_tot, sph_tot = _v["hyp_tot"], _v["flat_tot"], _v["sph_tot"]
+    hyp_gap, flat_gap, sph_gap = _v["hyp_gap"], _v["flat_gap"], _v["sph_gap"]
+    hyp_area = _v["hyp_area"]
     S, CY, PX = 0.95, 0.05, (-2.55, 0.0, 2.55)
 
     def tp(i, p):
@@ -1729,6 +1771,13 @@ def fig_symmetry():
                                      "pad": {"l": 16, "r": 16, "b": 16, "t": 16},
                                      "equalAspect": True},
             "layers": layers, "steps": steps}
+
+
+def cayley_values():
+    """D₃ 的规模 —— 正文与图形共用。"""
+    names, _, tbl = _d3()
+    n = len(names)
+    return {"n": n, "cells": n * n}
 
 
 def fig_cayley():
@@ -2620,6 +2669,10 @@ def build(ids=None):
 #   · 只登记「正文确实引用」的值，不做无目的的搬运。
 PROSE = {
     "fig-poincare": poincare_values,
+    "fig-riemann": riemann_values,
+    "fig-curvature": curvature_values,
+    "fig-dice": dice_values,
+    "fig-cayley": cayley_values,
 }
 
 

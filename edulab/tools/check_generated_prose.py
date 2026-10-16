@@ -104,6 +104,21 @@ class Scanner(ast.NodeVisitor):
                 self.visit(v.value)
         return
 
+    def visit_Call(self, node):
+        """".format(...)" 也是生成 —— 只认 f-string 会低估覆盖率（figures.py 大量用它）。"""
+        f = node.func
+        if (isinstance(f, ast.Attribute) and f.attr == "format"
+                and isinstance(f.value, ast.Constant) and isinstance(f.value.value, str)):
+            s = f.value.value
+            self.generated += len(re.findall(r"\{[^{}]*\}", s))
+            for raw in claims(re.sub(r"\{[^{}]*\}", " ", s)):
+                self.hand.append((getattr(node, "lineno", 0), raw,
+                                  s[:90].replace("\n", " ")))
+            for a in node.args:
+                self.visit(a)
+            return
+        self.generic_visit(node)
+
     def visit_Constant(self, node):
         if isinstance(node.value, str):
             self.report(node)                        # 普通字符串 → 手写
@@ -242,7 +257,7 @@ def main(argv):
     w(f"| 书 `figures.py` | {cov['书 figures.py']:.0f}% | "
       "同上，步骤注解里已大量使用 `.format()`，继续补齐 |")
     w(f"| **书 `chapters/*.json`** | **{cov['书 chapters/*.json']:.0f}%** | "
-      "**最大短板：正文的生成路径才刚起步（本轮只打通了一张图的样板）** |")
+      "**最大短板：正文的生成路径刚起步（目前接通 5 张图）** |")
     w("")
     w("给 `chapters/*.json` 加生成路径，是这套方法里**性价比最高的一步**：")
     w("上次通读抓出的 5 类图文不符，全部落在这个 0% 的文件里。")

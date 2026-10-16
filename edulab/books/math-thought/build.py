@@ -56,7 +56,12 @@ def subst_prose(text, values, where):
         if name not in values:
             raise KeyError(f"{where}：正文引用了未注册的记号 @@{name}@@"
                            f"（可用：{', '.join(sorted(values)) or '无'}）")
-        return f"{values[name]:.{int(prec) if prec else 2}f}"
+        v = values[name]
+        if prec is not None:                      # 显式指定精度（如需 0.790 这类保留位）
+            return f"{v:.{int(prec)}f}"
+        if abs(v - round(v)) < 1e-9:              # 默认：整数就写整数，别写成 6.00
+            return str(int(round(v)))
+        return f"{v:.2f}"
     return PROSE_TOKEN.sub(one, text)
 
 
