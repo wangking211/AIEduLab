@@ -1406,6 +1406,7 @@ def bb_values():
     return {
         "bb_sig1": sig1, "bb_t1": t1, "bb_machines1": tot1,
         "bb_sig2": sig2, "bb_t2": t2, "bb_machines2": tot2, "bb_halted2": hal2,
+        "bb_machines3": (4 * (3 + 1)) ** (2 * 3),      # 三状态二符号：16⁶ = 16 777 216
         "bb_sig3_ones": ones3, "bb_sig3_steps": steps3,
         "bb_t3_ones": ones3t, "bb_t3_steps": steps3t,
         "bb_states3": 3, "bb_rules3": 6,        # 获胜机：3 状态 × 2 符号
@@ -1439,9 +1440,12 @@ def lln_values(flips=500):
 
 
 def symmetry_values():
-    """D₃ 的操作个数 —— 正文与图形共用。"""
+    """D₃ 的操作个数与旋转角 —— 正文与图形共用。"""
     names, _, _ = _d3()
-    return {"sym_ops": len(names)}
+    n = len(names) // 2                 # 一半是旋转：e、r、r²
+    step = 360.0 / n
+    return {"sym_ops": len(names), "sym_rotn": n,
+            "sym_rot1": step, "sym_rot2": 2 * step}
 
 
 def universal_values():
@@ -1863,7 +1867,7 @@ def cayley_values():
     """D₃ 的规模 —— 正文与图形共用。"""
     names, _, tbl = _d3()
     n = len(names)
-    return {"cayley_n": n, "cayley_cells": n * n}
+    return {"cayley_n": n, "cayley_cells": n * n, "cayley_tuples": n ** 3}
 
 
 def fig_cayley():

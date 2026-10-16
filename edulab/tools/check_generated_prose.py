@@ -258,7 +258,7 @@ def main(argv):
     w(f"| 书 `figures.py` | {cov['书 figures.py']:.0f}% | "
       "同上，步骤注解里已大量使用 `.format()`，继续补齐 |")
     w(f"| **书 `chapters/*.json`** | **{cov['书 chapters/*.json']:.0f}%** | "
-      f"**最大短板：正文的生成路径刚起步（目前接通 {len(F.PROSE)} 张图）** |")
+      f"图注层已做完（接通 {len(F.PROSE)} 张图），正文段落与步骤注解仍在手写 |")
     w("")
     w("给 `chapters/*.json` 加生成路径，是这套方法里**性价比最高的一步**：")
     w("上次通读抓出的 5 类图文不符，全部落在这个 0% 的文件里。")

@@ -4,9 +4,9 @@
   "cplx_quarter": "90"
  },
  "ch04": {
-  "exact": "3.750",
-  "n1": "1.500",
-  "n8": "3.346"
+  "exact:3": "3.750",
+  "n1:3": "1.500",
+  "n8:3": "3.346"
  },
  "ch05": {
   "at7": "6",
@@ -23,14 +23,15 @@
   "a1": "27.35",
   "a2": "27.35",
   "a3": "80.06",
-  "area": "0.790",
+  "area:3": "0.790",
   "defect": "45.24",
-  "flat_angle": "38.7",
-  "flat_tot": "180.0",
-  "hyp_angle": "27.3",
-  "hyp_tot": "134.8",
-  "sph_angle": "90.0",
-  "sph_tot": "270.0",
+  "flat_angle:1": "38.7",
+  "flat_tot": "180",
+  "flat_tot:1": "180.0",
+  "hyp_angle:1": "27.3",
+  "hyp_tot:1": "134.8",
+  "sph_angle:1": "90.0",
+  "sph_tot:1": "270.0",
   "sphere_excess": "90",
   "sphere_total": "270",
   "tot": "134.76"
@@ -38,10 +39,13 @@
  "ch07": {
   "cayley_cells": "36",
   "cayley_n": "6",
+  "cayley_tuples": "216",
   "roots_axes": "5",
   "roots_rot": "5",
   "roots_sym": "10",
   "sym_ops": "6",
+  "sym_rot1": "120",
+  "sym_rot2": "240",
   "tower_a5": "60",
   "tower_q3_0": "2",
   "tower_q3_1": "3",
@@ -53,6 +57,7 @@
  "ch08": {
   "bb_machines1": "64",
   "bb_machines2": "20,736",
+  "bb_machines3": "16,777,216",
   "bb_rules3": "6",
   "bb_sig1": "1",
   "bb_sig2": "4",

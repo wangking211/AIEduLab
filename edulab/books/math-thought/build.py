@@ -73,7 +73,10 @@ def subst_prose(text, values, where, seen=None):
         else:
             rendered = f"{v:.2f}"
         if seen is not None:
-            seen[name] = rendered
+            # 按「完整记号」做键而不是按名字：同一个名字可以带不同精度渲染
+            # （图注写 @@flat_tot:1@@ 得 180.0，正文写 @@flat_tot@@ 得 180），
+            # 按名字做键会让两者互相覆盖，基线就失去了分辨力。
+            seen[f"{name}:{prec}" if prec else name] = rendered
         return rendered
     return PROSE_TOKEN.sub(one, text)
 
