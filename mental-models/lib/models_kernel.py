@@ -5,12 +5,17 @@ models_kernel.py — 查理·芒格思维模型：可量化部分的精确计算
 单一数据源设计：复利、贝叶斯基率、期望值与凯利仓位、安全边际击穿概率、机会成本
 全部由本模块精确算出，讲解文字只引用 tex() 输出，绝无心算误差。
 
-覆盖（v1，5 个模型）：
+覆盖（v2，10 个模型）：
  1. compound    —— 复利/单利/翻倍时间（"时间是朋友还是敌人"的数学根据）
  2. bayes       —— 贝叶斯基率更新（基率忽视 → 假阳性的数学根源）
  3. expected    —— 期望值 + 幸存者偏差 + 凯利公式 f* = (bp − q)/b
  4. safety      —— 安全边际：正态内在价值分布 vs 价格线的击穿概率
  5. opportunity —— 机会成本：隐性成本 = 放弃的最优替代
+ 6. inversion   —— 反过来想：串联系统的存活率 = ∏(1−pᵢ)，最弱环节优先
+ 7. incentive   —— 激励优先：把提成写进效用函数，代理人最优点必然偏离委托人
+ 8. competence  —— 能力圈：圈外暴露比例 → σ → 击穿概率
+ 9. lollapalooza—— 多倾向同向叠加：乘法放大 (1+a)ⁿ vs 线性直觉 1+na
+10. checklist   —— 误判清单的拦截率 1−(1−hit)^k
 
 依赖: sympy。自检：python models_kernel.py
 """
@@ -217,6 +222,148 @@ def opportunity_cost(chosen_value, alternatives):
     }
 
 
+# ==================== 6) 反过来想（最弱环节） ====================
+def inversion(n_factors, p_weak, p_rest):
+    """反过来想：不问「怎么成功」，先问「怎么必然失败」。
+
+    系统由 n 个必要环节串联——任何一环失效则全盘失败，于是存活率
+        S = (1 − p_weak)·(1 − p_rest)^(n−1)
+    有了生存概率，就能比大小：「先堵最弱的洞」和「把每个环节都做得更好」
+    哪个更值钱。逆向思维在这里不再是格言，而是一个可排序的量。
+    """
+    n = _num(n_factors)
+    pw, pr = _pct(p_weak), _pct(p_rest)
+    assert n >= 1, "环节数须为正"
+    assert 0 <= pw <= 1 and 0 <= pr <= 1, "失效概率须落在 [0,1]"
+    S = sp.simplify((1 - pw) * (1 - pr) ** (n - 1))
+    ceiling = sp.simplify((1 - pr) ** n)         # 最弱环节也修到普通水平后的存活率上限
+    fail = sp.simplify(1 - S)
+    # 归因：最弱环节一旦失效就全盘结束，故它单独造成的失败占全部失败的比例
+    fatal_share = sp.Integer(0) if fail.is_zero else sp.simplify(pw / fail)
+    # 策略 A：先堵最弱的洞（pw → pr）；策略 B：普通环节的失效概率各减半
+    fix_gain = sp.oo if S.is_zero else sp.simplify(ceiling / S)
+    polish_gain = sp.simplify(((1 - pr / 2) / (1 - pr)) ** (n - 1))
+    # S ≥ 1/2 所容许的 pw 上界（< 0 即意味着再怎么修最弱环节也到不了一半）
+    pw_limit = sp.simplify(1 - 1 / (2 * (1 - pr) ** (n - 1)))
+    return {
+        "n": n, "p_weak": pw, "p_rest": pr,
+        "S": S, "fail": fail, "ceiling": ceiling, "fatal_share": fatal_share,
+        "fix_weakest_gain": fix_gain, "polish_rest_gain": polish_gain,
+        "fix_is_better": bool(sp.simplify(fix_gain - polish_gain) >= 0),
+        "pw_limit_for_half": pw_limit, "half_reachable": bool(pw_limit >= 0),
+        "S_tex": tex(S), "fail_tex": tex(fail), "ceiling_tex": tex(ceiling),
+        "fatal_share_tex": tex(fatal_share),
+    }
+
+
+# ==================== 7) 激励优先（委托—代理） ====================
+def incentive(commission, v_lin=100, v_quad=5, c_quad=2):
+    """激励优先：把提成写进效用函数，代理人的最优点就必然偏离委托人。
+
+    委托人（顾客）价值 $V(x) = v_{lin}x - v_{quad}x^2$，最优 $x_P = v_{lin}/(2v_{quad})$。
+    代理人效用 $U(x) = commission\\cdot x - c_{quad}x^2$，最优 $x_A = commission/(2c_{quad})$。
+    只有 $commission^* = c_{quad}v_{lin}/v_{quad}$ 时两者重合——
+    偏一点，行为就偏一截。这不是道德问题，是算术问题。
+    """
+    c, a, b, d = _num(commission), _num(v_lin), _num(v_quad), _num(c_quad)
+    assert a > 0 and b > 0 and d > 0, "系数须为正"
+    x_p = sp.simplify(a / (2 * b))                       # 委托人最优
+    x_a = sp.simplify(c / (2 * d))                       # 代理人最优
+    V_opt = sp.simplify(a * x_p - b * x_p ** 2)          # 委托人在最优处的价值
+    V_at_a = sp.simplify(a * x_a - b * x_a ** 2)         # 委托人在代理人最优处的价值
+    loss = sp.simplify(V_opt - V_at_a)
+    return {
+        "commission": c, "x_p": x_p, "x_a": x_a,
+        "misalign": sp.simplify(x_a - x_p),
+        "V_at_opt": V_opt, "V_at_agent": V_at_a, "client_loss": loss,
+        "loss_share": sp.simplify(loss / V_opt),
+        "align_commission": sp.simplify(2 * d * x_p),    # 恰好对齐的提成
+        "aligned": bool(sp.simplify(x_a - x_p) == 0),
+        "x_p_tex": tex(x_p), "x_a_tex": tex(x_a), "loss_tex": tex(loss),
+    }
+
+
+# ==================== 8) 能力圈（暴露比例 → σ → 击穿） ====================
+def competence(w_out, sigma_in, sigma_out, rho, mos, mu=100):
+    """能力圈：圈外暴露比例 w 决定整体估计误差 σ，再决定击穿概率。
+
+    组合 $\\sigma = \\sqrt{(1-w)^2\\sigma_{in}^2 + w^2\\sigma_{out}^2 + 2w(1-w)\\rho\\sigma_{in}\\sigma_{out}}$，
+    击穿概率 $\\Phi((P-\\mu)/\\sigma)$，其中 $P = \\mu(1-\\text{MOS})$。
+    关键：圈外方差与圈内方差相等发生在 $w^* = \\sigma_{in}/(\\sigma_{in}+\\sigma_{out})$——
+    圈外只要占一小块，就吃掉一半方差。这就是「边界比大小重要」的可算版本。
+    """
+    w, si, so, r = _num(w_out), _num(sigma_in), _num(sigma_out), _num(rho)
+    mos_, mu_ = _pct(mos), _num(mu)
+    assert 0 <= w <= 1, "暴露比例须落在 [0,1]"
+    assert si > 0 and so > 0, "标准差须为正"
+    assert -1 <= r <= 1, "相关系数须落在 [-1,1]"
+    var = sp.simplify((1 - w) ** 2 * si ** 2 + w ** 2 * so ** 2
+                      + 2 * w * (1 - w) * r * si * so)
+    sigma = sp.simplify(sp.sqrt(var))
+    price = sp.simplify(mu_ * (1 - mos_))
+    z = sp.simplify((price - mu_) / sigma)
+    prob = sp.simplify(sp.Rational(1, 2) * (1 + sp.erf(z / sp.sqrt(2))))
+    z_in = sp.simplify(-mos_ * mu_ / si)                  # 纯圈内（w=0）时的标准分
+    prob_in = sp.simplify(sp.Rational(1, 2) * (1 + sp.erf(z_in / sp.sqrt(2))))
+    return {
+        "w": w, "sigma_in": si, "sigma_out": so, "rho": r, "mos": mos_, "mu": mu_,
+        "sigma": sigma, "price": price, "z": z, "prob": prob,
+        "prob_pure": prob_in, "prob_ratio": sp.simplify(prob / prob_in),
+        "var_share_out": sp.Integer(0) if var.is_zero else sp.simplify(w ** 2 * so ** 2 / var),
+        "w_crit": sp.simplify(si / (si + so)),            # 圈外方差贡献 = 圈内
+        "safe": bool(prob < sp.Rational(1, 20)),
+        "sigma_tex": tex(sigma), "prob_tex": tex(prob), "z_tex": tex(z),
+    }
+
+
+# ==================== 9) Lollapalooza（多倾向同向叠加） ====================
+def lollapalooza(n, a):
+    """Lollapalooza：多个倾向同向叠加时，乘法放大远快于线性直觉。
+
+    单条倾向把「冲动」放大 (1+a) 倍，n 条同向叠加就是 (1+a)^n。
+    而人的直觉按 1 + n·a 相加——两者在 n ≥ 2 就分道扬镳。
+    """
+    n, aa = _num(n), _num(a)
+    assert n >= 1, "倾向条数须为正"
+    assert aa > -1, "放大率须大于 −1"
+    product = sp.simplify((1 + aa) ** n)
+    linear = sp.simplify(1 + n * aa)
+    excess = sp.simplify(product / linear)
+    n_double = None
+    for k in range(2, 61):
+        if f((1 + aa) ** k / (1 + k * aa)) > 2:
+            n_double = k
+            break
+    return {
+        "n": n, "a": aa, "product": product, "linear": linear, "excess": excess,
+        "extra_pct": sp.simplify((product - linear) / linear),
+        "n_for_double": n_double,
+        "product_tex": tex(product), "excess_tex": tex(excess),
+        "superadditive": bool(sp.simplify(excess) > 1),
+    }
+
+
+# ==================== 10) 误判清单（拦截率） ====================
+def checklist(k, a, hit):
+    """误判倾向清单的净效果：每条倾向被栏下的概率为 hit。
+
+    不上清单：放大 $(1+a)^k$；上了清单：$(1+a)^k(1-\\text{hit})^k$。
+    拦截率 $= 1-(1-\\text{hit})^k$——同向倾向叠得越多，清单越值钱。
+    """
+    k, aa, h = _num(k), _num(a), _pct(hit)
+    assert k >= 1, "倾向条数须为正"
+    assert aa > -1 and 0 <= h <= 1, "参数越界"
+    gross = sp.simplify((1 + aa) ** k)
+    net = sp.simplify(((1 + aa) * (1 - h)) ** k)
+    return {
+        "k": k, "a": aa, "hit": h, "gross": gross, "net": net,
+        "blocked": sp.simplify(1 - (1 - h) ** k),
+        "residual_share": sp.simplify((1 - h) ** k),
+        "cut": sp.simplify(gross / net) if not net.is_zero else sp.oo,   # 风险被压低多少倍
+        "gross_tex": tex(gross), "net_tex": tex(net),
+    }
+
+
 # ==================== 自检 ====================
 if __name__ == "__main__":
     # 复利
@@ -260,9 +407,58 @@ if __name__ == "__main__":
     assert f(o["opp_cost"]) == 20.0 and o["is_best"] is False
     assert opportunity_cost(100, [80])["is_best"] is True
 
+    # 反过来想
+    inv = inversion(8, sp.Rational(1, 2), sp.Rational(1, 10))
+    assert abs(f(inv["S"]) - 0.239148450) < 1e-9              # 0.5 · 0.9^7
+    assert abs(f(inv["ceiling"]) - 0.430467210) < 1e-9        # 0.9^8
+    assert abs(f(inv["fix_weakest_gain"]) - 1.8) < 1e-9       # = (1−0.1)/(1−0.5)
+    assert inv["fix_is_better"] is True, "先堵最弱的洞应优于全员优化"
+    assert inv["half_reachable"] is False, "8 环 @10%：最弱环节修好也到不了一半"
+    assert sp.simplify(inv["fatal_share"] * inv["fail"] - inv["p_weak"]) == 0
+    assert f(inversion(1, sp.Rational(3, 10), sp.Rational(1, 10))["S"]) == 0.7
+
+    # 激励优先
+    inc = incentive(20)
+    assert f(inc["x_p"]) == 10 and f(inc["x_a"]) == 5
+    assert f(inc["client_loss"]) == 125 and abs(f(inc["loss_share"]) - 0.25) < 1e-9
+    assert f(inc["align_commission"]) == 40
+    assert inc["aligned"] is False and incentive(40)["aligned"] is True
+    assert f(incentive(40)["x_a"]) == 10
+    # 提成太低（消极）与太高（过度推销）造成的损失对称
+    assert sp.simplify(incentive(60)["client_loss"] - 125) == 0
+    assert sp.simplify(incentive(20)["misalign"] + incentive(60)["misalign"]) == 0
+
+    # 能力圈
+    cp = competence(sp.Rational(1, 5), 10, 40, 0, sp.Rational(1, 5))
+    assert sp.simplify(cp["sigma"] ** 2 - 128) == 0            # 64（圈内）+ 64（圈外）
+    assert abs(f(cp["var_share_out"]) - 0.5) < 1e-9, "20% 暴露就吃掉一半方差"
+    assert abs(f(cp["w_crit"]) - 0.2) < 1e-9
+    assert cp["safe"] is True
+    assert competence(sp.Rational(2, 5), 10, 40, 0, sp.Rational(1, 5))["prob"] > cp["prob"]
+    assert f(competence(0, 10, 40, 0, sp.Rational(1, 5))["prob_pure"] - cp["prob_pure"]) == 0
+
+    # Lollapalooza
+    lp = lollapalooza(4, sp.Rational(1, 2))
+    assert sp.simplify(lp["product"] - sp.Rational(81, 16)) == 0    # 1.5^4
+    assert lp["linear"] == 3 and sp.simplify(lp["excess"] - sp.Rational(27, 16)) == 0
+    assert lp["n_for_double"] == 5
+    assert lollapalooza(1, sp.Rational(1, 2))["excess"] == 1        # 单条无叠加
+    assert lollapalooza(2, sp.Rational(1, 2))["superadditive"] is True
+
+    # 误判清单
+    ck_ = checklist(4, sp.Rational(1, 2), sp.Rational(1, 2))
+    assert sp.simplify(ck_["gross"] - sp.Rational(81, 16)) == 0     # 1.5^4
+    assert sp.simplify(ck_["net"] - sp.Rational(81, 256)) == 0      # 0.75^4
+    assert sp.simplify(ck_["blocked"] - sp.Rational(15, 16)) == 0    # 1 − 0.5^4
+
     print("models_kernel self-check OK ✓")
     print(f"  复利 1 万 @8% 30 年 → {f(c['F']):,.0f}（单利 {f(c['F_simple']):,.0f}，翻倍需 {f(c['doubling_years']):.2f} 年）")
     print(f"  贝叶斯 1% 患病率 + 99% 灵敏度/95% 特异度 → 阳性者真实患病概率 {f(b['posterior'])*100:.1f}%")
     print(f"  凯利 60% 赔率 2:1 → 满仓 {f(k['kelly'])*100:.0f}%，半仓 {f(k['kelly_half'])*100:.0f}%")
     print(f"  安全边际 120 估价 / 80 买入 → {f(m['mos_pct']):.1f}%，σ=15 时击穿概率 {f(kp['prob_pct']):.1f}%")
     print(f"  机会成本：选 80 放弃 {o['best_alt']} → 隐性成本 {f(o['opp_cost'])}")
+    print(f"  反过来想 8 环 @10%、最弱 50% → 存活 {f(inv['S'])*100:.1f}%，修最弱 ×{f(inv['fix_weakest_gain']):.2f}")
+    print(f"  激励优先提成 20 → 代理人选 {f(inc['x_a']):.0f}、委托人要 {f(inc['x_p']):.0f}，损失 {f(inc['client_loss']):.0f}")
+    print(f"  能力圈 20% 暴露（σ {f(cp['sigma_in']):.0f} vs {f(cp['sigma_out']):.0f}）→ σ {f(cp['sigma']):.2f}，占方差 {f(cp['var_share_out'])*100:.0f}%")
+    print(f"  Lollapalooza 4 条 ×1.5 → {f(lp['product']):.2f}（线性只给 {f(lp['linear']):.0f}），超出 {f(lp['extra_pct'])*100:.0f}%")
+    print(f"  误判清单 4 条 ×1.5、拦截 50% → {f(ck_['gross']):.2f} 降到 {f(ck_['net']):.2f}，拦掉 {f(ck_['blocked'])*100:.1f}%")

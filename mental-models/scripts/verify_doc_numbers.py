@@ -93,6 +93,58 @@ ck("最优替代", f(o["best_alt"]), 100, 1e-9)
 ck("相对最优净收益", f(o["net_vs_best"]), -20, 1e-9)
 ck("不是最优", 0 if o["is_best"] else 1, 1)
 
+# ---- 反过来想（§6.1） ----
+inv = K.inversion(8, sp.Rational(1, 2), sp.Rational(1, 10))
+ck("串联存活率 %", f(inv["S"]) * 100, 23.91, 0.005)
+ck("整体失败率 %", f(inv["fail"]) * 100, 76.09, 0.005)
+ck("最弱环失败占比 %", f(inv["fatal_share"]) * 100, 65.7, 0.05)
+ck("先堵最弱 ×", f(inv["fix_weakest_gain"]), 1.80, 0.005)
+ck("全员优化 ×", f(inv["polish_rest_gain"]), 1.46, 0.005)
+ck("存活率上限 %", f(inv["ceiling"]) * 100, 43.05, 0.005)
+ck("过一半所需 pw 上界", f(inv["pw_limit_for_half"]), -0.045, 0.0005)
+ck("该结构下过不了一半", 1 if not inv["half_reachable"] else 0, 1)
+ck("先堵最弱优于全员优化", 1 if inv["fix_is_better"] else 0, 1)
+
+# ---- 激励优先（§6.2） ----
+inc = K.incentive(20)
+ck("委托人最优 x_P", f(inc["x_p"]), 10, 1e-9)
+ck("代理人最优 x_A", f(inc["x_a"]), 5, 1e-9)
+ck("错配 x_A − x_P", f(inc["misalign"]), -5, 1e-9)
+ck("顾客最优价值 V(x_P)", f(inc["V_at_opt"]), 500, 1e-9)
+ck("代理人最优处 V(x_A)", f(inc["V_at_agent"]), 375, 1e-9)
+ck("顾客被白损失", f(inc["client_loss"]), 125, 1e-9)
+ck("损失占比 %", f(inc["loss_share"]) * 100, 25.0, 1e-9)
+ck("恰好对齐的提成 c*", f(inc["align_commission"]), 40, 1e-9)
+inc60 = K.incentive(60)
+ck("提成 60 时 x_A", f(inc60["x_a"]), 15, 1e-9)
+ck("提成 60 时损失（与 20 对称）", f(inc60["client_loss"]), 125, 1e-9)
+
+# ---- 能力圈（§6.3） ----
+cp = K.competence(sp.Rational(1, 5), 10, 40, 0, sp.Rational(1, 5))
+ck("组合方差 σ²", f(cp["sigma"]) ** 2, 128, 1e-9)
+ck("组合 σ", f(cp["sigma"]), 11.31, 0.005)
+ck("圈外占方差 %", f(cp["var_share_out"]) * 100, 50.0, 1e-9)
+ck("临界暴露 w* %", f(cp["w_crit"]) * 100, 20.0, 1e-9)
+ck("标准分 z", f(cp["z"]), -1.768, 0.0005)
+ck("击穿概率 %", f(cp["prob"]) * 100, 3.85, 0.005)
+ck("纯圈内击穿概率 %", f(cp["prob_pure"]) * 100, 2.28, 0.005)
+ck("风险放大倍数", f(cp["prob_ratio"]), 1.69, 0.005)
+
+# ---- Lollapalooza（§6.4） ----
+lp = K.lollapalooza(4, sp.Rational(1, 2))
+ck("乘法叠加 (1+a)^n", f(lp["product"]), 5.06, 0.005)
+ck("线性直觉 1+na", f(lp["linear"]), 3.0, 1e-9)
+ck("超出比例 %", f(lp["extra_pct"]) * 100, 68.8, 0.05)
+ck("实际 / 直觉", f(lp["excess"]), 1.69, 0.005)
+ck("超过 2 倍所需条数", lp["n_for_double"], 5, 1e-9)
+
+# ---- 误判清单（§6.5） ----
+bi = K.checklist(4, sp.Rational(1, 2), sp.Rational(1, 2))
+ck("不上清单的冲动放大", f(bi["gross"]), 5.06, 0.005)
+ck("上清单后的残余放大", f(bi["net"]), 0.316, 0.0005)
+ck("拦截率 %", f(bi["blocked"]) * 100, 93.75, 0.005)
+ck("风险被压低倍数", f(bi["cut"]), 16.0, 1e-9)
+
 # ---- 汇总 ----
 bad = [c for c in checks if not c[0]]
 for ok, name, got, want in checks:

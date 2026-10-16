@@ -496,15 +496,575 @@ def build_opportunity():
     }
 
 
+# =====================================================================
+# 6) 反过来想：最弱环节决定生死
+# =====================================================================
+def build_inversion():
+    n, pw, pr = 8, 50, 10
+    inv = K.inversion(n, pw, pr)
+    fixg, polg = _n(inv["fix_weakest_gain"]), _n(inv["polish_rest_gain"])
+    return {
+        "lesson": {
+            "title": "反过来想：最弱环节决定生死",
+            "subtitle": "芒格：「如果我不能比对手更清楚地知道我会死在哪里，我就不去那个地方。」",
+            "problem": (
+                "<p>一笔投资要连续通过 <b>8 道关卡</b>（研究、估值、买点、仓位、持有、退出……），"
+                "任何一道失败，全盘归零。</p>"
+                "<p class='mt-2'>其中<b>最弱的一道</b>失败率高达 <b>50%</b>，其余七道各 <b>10%</b>。</p>"
+                "<p class='mt-2'>不问「怎么成功」，反过来问："
+                "<span class='text-rose-600 font-semibold'>先修哪一道最值钱？</span>"
+                "拖动滑块，比一比「先堵最弱的洞」与「全员优化」。</p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "inversion", "caption": "最弱环节决定整体存活率"},
+            "view": {"xRange": [0, 1], "yRange": [0, 1]},
+            "params": [
+                {"name": "n", "label": "必要环节数 n", "min": 1, "max": 12, "step": 1, "value": n, "unit": " 环", "digits": 0},
+                {"name": "pw", "label": "最弱一环的失败率", "min": 1, "max": 90, "step": 1, "value": pw, "unit": "%", "digits": 0},
+                {"name": "pr", "label": "其余各环的失败率", "min": 1, "max": 30, "step": 0.5, "value": pr, "unit": "%", "digits": 1},
+            ],
+            "scalars": [
+                {"name": "Fw", "expr": "1-pw/100"},
+                {"name": "Fr", "expr": "1-pr/100"},
+                {"name": "Sw", "expr": "Fw*Fr^(n-1)"},
+                {"name": "Sc", "expr": "Fr^n"},
+                {"name": "Sp", "expr": "Fw*(1-pr/200)^(n-1)"},
+                {"name": "FixGain", "expr": "Fr/Fw"},
+                {"name": "PolGain", "expr": "Sp/Sw"},
+            ],
+            "readouts": [
+                {"id": "s", "label": "整体存活率 S = ∏(1−pᵢ)", "type": "expr", "expr": "Sw*100", "digits": 1, "unit": "%", "highlight": True},
+                {"id": "fail", "label": "整体失败率 1−S", "type": "expr", "expr": "(1-Sw)*100", "digits": 1, "unit": "%", "color": "#dc2626"},
+                {"id": "fixg", "label": "先堵最弱一环 → 存活率 ×", "type": "expr", "expr": "FixGain", "digits": 2, "unit": " 倍", "color": "#059669"},
+                {"id": "polg", "label": "其余各环失败率减半 → ×", "type": "expr", "expr": "PolGain", "digits": 2, "unit": " 倍", "color": "#0891b2"},
+                {"id": "ceil", "label": "存活率上限（最弱环也修到普通水平）", "type": "expr", "expr": "Sc*100", "digits": 1, "unit": "%", "color": "#78716c"},
+                {"id": "ok", "label": "存活是否过半", "type": "status", "expr": "Sw", "op": ">=", "rhs": 0.5, "okText": "存活率过半", "badText": "存活率不足一半"},
+            ],
+            "legend": [
+                {"color": "#dc2626", "text": "最弱一环 / 现状"},
+                {"color": "#57534e", "text": "其余环节"},
+                {"color": "#059669", "text": "先堵最弱的洞"},
+                {"color": "#0891b2", "text": "全员优化"},
+            ],
+        },
+        "steps": [
+            {"title": "把「怎么成功」换成「怎么失败」", "content": (
+                "<p>逆向思维不只是姿态——它把问题变成了一个<b>可以相乘的量</b>。"
+                "把一个计划拆成 $n$ 个必要环节：只要一环断掉，整体归零。"
+                "于是整体存活率就是各环存活率的<b>连乘</b>：</p>"
+                "$$S = (1-p_w)(1-p_r)^{n-1}$$"
+                "<p>其中 $p_w$ 是最弱那一环的失败率，$p_r$ 是其余各环的失败率。</p>"
+                "<p class='mt-2 text-stone-500 text-xs'>注意：串联系统的乘积与各环的排列顺序无关，"
+                "所以「最弱」放在链条哪一段都一样——重要的不是它<b>在哪</b>，而是它<b>有多弱</b>。</p>"
+            )},
+            {"title": "代入默认参数", "content": (
+                "<p>8 道关卡，最弱一环 50%、其余 10%：</p>"
+                "$$S = 0.5 \\times 0.9^{7} = " + f"{_n(inv['S']):.4f}" + "$$"
+                "<p>存活率只有 <b>" + f"{_n(inv['S']) * 100:.1f}" + "%</b>——"
+                "尽管七道普通关卡每一道都做到了 90%。"
+                "整体失败率 <b>" + f"{_n(inv['fail']) * 100:.1f}" + "%</b>，"
+                "其中 <b>" + f"{_n(inv['fatal_share']) * 100:.0f}" + "%</b> 可以直接归因于最弱的那一环。</p>"
+            )},
+            {"title": "两种改法，比大小", "content": (
+                "<ul class='list-disc pl-5 space-y-1'>"
+                "<li><b>策略 A · 先堵最弱的洞</b>：把 50% 修到 10%，存活率 <b>×"
+                + f"{fixg:.2f}" + "</b>（$= 0.9/0.5$）</li>"
+                "<li><b>策略 B · 全员优化</b>：其余七道各从 10% 再降到 5%，存活率 <b>×"
+                + f"{polg:.2f}" + "</b></li>"
+                "</ul>"
+                "<p class='mt-2'>先修一个洞，胜过把七个环节都改进一遍——"
+                "<b>乘法里，最小的那个因子说话最响。</b></p>"
+            )},
+            {"title": "天花板：环节越多，越够不着", "content": (
+                "<p>就算把最弱那一环也修到 10%，存活率上限也只有</p>"
+                "$$S_{\\max} = 0.9^{8} = " + f"{_n(inv['ceiling']):.4f}" + "$$"
+                "<p>依然<b>不到一半</b>。要 $S \\ge 0.5$，最弱一环的失败率必须低于</p>"
+                "$$p_w \\le 1 - \\frac{1}{2(1-p_r)^{n-1}}$$"
+                "<p>代入 $p_r = 0.1,\\ n = 8$ 得 <b>" + f"{_n(inv['pw_limit_for_half']):.3f}"
+                + "</b>——是个<b>负数</b>。也就是说，在这个结构下无论把最弱环节修得多好，"
+                "存活率都过不了一半。</p>"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3'>这就是芒格把"
+                "「<b>先排除愚蠢</b>」排在「追求卓越」前面的算术理由："
+                "成功要走完整条链，失败只需断一环。先删掉失败路径，再谈收益。</p>"
+            )},
+        ],
+    }
+
+
+# =====================================================================
+# 7) 激励优先：佣金决定行为
+# =====================================================================
+def build_incentive():
+    c = 20
+    inc = K.incentive(c)
+    c_align = _n(inc["align_commission"])
+    loss_share = _n(inc["loss_share"])
+    hi = K.incentive(60)
+    return {
+        "lesson": {
+            "title": "激励优先：佣金决定行为",
+            "subtitle": "芒格：「永远不要怀疑，一个既得利益者会不顾一切地维护他的既得利益。」",
+            "problem": (
+                "<p>你雇人卖东西。<b>顾客</b>希望服务做到位——太少不好用，太多是浪费。"
+                "顾客的价值是 $V(x) = 100x - 5x^2$，最优在 $x = 10$。</p>"
+                "<p class='mt-2'><b>销售员</b>按每单位 <b>20 元</b>提成拿钱，"
+                "同时要付出努力成本，收入是 $U(x) = 20x - 2x^2$。</p>"
+                "<p class='mt-2'>他会做到多少？"
+                "<span class='text-rose-600 font-semibold'>他不是「不够努力」——他算得很对。</span>"
+                "拖动滑块改提成，看两个人的最优解怎么分岔。</p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "incentive", "caption": "委托人与代理人的最优努力"},
+            "view": {"xRange": [0, 30], "yRange": [0, 600]},
+            "params": [
+                {"name": "commission", "label": "每单提成", "min": 0, "max": 80, "step": 1, "value": c, "unit": " 元", "digits": 0},
+            ],
+            "scalars": [
+                {"name": "vLin", "expr": "100"},
+                {"name": "vQuad", "expr": "5"},
+                {"name": "cQuad", "expr": "2"},
+                {"name": "xP", "expr": "vLin/(2*vQuad)"},
+                {"name": "xA", "expr": "commission/(2*cQuad)"},
+                {"name": "xMax", "expr": "max(24, 1.4*max(xP, xA))"},
+                {"name": "Vopt", "expr": "vLin*xP - vQuad*xP^2"},
+                {"name": "VatA", "expr": "vLin*xA - vQuad*xA^2"},
+                {"name": "Loss", "expr": "Vopt - VatA"},
+                {"name": "LossShare", "expr": "Loss/Vopt"},
+                {"name": "AlignC", "expr": "2*cQuad*xP"},
+                {"name": "Aligned", "expr": "abs(xA-xP) < 0.5 ? 1 : 0"},
+            ],
+            "readouts": [
+                {"id": "xa", "label": "代理人最优 x_A = 提成/(2·成本系数)", "type": "expr", "expr": "xA", "digits": 2, "unit": "", "highlight": True},
+                {"id": "xp", "label": "委托人最优 x_P", "type": "expr", "expr": "xP", "digits": 2, "unit": "", "color": "#059669"},
+                {"id": "mis", "label": "错配 x_A − x_P", "type": "expr", "expr": "xA-xP", "digits": 2, "unit": "", "color": "#dc2626"},
+                {"id": "loss", "label": "顾客被白损失的价值", "type": "expr", "expr": "Loss", "digits": 0, "unit": "", "color": "#dc2626"},
+                {"id": "lossPct", "label": "损失占顾客最优价值的比例", "type": "expr", "expr": "LossShare*100", "digits": 1, "unit": "%", "color": "#dc2626"},
+                {"id": "alignC", "label": "恰好对齐所需的提成", "type": "expr", "expr": "AlignC", "digits": 0, "unit": " 元", "color": "#78716c"},
+                {"id": "ok", "label": "激励是否对齐", "type": "status", "expr": "abs(xA-xP)", "op": "<", "rhs": 0.5, "okText": "已对齐：代理人想做的事就是该做的事", "badText": "错配：代理人不会做你想做的事"},
+            ],
+            "legend": [
+                {"color": "#b45309", "text": "顾客价值 V(x)"},
+                {"color": "#0891b2", "text": "代理人收入 U(x)"},
+                {"color": "#dc2626", "text": "错配区间"},
+            ],
+        },
+        "steps": [
+            {"title": "把两边的最优点分别写出来", "content": (
+                "<p>委托人（顾客）价值：$V(x) = v_{lin}x - v_{quad}x^2$，"
+                "对 $x$ 求导置零得 $x_P = \\dfrac{v_{lin}}{2v_{quad}}$。</p>"
+                "<p>代理人效用：$U(x) = c\\,x - c_{quad}x^2$，"
+                "对 $x$ 求导置零得 $x_A = \\dfrac{c}{2c_{quad}}$。</p>"
+                "<p>代入 $v_{lin}=100,\\ v_{quad}=5,\\ c_{quad}=2$：</p>"
+                "$$x_P = \\frac{100}{10} = " + f"{_n(inc['x_p']):.0f}" + ",\\qquad "
+                "x_A = \\frac{c}{4}$$"
+                "<p><b>关键在于：$x_A$ 只跟提成 $c$ 有关，跟顾客想要什么毫无关系。</b></p>"
+            )},
+            {"title": "提成 20 元时发生了什么", "content": (
+                "<p>代理人算自己的账：$x_A = 20/4 = " + f"{_n(inc['x_a']):.0f}" + "$。"
+                "顾客想要 " + f"{_n(inc['x_p']):.0f}" + "。"
+                "错配 <b>" + f"{_n(inc['misalign'] * -1):.0f}" + " 个单位</b>——只做到一半。</p>"
+                "<p>顾客价值从 $V(" + f"{_n(inc['x_p']):.0f}" + ") = " + f"{_n(inc['V_at_opt']):.0f}"
+                + "$ 掉到 $V(" + f"{_n(inc['x_a']):.0f}" + ") = " + f"{_n(inc['V_at_agent']):.0f}"
+                + "$，<b>净损失 " + f"{_n(inc['client_loss']):.0f}" + "</b>，"
+                "占其最优价值的 <b>" + f"{loss_share * 100:.1f}" + "%</b>。</p>"
+                "<p class='mt-2 text-stone-500 text-xs'>注意这里的损失不是「代理人偷懒」造成的，"
+                "而是<b>两套目标函数本来就不同</b>造成的——换一个更勤奋的人也一样。</p>"
+            )},
+            {"title": "对齐点在哪", "content": (
+                "<p>让两个最优点重合，解 $x_A = x_P$：</p>"
+                "$$c^{*} = 2c_{quad}\\cdot x_P = 2 \\times 2 \\times 10 = "
+                + f"{c_align:.0f}" + "\\ \\text{元}$$"
+                "<p>只有提成恰好等于 <b>" + f"{c_align:.0f}" + " 元</b>时，"
+                "代理人自己最想做的事，才正好是顾客最想让他做的事。</p>"
+                "<p class='mt-2'>而且两侧是<b>对称</b>的：把提成提到 60 元，"
+                "$x_A = 15$ 变成过度推销，顾客同样损失 <b>"
+                + f"{_n(hi['client_loss']):.0f}" + "</b>。"
+                "太少是消极，太多是过度——<b>两种错法的损失一模一样。</b></p>"
+            )},
+            {"title": "为什么「说教」没用", "content": (
+                "<p>芒格的原话是：永远不要怀疑一个既得利益者会维护他的既得利益。"
+                "上面的算术给出了它的精确含义：</p>"
+                "<ul class='list-disc pl-5 space-y-1'>"
+                "<li>代理人的最优解是<b>提成的函数</b>，不是人品的函数；</li>"
+                "<li>想改变行为，要么改 $c$，要么改 $c_{quad}$（努力成本），"
+                "要么<b>换一种计酬方式</b>——而不是开会强调责任心；</li>"
+                "<li>看到任何行为，先找背后的激励结构：<b>激励 &gt; 说教</b>。</li>"
+                "</ul>"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3'>"
+                "佣金导向的销售必然过度推销；按住院天数收费的医院必然倾向多留病人。"
+                "这不说明从业者坏，只说明<b>激励结构被设计错了</b>。</p>"
+            )},
+        ],
+    }
+
+
+# =====================================================================
+# 8) 能力圈：边界比大小重要
+# =====================================================================
+def build_competence():
+    w, si, so, mos = 20, 10, 40, 20
+    cp = K.competence(w / 100, si, so, 0, mos / 100)
+    return {
+        "lesson": {
+            "title": "能力圈：边界比大小重要",
+            "subtitle": "「知道边界在哪，比边界有多大更重要。」——因为边界直接决定你的风险预算",
+            "problem": (
+                "<p>你要买一个资产。你的组合里，<b>圈内</b>部分你估得准（估值误差 $\\sigma_{in} = 10$），"
+                "<b>圈外</b>部分你看不懂（$\\sigma_{out} = 40$）。</p>"
+                "<p class='mt-2'>现在有 <b>20%</b> 的仓位放在圈外。安全边际照旧留 20%。</p>"
+                "<p class='mt-2'>问题：<span class='text-rose-600 font-semibold'>"
+                "这 20% 的圈外暴露，会让整体风险涨多少？</span>"
+                "拖动滑块，看一条曲线就够了。</p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "competence", "caption": "圈外暴露 → σ → 击穿概率"},
+            "view": {"xRange": [0, 1], "yRange": [0, 0.3]},
+            "params": [
+                {"name": "w", "label": "圈外暴露比例 w", "min": 0, "max": 80, "step": 1, "value": w, "unit": "%", "digits": 0},
+                {"name": "sigIn", "label": "圈内估值误差 σ_in", "min": 5, "max": 30, "step": 1, "value": si, "unit": "", "digits": 0},
+                {"name": "sigOut", "label": "圈外估值误差 σ_out", "min": 15, "max": 80, "step": 1, "value": so, "unit": "", "digits": 0},
+                {"name": "mos", "label": "安全边际 MOS", "min": 5, "max": 40, "step": 1, "value": mos, "unit": "%", "digits": 0},
+            ],
+            "scalars": [
+                {"name": "W", "expr": "w/100"},
+                {"name": "mu", "expr": "100"},
+                {"name": "rho", "expr": "0"},
+                {"name": "si", "expr": "sigIn"},
+                {"name": "so", "expr": "sigOut"},
+                {"name": "Price", "expr": "mu*(1-mos/100)"},
+                {"name": "Var", "expr": "(1-W)^2*si^2 + W^2*so^2 + 2*W*(1-W)*rho*si*so"},
+                {"name": "SigmaNow", "expr": "sqrt(Var)"},
+                {"name": "z", "expr": "(Price-mu)/SigmaNow"},
+                {"name": "Prob", "expr": "0.5*(1+erf(z/sqrt(2)))"},
+                {"name": "z0", "expr": "-(mos/100)*mu/si"},
+                {"name": "ProbPure", "expr": "0.5*(1+erf(z0/sqrt(2)))"},
+                {"name": "ProbRatio", "expr": "Prob/ProbPure"},
+                {"name": "VarShare", "expr": "W^2*so^2/Var"},
+                {"name": "WCrit", "expr": "si/(si+so)"},
+                {"name": "Safe", "expr": "Prob < 0.05 ? 1 : 0"},
+            ],
+            "readouts": [
+                {"id": "sig", "label": "组合估值误差 σ", "type": "expr", "expr": "SigmaNow", "digits": 2, "unit": "", "highlight": True},
+                {"id": "varshare", "label": "圈外占了多少方差", "type": "expr", "expr": "VarShare*100", "digits": 1, "unit": "%", "color": "#0891b2"},
+                {"id": "prob", "label": "击穿概率 P(真实价值 < 买价)", "type": "expr", "expr": "Prob*100", "digits": 2, "unit": "%", "color": "#dc2626"},
+                {"id": "pure", "label": "纯圈内时的击穿概率", "type": "expr", "expr": "ProbPure*100", "digits": 2, "unit": "%", "color": "#78716c"},
+                {"id": "ratio", "label": "风险放大倍数", "type": "expr", "expr": "ProbRatio", "digits": 2, "unit": " 倍", "color": "#dc2626"},
+                {"id": "wcrit", "label": "临界暴露 w*（圈外吃掉一半方差）", "type": "expr", "expr": "WCrit*100", "digits": 1, "unit": "%", "color": "#0891b2"},
+                {"id": "ok", "label": "击穿概率是否低于 5%", "type": "status", "expr": "Prob", "op": "<", "rhs": 0.05, "okText": "在 5% 警戒线以内", "badText": "击穿概率已超过 5%"},
+            ],
+            "legend": [
+                {"color": "#dc2626", "text": "击穿概率随圈外暴露上升"},
+                {"color": "#0891b2", "text": "临界 w*：圈外方差 = 圈内方差"},
+                {"color": "#059669", "text": "5% 警戒线"},
+            ],
+        },
+        "steps": [
+            {"title": "能力圈的量化含义", "content": (
+                "<p>「能力圈」听起来像一句态度宣言，但它落在数学上就是一个数："
+                "<b>你的估计误差 σ</b>。</p>"
+                "<p>圈内看得懂，估值误差小（$\\sigma_{in}$）；圈外看不懂，"
+                "误差大（$\\sigma_{out}$）。所以能力圈的边界，"
+                "本质上是你愿意承受的 <b>σ 的边界</b>。</p>"
+                "<p class='mt-2'>这正好接上第 4 节的安全边际："
+                "<b>击穿概率 $= \\Phi((P-\\mu)/\\sigma)$，σ 在分母上。</b></p>"
+            )},
+            {"title": "组合的 σ 怎么合成", "content": (
+                "<p>设圈外占比 $w$，两部分估值的相关系数 $\\rho$：</p>"
+                "$$\\sigma = \\sqrt{(1-w)^2\\sigma_{in}^2 + w^2\\sigma_{out}^2"
+                " + 2w(1-w)\\rho\\,\\sigma_{in}\\sigma_{out}}$$"
+                "<p>本页取 $\\rho = 0$（互不相关），式子只剩前两项。"
+                "注意它是<b>平方相加</b>——不是加权平均。"
+                "这就是为什么圈外的一小块，能顶掉圈内的一大块。</p>"
+            )},
+            {"title": "代入 20% 的圈外暴露", "content": (
+                "<p>$w = 0.2,\\ \\sigma_{in} = 10,\\ \\sigma_{out} = 40$：</p>"
+                "$$\\sigma^2 = 0.8^2 \\times 10^2 + 0.2^2 \\times 40^2"
+                " = " + f"{0.8 ** 2 * 100:.0f}" + " + " + f"{0.2 ** 2 * 1600:.0f}" + " = "
+                + f"{_n(cp['sigma']) ** 2:.0f}" + "$$"
+                "$$\\sigma = " + f"{_n(cp['sigma']):.2f}" + "$$"
+                "<p><b>圈外只占 20% 的仓位，却贡献了整整 "
+                + f"{_n(cp['var_share_out']) * 100:.0f}" + "% 的方差。</b>"
+                "临界点就是 $w^{*} = \\dfrac{\\sigma_{in}}{\\sigma_{in}+\\sigma_{out}} = "
+                + f"{_n(cp['w_crit']) * 100:.0f}" + "\\%$——"
+                "在这一点上，两块方差的贡献恰好相等。</p>"
+                "<p class='mt-2'>这就是「<b>边界比大小重要</b>」的精确版本："
+                "你不需要能力圈很大，但必须知道它在哪，"
+                "因为<b>越界的一小块会立刻主导整体风险</b>。</p>"
+            )},
+            {"title": "换算成击穿概率", "content": (
+                "<p>买价取安全边际 20% 的位置：$P = \\mu(1-0.2) = " + f"{_n(cp['price']):.0f}" + "$。"
+                "标准分</p>"
+                "$$z = \\frac{P-\\mu}{\\sigma} = \\frac{-20}{" + f"{_n(cp['sigma']):.2f}"
+                + "} = " + f"{_n(cp['z']):.3f}" + "$$"
+                "<p>击穿概率 $= " + f"{_n(cp['prob']) * 100:.2f}" + "\\%$，"
+                "而纯圈内只要 $ " + f"{_n(cp['prob_pure']) * 100:.2f}" + "\\%$——"
+                "风险被放大了 <b>" + f"{_n(cp['prob_ratio']):.2f}" + " 倍</b>。</p>"
+                "<p class='mt-2 text-stone-500 text-xs'>换句话说："
+                "同样留 20% 的安全边际，<b>只要把资产放进圈外，边际就不够用了</b>。"
+                "巴菲特的「只买看得懂的生意」不是保守，而是把 σ 锁在分母的一个小区间里。</p>"
+            )},
+        ],
+    }
+
+
+# =====================================================================
+# 9) Lollapalooza：多个倾向同向叠加
+# =====================================================================
+def build_lollapalooza():
+    n, amt = 4, 50
+    lp = K.lollapalooza(n, amt / 100)
+    return {
+        "lesson": {
+            "title": "Lollapalooza：多个倾向同向叠加",
+            "subtitle": "芒格：「当几种心理倾向同时同向作用时，结果会超出任何单一倾向的量级。」",
+            "problem": (
+                "<p>一条心理倾向会把你的冲动放大 <b>50%</b>。这不算多——"
+                "理性一点就压得住。</p>"
+                "<p class='mt-2'>但如果 <b>4 条</b>倾向<b>同时、同方向</b>作用呢？</p>"
+                "<p class='mt-2'>直觉会把它们加起来：$1 + 4 \\times 0.5 = 3$ 倍。"
+                "而真实结果是"
+                "<span class='text-rose-600 font-semibold'>$1.5^4 = "
+                + f"{_n(lp['product']):.2f}" + "$ 倍</span>。</p>"
+                "<p class='mt-2'>拖动滑块，看缺口怎么张开。</p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "lollapalooza", "caption": "乘法叠加 vs 线性直觉"},
+            "view": {"xRange": [1, 10], "yRange": [0, 12]},
+            "params": [
+                {"name": "n", "label": "同向倾向条数 n", "min": 1, "max": 10, "step": 1, "value": n, "unit": " 条", "digits": 0},
+                {"name": "amt", "label": "单条倾向的放大率 a", "min": 10, "max": 120, "step": 5, "value": amt, "unit": "%", "digits": 0},
+            ],
+            "scalars": [
+                {"name": "a", "expr": "amt/100"},
+                {"name": "nMax", "expr": "10"},
+                {"name": "Prod", "expr": "(1+a)^n"},
+                {"name": "Lin", "expr": "1+n*a"},
+                {"name": "Excess", "expr": "Prod/Lin"},
+                {"name": "ExtraPct", "expr": "(Prod-Lin)/Lin"},
+            ],
+            "readouts": [
+                {"id": "prod", "label": "乘法叠加 (1+a)ⁿ", "type": "expr", "expr": "Prod", "digits": 2, "unit": " 倍", "highlight": True},
+                {"id": "lin", "label": "线性直觉 1+na", "type": "expr", "expr": "Lin", "digits": 2, "unit": " 倍", "color": "#0891b2"},
+                {"id": "extra", "label": "超出线性直觉的比例", "type": "expr", "expr": "ExtraPct*100", "digits": 1, "unit": "%", "color": "#dc2626"},
+                {"id": "ex", "label": "实际 / 直觉", "type": "expr", "expr": "Excess", "digits": 2, "unit": " 倍", "color": "#dc2626"},
+                {"id": "ok", "label": "是否出现超线性", "type": "status", "expr": "Excess", "op": ">", "rhs": 1.0, "okText": "已超线性——多条倾向在互相喂养", "badText": "尚未出现叠加效应"},
+            ],
+            "legend": [
+                {"color": "#b45309", "text": "乘法叠加 (1+a)ⁿ"},
+                {"color": "#0891b2", "text": "线性直觉 1+na"},
+                {"color": "#dc2626", "text": "被直觉漏掉的部分"},
+            ],
+        },
+        "steps": [
+            {"title": "两个公式，只差一个位置", "content": (
+                "<p>单条倾向把冲动放大 $(1+a)$ 倍。$n$ 条<b>同向</b>叠加：</p>"
+                "$$\\text{真实} = (1+a)^{n} \\qquad\\text{直觉} = 1 + na$$"
+                "<p>差别只在 $a$ 是乘在<b>外面</b>还是里面的常数上。"
+                "指数放在外面，是复利式放大；直觉却是加法。</p>"
+                "<p class='mt-2'>$n = 1$ 时两者完全相等（都是 $1+a$）——"
+                "所以单条倾向看不出问题，<b>问题只在叠加时才爆发</b>。</p>"
+            )},
+            {"title": "代入 4 条 ×50%", "content": (
+                "$$\\text{真实} = 1.5^{4} = " + f"{_n(lp['product']):.4f}" + "$$"
+                "$$\\text{直觉} = 1 + 4 \\times 0.5 = " + f"{_n(lp['linear']):.0f}" + "$$"
+                "<p>超出 <b>" + f"{_n(lp['extra_pct']) * 100:.1f}" + "%</b>。"
+                "四条各 50% 的倾向，叠出 5 倍多的冲动——"
+                "而每个人都以为只是「加了 4 个 50%」。</p>"
+            )},
+            {"title": "为什么是指数：互相喂养", "content": (
+                "<p>把过程拆开看就明白了：第 1 条把冲动抬到 1.5 倍，"
+                "第 2 条是在这个 1.5 倍<b>上面</b>再抬 50%，"
+                "第 3 条又在前一个结果上抬——每一条都在<b>更高的底座</b>上发力。</p>"
+                "$$1.5 \\to 2.25 \\to 3.375 \\to " + f"{_n(lp['product']):.3f}" + "$$"
+                "<p>把它和「线性相加」的 $1.5 \\to 2.0 \\to 2.5 \\to 3.0$ 对照，"
+                "差距一眼就出来了：<b>直觉假设各条倾向互不影响，"
+                "而真实世界里它们会互相喂养。</b></p>"
+                "<p class='mt-2 text-stone-500 text-xs'>在 a = "
+                + f"{_n(lp['a']) * 100:.0f}" + "% 时，只要 "
+                + str(lp["n_for_double"] or "—") + " 条同向倾向，"
+                "就能让放大倍数<b>超过线性直觉的两倍</b>。</p>"
+            )},
+            {"title": "它长什么样", "content": (
+                "<p>芒格举的例子：</p>"
+                "<ul class='list-disc pl-5 space-y-1'>"
+                "<li><b>拍卖会</b>：社会认同 + 竞争心理 + 稀缺感 + 承诺一致 → 非理性高价；</li>"
+                "<li><b>促销排队</b>：稀缺 + 社会认同 → 明知不缺货仍然排队；</li>"
+                "<li><b>传销 / 邪教</b>：权威 + 社会认同 + 承诺一致 + 剥夺睡眠 → 全面控制。</li>"
+                "</ul>"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3'>"
+                "所以芒格的应对不是「不要有偏见」（人的倾向无法清零），"
+                "而是<b>识别出「几个倾向正在同向叠加」</b>这种结构。"
+                "一旦识别出来，就知道自己正处于指数曲线的陡坡上，该做的动作是<b>离场</b>，"
+                "而不是「再理性分析一下」。</p>"
+            )},
+        ],
+    }
+
+
+# =====================================================================
+# 10) 25 条误判倾向：清单把风险指数级压低
+# =====================================================================
+BIASES = [
+    ("奖励与惩罚超级反应", "拿谁的钱就为谁说话，激励压倒一切", "先画激励结构图"),
+    ("喜爱/热爱", "喜欢的人做什么都对", "把人和事分开评估"),
+    ("讨厌/憎恨", "讨厌的人做什么都错", "同上，先剥离情绪再看证据"),
+    ("避免怀疑", "急着下结论以消除不确定感", "强制给自己一个「再等等」"),
+    ("避免不一致", "公开承诺后很难改口", "公开表态前先内部想清楚"),
+    ("好奇心", "唯一纯正的建设性倾向", "用它去研究，而不是用它去冒险"),
+    ("康德式公平", "要求程序公平，否则宁可两败", "分清「公平」与「划算」"),
+    ("嫉妒", "见不得别人好，驱动非理性竞争", "只跟自己的目标比"),
+    ("回馈", "受了小恩小惠就难以拒绝", "警惕先给好处的一方"),
+    ("简单联想", "因为 A 像 B 就以为 A 是 B", "问「这个类比成立在哪一步」"),
+    ("避免痛苦的否认", "太痛的事实干脆不信", "把坏消息写下来，逼自己看"),
+    ("自视过高", "高估自己的能力与判断", "记录预测，用命中率打分"),
+    ("过度乐观", "系统性地低估失败概率", "用基率而不是感觉"),
+    ("被剥夺超级反应", "失去 100 的痛远大于得到 100", "用「不作为」的代价做对照"),
+    ("社会认同", "看别人怎么做就怎么做", "问「如果没人看到，我还会做吗」"),
+    ("对比误反应", "被前后对比牵着走，而非绝对值", "把绝对价格单独看一遍"),
+    ("压力影响", "高压下判断力急剧下降", "重大决定不在压力下做"),
+    ("易得性误衡量", "容易想起的事被高估概率", "用基率，不用记忆"),
+    ("不用就忘", "不常练的能力会退化", "关键技能定期复习"),
+    ("化学物质误影响", "酒精药物直接损坏判断", "重大决策前保持清醒"),
+    ("衰老误影响", "认知能力随年龄下降", "把决策交给更年轻的头脑复核"),
+    ("权威误影响", "无条件听信专家", "问「他的专业和这个问题相关吗」"),
+    ("废话", "说得多不等于说得对", "只在有信息量时开口"),
+    ("重视理由", "给了理由（哪怕荒谬）就更易被接受", "要证据，不要理由"),
+    ("Lollapalooza", "多个倾向同向叠加产生极端结果", "识别同向叠加，立刻离场"),
+]
+
+
+def build_bias():
+    k, hit, a = 4, 50, 0.5
+    ck_ = K.checklist(k, a, hit / 100)
+    rows = "".join(
+        "<tr class='border-b border-stone-100'>"
+        f"<td class='py-1.5 pr-3 text-stone-400 font-mono text-xs align-top'>{i:02d}</td>"
+        f"<td class='py-1.5 pr-3 font-semibold text-stone-800 align-top'>{name}</td>"
+        f"<td class='py-1.5 pr-3 text-stone-600 align-top'>{desc}</td>"
+        f"<td class='py-1.5 text-stone-500 text-xs align-top'>{fix}</td>"
+        "</tr>"
+        for i, (name, desc, fix) in enumerate(BIASES, 1))
+    return {
+        "lesson": {
+            "title": "误判清单：把风险指数级压下去",
+            "subtitle": "芒格：「聪明人没有不每天用清单的。」——不是不犯错，而是不让错误叠加",
+            "problem": (
+                "<p>第 9 节说：$k$ 条同向倾向会把冲动放大 $(1+a)^k$ 倍。"
+                "$k = 4$、$a = 50\\%$ 时就是 " + f"{_n(ck_['gross']):.2f}" + " 倍。</p>"
+                "<p class='mt-2'>清单能做什么？它不能消除倾向，"
+                "但每条倾向被拦下的概率是 <b>50%</b>（只要真的逐条问过）。</p>"
+                "<p class='mt-2'>拦下一条，就少一个「互相喂养」的因子。"
+                "拖动滑块看：<span class='text-rose-600 font-semibold'>"
+                "同向倾向越多，清单越值钱。</span></p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "checklist", "caption": "拦截率随同向倾向条数上升"},
+            "view": {"xRange": [1, 10], "yRange": [0, 1]},
+            "params": [
+                {"name": "kk", "label": "同时激活的同向倾向条数 k", "min": 1, "max": 10, "step": 1, "value": k, "unit": " 条", "digits": 0},
+                {"name": "hit", "label": "清单对单条倾向的拦截率", "min": 10, "max": 90, "step": 5, "value": hit, "unit": "%", "digits": 0},
+            ],
+            "scalars": [
+                {"name": "a", "expr": "0.5"},
+                {"name": "kMax", "expr": "10"},
+                {"name": "Gross", "expr": "(1+a)^kk"},
+                {"name": "Net", "expr": "((1+a)*(1-hit/100))^kk"},
+                {"name": "Blocked", "expr": "1-(1-hit/100)^kk"},
+                {"name": "Cut", "expr": "Gross/Net"},
+            ],
+            "readouts": [
+                {"id": "blocked", "label": "被清单拦下的比例", "type": "expr", "expr": "Blocked*100", "digits": 1, "unit": "%", "highlight": True},
+                {"id": "gross", "label": "不上清单：冲动放大", "type": "expr", "expr": "Gross", "digits": 2, "unit": " 倍", "color": "#dc2626"},
+                {"id": "net", "label": "上清单后：残余放大", "type": "expr", "expr": "Net", "digits": 3, "unit": " 倍", "color": "#059669"},
+                {"id": "cut", "label": "风险被压低", "type": "expr", "expr": "Cut", "digits": 2, "unit": " 倍", "color": "#059669"},
+                {"id": "ok", "label": "残余放大是否已被压到 1 倍以下", "type": "status", "expr": "Net", "op": "<", "rhs": 1.0, "okText": "已压到无放大", "badText": "仍处于放大状态"},
+            ],
+            "legend": [
+                {"color": "#059669", "text": "上清单后的拦截率"},
+                {"color": "#78716c", "text": "单条拦截率（清单基线）"},
+            ],
+        },
+        "steps": [
+            {"title": "清单的数学形式", "content": (
+                "<p>每一条倾向被清单拦下的概率是 $h$。那么 $k$ 条同向倾向的<b>残余放大</b>是</p>"
+                "$$\\text{残余} = (1+a)^k (1-h)^k = \\big[(1+a)(1-h)\\big]^{k}$$"
+                "<p>而<b>拦截率</b>只跟 $h$ 和 $k$ 有关：</p>"
+                "$$\\text{拦截率} = 1 - (1-h)^{k}$$"
+                "<p class='mt-2'>注意 $(1-h)^k$ 里 $k$ 在指数上——"
+                "<b>拦截率随条数呈指数逼近 100%</b>，而不是线性地涨。</p>"
+            )},
+            {"title": "代入 k = 4、h = 50%", "content": (
+                "$$h = 0.5,\\quad k = 4$$"
+                "$$\\text{拦截率} = 1 - 0.5^{4} = " + f"{_n(ck_['blocked']):.4f}"
+                " = " + f"{_n(ck_['blocked']) * 100:.1f}" + "\\%$$"
+                "$$\\text{残余放大} = (1.5 \\times 0.5)^{4} = 0.75^{4} = "
+                + f"{_n(ck_['net']):.4f}" + " < 1$$"
+                "<p>冲动从 <b>" + f"{_n(ck_['gross']):.2f}" + " 倍</b>降到 <b>"
+                + f"{_n(ck_['net']):.3f}" + " 倍</b>——"
+                "拦掉 <b>" + f"{_n(ck_['blocked']) * 100:.1f}" + "%</b>，风险被压低 <b>"
+                + f"{_n(ck_['cut']):.1f}" + " 倍</b>。</p>"
+                "<p class='mt-2 text-stone-500 text-xs'>关键在于："
+                "$h = 50\\%$ 听起来只是「一份一半的用处的清单」，"
+                "但 $k = 4$ 条同向倾向时，它把整条指数曲线压到了 1 以下。"
+                "<b>越是容易出错的结构，清单越值钱。</b></p>"
+            )},
+            {"title": "25 条人类误判倾向（芒格原表）", "content": (
+                "<p>下面就是芒格在《人类误判心理学》里列出的 25 条。"
+                "清单的用法不是「防止有倾向」，而是<b>在重大决策前逐条问一遍</b>："
+                "这一条现在有没有在起作用？</p>"
+                "<div class='mt-3 overflow-x-auto'><table class='w-full text-sm'>"
+                "<thead><tr class='border-b-2 border-stone-300 text-left text-xs uppercase text-stone-400'>"
+                "<th class='py-2 pr-3' style='width:2rem'>#</th>"
+                "<th class='py-2 pr-3'>倾向</th><th class='py-2 pr-3'>它怎么害你</th>"
+                "<th class='py-2'>对策</th></tr></thead>"
+                "<tbody>" + rows + "</tbody></table></div>"
+                "<p class='mt-3 text-stone-500 text-xs'>其中第 25 条就是上一页的 Lollapalooza——"
+                "它不是又一条倾向，而是<b>前面 24 条叠加起来</b>的那种结构性风险。"
+                "所以清单要一直问到第 25 条为止。</p>"
+            )},
+            {"title": "怎么真的用起来", "content": (
+                "<ul class='list-disc pl-5 space-y-1'>"
+                "<li><b>只用在高风险决策上</b>：不可逆、金额大、时间紧——这三类才值得走一遍 25 条；</li>"
+                "<li><b>逐条问「此刻它在不在」</b>，而不是「我有没有这个毛病」——"
+                "前者能得到证据，后者只会得到自我辩护；</li>"
+                "<li><b>优先查同向叠加</b>：一旦有 3–4 条指向同一个方向，"
+                "就停止寻找理由，改找<b>离场</b>的理由；</li>"
+                "<li><b>把它写下来</b>：写在纸上的清单才有 $h$；"
+                "存在脑子里的清单，$h$ 趋近于 0。</li>"
+                "</ul>"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3'>"
+                "「反过来想」+「激励优先」+「能力圈」+「清单」，"
+                "四件事其实在说同一句话：<b>先保证自己不犯大错，收益自然会来。</b></p>"
+            )},
+        ],
+    }
+
+
 REGISTRY = {
     "compound": build_compound,
     "bayes": build_bayes,
     "expected": build_expected,
     "safety": build_safety,
     "opportunity": build_opportunity,
+    "inversion": build_inversion,
+    "incentive": build_incentive,
+    "competence": build_competence,
+    "lollapalooza": build_lollapalooza,
+    "bias": build_bias,
 }
 
-ORDER = ["compound", "bayes", "expected", "safety", "opportunity"]
+ORDER = ["compound", "bayes", "expected", "safety", "opportunity",
+         "inversion", "incentive", "competence", "lollapalooza", "bias"]
 
 META = {
     "compound": ("复利", "时间是朋友还是敌人", "指数增长 · 72 法则 · 负债的另一面"),
@@ -512,6 +1072,11 @@ META = {
     "expected": ("期望值与凯利", "为什么全押必输", "算术期望 · 几何增长 · 半凯利"),
     "safety": ("安全边际", "估计必然出错，所以要留冗余", "正态分布 · 击穿概率 · 能力圈"),
     "opportunity": ("机会成本", "选 A 的真实成本是放弃的 B", "最优替代 · 真实净收益"),
+    "inversion": ("反过来想", "最弱环节决定生死", "串联存活率 · 最弱环节优先 · 避免愚蠢"),
+    "incentive": ("激励优先", "佣金决定行为", "委托—代理 · 目标分岔 · 对齐点"),
+    "competence": ("能力圈", "边界比大小重要", "暴露比例 · σ 预算 · 击穿概率"),
+    "lollapalooza": ("Lollapalooza", "多个倾向同向叠加", "乘法放大 · 互相喂养 · 超线性"),
+    "bias": ("误判清单", "把风险指数级压下去", "25 条倾向 · 拦截率 · 逐条自检"),
 }
 
 
@@ -537,11 +1102,13 @@ def build_index(out):
 <body class="bg-stone-100 text-stone-900">
 <div class="max-w-4xl mx-auto px-6 py-12">
     <div class="text-xs uppercase tracking-widest text-amber-600 font-bold mb-2">Charlie Munger · Latticework of Mental Models</div>
-    <h1 class="text-3xl font-bold mb-3">思维模型：可量化的那部分</h1>
+    <h1 class="text-3xl font-bold mb-3">思维模型：可算的那一部分</h1>
     <p class="text-stone-600 leading-relaxed max-w-2xl">
         芒格说：「你必须知道重要学科的重要理论，并经常使用它们——要全部都用上，而不是只用几个。」
-        下面 5 个模型是其中<b>能算清楚</b>的部分：拖动滑块，看数字如何改变你的判断。
-        每页含分步解析与定值/状态指示，所有数值由 sympy 精确计算。
+        下面 <b>10 个模型</b>是这套格栅里<b>能算清楚</b>的部分：前 5 个是数学地基
+        （复利、贝叶斯、凯利、安全边际、机会成本），后 5 个把芒格最常说的四句话
+        （反过来想 · 看激励 · 守能力圈 · 用清单）落成了可计算的形状。
+        拖动滑块，看数字如何改变你的判断——所有数值由 sympy 精确计算，与配套文档同源。
     </p>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
         {''.join(cards)}

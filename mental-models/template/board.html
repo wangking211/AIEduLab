@@ -96,6 +96,15 @@ function evalExpr(expr, env){
 const resolveVal = (v, env) => (typeof v === 'string') ? evalExpr(v, env) : v;
 function fmt(x, d=2){
     if (x === null || x === undefined || !isFinite(x)) return '—';
+    const ax = Math.abs(x);
+    // 指数叠加的页面会出现 1e6 级倍数与 1e-4 级残余：定点格式会退化成 1000000.00 / 0.000
+    if (ax >= 10000) return Math.round(x).toLocaleString('zh-CN');
+    if (ax > 0 && ax < 1e-3){
+        const sup = {'-':'⁻','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴',
+                     '5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+        const [m, e] = x.toExponential(1).split('e');
+        return m + '×10' + e.split('').map(c => sup[c] || c).join('');
+    }
     let s = x.toFixed(d);
     if (s === '-' + (0).toFixed(d)) s = (0).toFixed(d);
     return s;
@@ -476,6 +485,223 @@ function drawOpportunity(S){
                     : '✗ 扣掉机会成本后的真实净收益：'+fmt(net,0)+' 万',
                  (SX(0)+SX(hi))/2, SY(yr[1])-30);
 }
+// ---- 6) 反过来想：串联环节 + 三种做法的存活率对比 ----
+function drawInversion(S){
+    const H=cssH, W=cssW;
+    const topH=Math.round(H*0.40);
+    const n=Math.max(1, Math.round(S.n));
+    const fw=1-S.pw/100, fr=1-S.pr/100;
+
+    // ① n 个必要环节串联：第 1 环是最弱的那个（顺序不影响乘积，这里固定放最前）
+    ctx.fillStyle=P.dim; ctx.font='bold 10.5px system-ui';
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText('① '+n+' 环串联：任何一环失效，全盘皆输', 14, 4);
+    const gL=14, gR=14, gw=W-gL-gR;
+    const bw=Math.min(40, Math.max(5, gw/n*0.66));
+    const baseY=topH-30, hMax=Math.max(18, topH-76);
+    for (let i=0;i<n;i++){
+        const cx=gL+gw*(i+0.5)/n;
+        const weak=(i===0);
+        const rel=weak?fw:fr;
+        const h=Math.max(2.5, hMax*rel);
+        ctx.fillStyle=weak?P.bad:'#57534e';
+        ctx.fillRect(cx-bw/2, baseY-h, bw, h);
+        ctx.font='bold 9.5px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+        ctx.fillStyle=weak?P.bad:P.text;
+        ctx.fillText(fmt(rel*100,0)+'%', cx, baseY-h-2);
+    }
+    ctx.strokeStyle=P.axis; ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.moveTo(gL, baseY); ctx.lineTo(gL+gw, baseY); ctx.stroke();
+    ctx.font='bold 10px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle=P.bad;
+    ctx.fillText('↑ 最弱一环：失效概率 '+fmt(S.pw,0)+'%', gL, baseY+4);
+    ctx.fillStyle=P.dim; ctx.textAlign='right';
+    ctx.fillText('其余 '+(n-1)+' 环各 '+fmt(S.pr,0)+'%', gL+gw, baseY+4);
+
+    // ② 三种做法下的整体存活率（把画布下半部铺满，避免大片留白）
+    const split=topH+34;
+    const avail=H-split-22;
+    const rowH=avail/3;
+    const bh=Math.max(14, Math.min(52, rowH*0.40));
+    const barX=Math.min(124, W*0.38), barW=Math.max(60, W-barX-58);
+    ctx.font='bold 10.5px system-ui'; ctx.fillStyle=P.dim;
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText('② 反过来想：先修哪一个？', 14, split-24);
+    const x50=barX+barW*0.5;
+    ctx.strokeStyle=P.dim; ctx.lineWidth=1.1; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(x50, split-2); ctx.lineTo(x50, split+avail); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font='9.5px system-ui'; ctx.fillStyle=P.dim;
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText('50% 基准', x50+5, split+3);
+    const recs=[['现状', S.Sw, P.bad], ['先堵最弱的洞', S.Sc, P.good], ['普通环节各减半', S.Sp, P.curve2]];
+    recs.forEach(([lab,v,c],i)=>{
+        const cy=split+rowH*i+rowH*0.5;
+        ctx.font='11.5px system-ui'; ctx.fillStyle=P.text;
+        ctx.textAlign='left'; ctx.textBaseline='middle';
+        ctx.fillText(lab, 14, cy);
+        const w=Math.max(2, barW*Math.max(0, Math.min(1, v)));
+        ctx.fillStyle=c; ctx.fillRect(barX, cy-bh/2, w, bh);
+        ctx.font='bold 12px system-ui'; ctx.fillStyle=P.text;
+        ctx.fillText(fmt(v*100,1)+'%', barX+w+7, cy);
+    });
+
+    // 结论：哪种做法更值钱（倍数由内核算出）
+    ctx.font='bold 11px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillStyle=S.FixGain>=S.PolGain ? P.good : P.curve2;
+    ctx.fillText('先堵最弱一环 ×'+fmt(S.FixGain,2)+'　vs　全员优化 ×'+fmt(S.PolGain,2),
+                 W/2, H-6);
+}
+
+// ---- 7) 激励优先：委托人与代理人的最优努力分岔 ----
+function drawIncentive(S){
+    const H=cssH, W=cssW;
+    const xMax=Math.max(4, S.xMax);
+    const V=x=>S.vLin*x - S.vQuad*x*x;
+    const U=x=>S.commission*x - S.cQuad*x*x;
+    const yTop=Math.max(1, V(S.xP), V(S.xA), U(S.xA))*1.18;
+    const R=panel(0, 26, W, H-58, [0, xMax], [-yTop*0.12, yTop]);
+    R.axis('努力 / 服务质量 x', '收益', niceTicks(0, xMax, 5), niceTicks(0, yTop, 4));
+    const pts=f=>{const a=[]; for(let i=0;i<=160;i++){const x=xMax*i/160; a.push([x,f(x)]);} return a;};
+    R.line(pts(V), P.curve, 2.6);
+    R.line(pts(U), P.curve2, 2.6);
+    // 两个最优点：委托人（绿）与代理人（红）
+    R.line([[S.xP,0],[S.xP,yTop]], P.good, 1.8, true);
+    R.line([[S.xA,0],[S.xA,yTop]], P.bad, 1.8, true);
+    R.ptxt(R.sx(S.xP), R.iy-2, '委托人最优 x='+fmt(S.xP,1), P.good, 'center', 10);
+    R.ptxt(R.sx(S.xA), R.iy+11, '代理人最优 x='+fmt(S.xA,1), P.bad, 'center', 10);
+    // 缺口：两个最优点之间的水平双箭头，画在收益的 55% 高度
+    const yGap=yTop*0.55;
+    const x1=R.sx(S.xP), x2=R.sx(S.xA);
+    ctx.strokeStyle=P.bad; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(x1, R.sy(yGap)); ctx.lineTo(x2, R.sy(yGap)); ctx.stroke();
+    const d=(x2>x1?1:-1);
+    [x1,x2].forEach(xx=>{ ctx.beginPath(); ctx.moveTo(xx+6*d, R.sy(yGap)-4);
+        ctx.lineTo(xx, R.sy(yGap)); ctx.lineTo(xx+6*d, R.sy(yGap)+4); ctx.stroke(); });
+    ctx.font='bold 10.5px system-ui'; ctx.fillStyle=P.bad;
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillText('错配 '+fmt(Math.abs(S.xA-S.xP),1)+' 单位', (x1+x2)/2, R.sy(yGap)-5);
+    // 图例与结论
+    ctx.font='bold 10.5px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle=P.curve; ctx.fillText('顾客价值 V(x)', 14, 6);
+    ctx.fillStyle=P.curve2; ctx.fillText('代理人收入 U(x)', 14, 20);
+    ctx.textAlign='right'; ctx.textBaseline='top';
+    ctx.fillStyle=P.dim;
+    ctx.fillText('每单提成 '+fmt(S.commission,0)+'（对齐需 '+fmt(S.AlignC,0)+'）', W-14, 6);
+    const aligned=S.Aligned>0;
+    ctx.font='bold 11.5px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillStyle=aligned?P.good:P.bad;
+    ctx.fillText(aligned ? '✓ 提成恰好对齐：代理人自己就想做对的事'
+                         : '✗ 顾客白损失 '+fmt(S.Loss,0)+'（占其最优价值的 '+fmt(S.LossShare*100,0)+'%）',
+                 W/2, H-6);
+}
+
+// ---- 8) 能力圈：圈外暴露比例 → 整体 σ → 击穿概率 ----
+function drawCompetence(S){
+    const H=cssH, W=cssW;
+    const Phi=z=>0.5*(1+_erf(z/Math.SQRT2));
+    const sig=w=>Math.sqrt((1-w)*(1-w)*S.si*S.si + w*w*S.so*S.so
+                           + 2*w*(1-w)*S.rho*S.si*S.so);
+    const prob=w=>Phi((S.Price-S.mu)/(sig(w)||1e-9));
+    const hi=Math.max(0.08, Math.min(0.6, prob(1)*1.15));
+    const R=panel(0, 26, W, H-58, [0,1], [0, hi]);
+    R.axis('圈外暴露比例 w', '击穿概率', niceTicks(0,1,5), niceTicks(0,hi,4));
+    // 5% 警戒线 + 纯圈内基准
+    R.line([[0,0.05],[1,0.05]], P.good, 1.5, true);
+    const pPure=prob(0);
+    R.line([[0,pPure],[1,pPure]], P.dim, 1.3, true);
+    // 击穿概率曲线
+    const pts=[]; for(let i=0;i<=160;i++){const w=i/160; pts.push([w, prob(w)]);}
+    R.line(pts, P.bad, 2.6);
+    // 临界 w*：圈外方差贡献 = 圈内
+    R.line([[S.WCrit,0],[S.WCrit,hi]], P.curve2, 1.8, true);
+    R.ptxt(R.sx(S.WCrit), R.iy+11, '临界 w*='+fmt(S.WCrit,2), P.curve2, 'center', 10);
+    // 当前 w
+    const w=Math.max(0, Math.min(1, S.W)), pNow=prob(w);
+    R.line([[w,0],[w,hi]], P.curve, 1.8, true);
+    ctx.fillStyle=P.curve; ctx.beginPath(); ctx.arc(R.sx(w), R.sy(pNow), 5, 0, 7); ctx.fill();
+    R.ptxt(R.sx(w), R.sy(pNow)-13, fmt(pNow*100,1)+'%', P.curve, 'center', 11, 'bold');
+    // 标注
+    ctx.font='bold 10.5px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle=P.good; ctx.fillText('5% 警戒', 14, 6);
+    ctx.fillStyle=P.dim; ctx.fillText('纯圈内 '+fmt(pPure*100,2)+'%', 14, 20);
+    ctx.textAlign='right';
+    ctx.fillStyle=P.curve2; ctx.fillText('圈外吃掉一半方差', W-14, 6);
+    ctx.font='bold 11.5px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillStyle=S.Safe>0?P.good:P.bad;
+    ctx.fillText('σ '+fmt(S.SigmaNow,2)+'（圈内 '+fmt(S.si,0)+' / 圈外 '+fmt(S.so,0)+'）'
+                 +'　圈外占方差 '+fmt(S.VarShare*100,0)+'%'
+                 +'　风险 ×'+fmt(S.ProbRatio,2), W/2, H-6);
+}
+
+// ---- 9) Lollapalooza：乘法叠加 vs 线性直觉的缺口 ----
+function drawLollapalooza(S){
+    const H=cssH, W=cssW;
+    const a=S.a, nMax=Math.max(4, Math.round(S.nMax));
+    const prod=n=>Math.pow(1+a, n), lin=n=>1+a*n;
+    const hi=Math.max(3, prod(nMax))*1.08;
+    const R=panel(0, 26, W, H-58, [1, nMax], [0, hi]);
+    R.axis('同向倾向条数 n', '放大倍数', niceTicks(1, nMax, 5), niceTicks(0, hi, 4));
+    // 两条曲线之间的缺口（超线性部分）填充
+    ctx.beginPath();
+    for(let i=0;i<=nMax*8;i++){ const n=1+i/8; const x=R.sx(n), y=R.sy(prod(n));
+        i? ctx.lineTo(x,y) : ctx.moveTo(x,y); }
+    for(let i=nMax*8;i>=0;i--){ const n=1+i/8; ctx.lineTo(R.sx(n), R.sy(lin(n))); }
+    ctx.closePath(); ctx.fillStyle=P.fill; ctx.fill();
+    const cP=[]; for(let n=1;n<=nMax*8;n++){ const x=n/8; if(x<1) continue; cP.push([x, prod(x)]); }
+    R.line(cP, P.curve, 2.6);
+    const cL=[]; for(let n=1;n<=nMax*8;n++){ const x=n/8; if(x<1) continue; cL.push([x, lin(x)]); }
+    R.line(cL, P.curve2, 2.2, true);
+    // 当前 n
+    const n0=Math.max(1, Math.min(nMax, Math.round(S.n)));
+    R.line([[n0,0],[n0,hi]], P.dim, 1.4, true);
+    ctx.fillStyle=P.curve; ctx.beginPath(); ctx.arc(R.sx(n0), R.sy(prod(n0)), 5, 0, 7); ctx.fill();
+    ctx.fillStyle=P.curve2; ctx.beginPath(); ctx.arc(R.sx(n0), R.sy(lin(n0)), 4.5, 0, 7); ctx.fill();
+    R.ptxt(R.sx(n0), R.sy(prod(n0))-13, fmt(prod(n0),2)+'×', P.curve, 'center', 11, 'bold');
+    R.ptxt(R.sx(n0), R.sy(lin(n0))-13, fmt(lin(n0),2)+'×', P.curve2, 'center', 10.5);
+    ctx.font='bold 10.5px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle=P.curve; ctx.fillText('乘法叠加 (1+a)ⁿ', 14, 6);
+    ctx.fillStyle=P.curve2; ctx.fillText('线性直觉 1+na', 14, 20);
+    ctx.textAlign='right'; ctx.fillStyle=P.dim;
+    ctx.fillText('单条放大 '+fmt((1+a)*100-100,0)+'%', W-14, 6);
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.font='bold 11.5px system-ui';
+    const ex=prod(n0)/lin(n0);
+    ctx.fillStyle=ex>1?P.bad:P.dim;
+    ctx.fillText(ex>1 ? '超出线性直觉 '+fmt((ex-1)*100,0)+'%（再多一条就更陡）'
+                      : '还没有叠加效应', W/2, H-6);
+}
+
+// ---- 10) 误判清单：拦截率随同向倾向条数指数逼近 100% ----
+function drawChecklist(S){
+    const H=cssH, W=cssW;
+    const hit=Math.max(0, Math.min(1, S.hit/100)), kMax=10;
+    const blocked=k=>1-Math.pow(1-hit, k);
+    const R=panel(0, 26, W, H-58, [1, kMax], [0, 1]);
+    R.axis('同时激活的同向倾向条数 k', '拦截率', niceTicks(1, kMax, 5), niceTicks(0, 1, 4));
+    // 基线：单条拦截率（若不上清单则为 0）
+    R.line([[1,hit],[kMax,hit]], P.dim, 1.3, true);
+    R.line([[1,0],[kMax,0]], P.bad, 1.3, true);
+    const pts=[]; for(let k=1;k<=kMax;k+=0.25) pts.push([k, blocked(k)]);
+    R.line(pts, P.good, 2.8);
+    const k0=Math.max(1, Math.min(kMax, Math.round(S.kk)));
+    R.line([[k0,0],[k0,1]], P.curve, 1.8, true);
+    const b0=blocked(k0);
+    ctx.fillStyle=P.good; ctx.beginPath(); ctx.arc(R.sx(k0), R.sy(b0), 5, 0, 7); ctx.fill();
+    R.ptxt(R.sx(k0), R.sy(b0)-13, fmt(b0*100,1)+'%', P.good, 'center', 11, 'bold');
+    // 标注
+    ctx.font='bold 10.5px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle=P.good; ctx.fillText('上清单后的拦截率 1−(1−h)ᵏ', 14, 6);
+    ctx.fillStyle=P.dim; ctx.fillText('单条拦截率 h='+fmt(hit*100,0)+'%', 14, 20);
+    ctx.fillStyle=P.bad; ctx.fillText('不上清单：拦截 0%', 14, 34);
+    // 结论：k 条下的残余放大（乘法）
+    const a=S.a, gross=Math.pow(1+a, k0), net=Math.pow((1+a)*(1-hit), k0);
+    ctx.font='bold 11.5px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillStyle=net<1?P.good:P.bad;
+    ctx.fillText((net<1?'✓ ':'')+'冲动 '+fmt(gross,2)+'× → 上清单后 '+fmt(net,3)+'×'
+                 +'　（压低 '+fmt(gross/net,2)+'×）', W/2, H-6);
+}
+
 const rangeTicks=(a,b,n,round=false)=>{
     const out=[]; for(let i=0;i<=n;i++){ const v=a+(b-a)*i/n; out.push(round? Math.round(v/10)*10 : Math.round(v*10)/10); }
     return out;
@@ -508,6 +734,11 @@ function render(){
         case 'expected': drawExpected(S); break;
         case 'safety': drawSafety(S); break;
         case 'opportunity': drawOpportunity(S); break;
+        case 'inversion': drawInversion(S); break;
+        case 'incentive': drawIncentive(S); break;
+        case 'competence': drawCompetence(S); break;
+        case 'lollapalooza': drawLollapalooza(S); break;
+        case 'checklist': drawChecklist(S); break;
     }
     updateReadouts(S);
 }
