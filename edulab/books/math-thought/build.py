@@ -40,13 +40,18 @@ def esc(s):
 
 
 PROSE_TOKEN = re.compile(r"@@([a-z_][a-z0-9_]*)(?::(\d+))?@@")
+PROSE_BASELINE = HERE / "prose-values.json"     # 每个 @@记号@@ 该渲染成什么（审批式基线）
 
 
-def subst_prose(text, values, where):
+def subst_prose(text, values, where, seen=None):
     """把正文里的 @@name@@ / @@name:3@@ 换成 figures.py 现算出来的值。
 
     这是「生成路径」的落地：正文里凡是图形也算得出的数，都不再手写。
     拼错的名字**直接报错**（而不是静默留白）—— 留白比错误更危险。
+
+    `seen` 记录「记号 → 渲染出来的字符串」，用于和 prose-values.json 逐项比对：
+    光有「值来自内核」还不够，还得保证**呈现方式**也没被悄悄改掉
+    （曾经把默认精度写成两位小数，`6×6 = 36` 就渲染成了 `6.00\times 6.00 = 36.00`）。
     """
     if not isinstance(text, str) or "@@" not in text:
         return text
@@ -58,27 +63,32 @@ def subst_prose(text, values, where):
                            f"（可用：{', '.join(sorted(values)) or '无'}）")
         v = values[name]
         if prec is not None:                      # 显式指定精度（如需 0.790 这类保留位）
-            return f"{v:.{int(prec)}f}"
-        if abs(v - round(v)) < 1e-9:              # 默认：整数就写整数，别写成 6.00
-            return str(int(round(v)))
-        return f"{v:.2f}"
+            rendered = f"{v:.{int(prec)}f}"
+        elif abs(v - round(v)) < 1e-9:            # 默认：整数就写整数，别写成 6.00
+            rendered = str(int(round(v)))
+        else:
+            rendered = f"{v:.2f}"
+        if seen is not None:
+            seen[name] = rendered
+        return rendered
     return PROSE_TOKEN.sub(one, text)
 
 
-def subst_chapter(ch, values):
+def subst_chapter(ch, values, seen, where="章节正文"):
     """递归地把一章里所有字符串字段都过一遍替换。"""
     if isinstance(ch, str):
-        return subst_prose(ch, values, "章节正文")
+        return subst_prose(ch, values, where, seen)
     if isinstance(ch, list):
-        return [subst_chapter(x, values) for x in ch]
+        return [subst_chapter(x, values, seen, where) for x in ch]
     if isinstance(ch, dict):
-        return {k: subst_chapter(v, values) for k, v in ch.items()}
+        return {k: subst_chapter(v, values, seen, where) for k, v in ch.items()}
     return ch
 
 
 def build_chapter(book, ch, fig_specs, out_dir):
     values = FIGS.prose_values(ch.get("figs", []))
-    ch = subst_chapter(ch, values)
+    seen = {}
+    ch = subst_chapter(ch, values, seen)
     data = {"book": book, "chapter": ch, "figures": {k: fig_specs[k] for k in ch.get("figs", []) if k in fig_specs}}
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     if "@@" in payload:
@@ -89,7 +99,7 @@ def build_chapter(book, ch, fig_specs, out_dir):
             .replace("__BOOK_DATA__", payload))
     out = out_dir / f"{ch['id']}.html"
     out.write_text(html, encoding="utf-8-sig")
-    return out
+    return out, seen
 
 
 def build_index(book, fig_specs, out_dir):
@@ -145,6 +155,8 @@ def build_index(book, fig_specs, out_dir):
 
 
 def main(argv):
+    update = "--update" in argv
+    argv = [a for a in argv if not a.startswith("--")]
     out_dir = Path(argv[0]) if argv else HERE / "output"
     out_dir.mkdir(parents=True, exist_ok=True)
     book = json.loads((HERE / "book.json").read_text(encoding="utf-8-sig"))
@@ -169,7 +181,7 @@ def main(argv):
         return 1
     print(f"✓ 插图校验通过（{len(all_figs)} 张）")
 
-    written = []
+    written, all_seen = [], {}
     for ch in book["chapters"]:
         ch_path = HERE / "chapters" / f"{ch['id']}.json"
         if not ch_path.exists():
@@ -178,8 +190,36 @@ def main(argv):
         cdata = json.loads(ch_path.read_text(encoding="utf-8-sig"))
         cdata.setdefault("num", ch["num"])
         cdata.setdefault("figs", ch.get("figs", []))       # 插图清单写在 book.json 的章节条目里
-        written.append(build_chapter(book, cdata, all_figs, out_dir))
+        p, seen = build_chapter(book, cdata, all_figs, out_dir)
+        written.append(p)
+        if seen:
+            all_seen[cdata["id"]] = seen
     written.append(build_index(book, all_figs, out_dir))
+
+    # ---- 生成值基线：正文里每个 @@记号@@ 渲染成什么，必须与基线逐项一致 ----
+    # 光有「值来自内核」不够 —— 呈现方式（精度）被悄悄改掉也会出错。
+    baseline = (json.loads(PROSE_BASELINE.read_text(encoding="utf-8-sig"))
+                if PROSE_BASELINE.exists() else {})
+    if update:
+        PROSE_BASELINE.write_text(
+            json.dumps(all_seen, ensure_ascii=False, indent=1, sort_keys=True) + "\n",
+            encoding="utf-8")
+        print(f"✓ 生成值基线已刷新：{PROSE_BASELINE.name}"
+              f"（{sum(len(v) for v in all_seen.values())} 个记号）")
+    else:
+        diffs = []
+        for cid in sorted(set(baseline) | set(all_seen)):
+            b, g = baseline.get(cid, {}), all_seen.get(cid, {})
+            for k in sorted(set(b) | set(g)):
+                if b.get(k) != g.get(k):
+                    diffs.append(f"  {cid}  @@{k}@@  基线={b.get(k)!r}  现在={g.get(k)!r}")
+        if diffs:
+            print("\n❌ 生成值与基线不一致（正文里的数字或精度变了）：")
+            print("\n".join(diffs))
+            print("  确认改动符合预期后：python build.py --update")
+            return 1
+        print(f"✓ 生成值基线一致（{sum(len(v) for v in all_seen.values())} 个记号）")
+
     for p in written:
         print(f"written: {p}")
     return 0

@@ -1371,6 +1371,31 @@ def fig_hyperbolic():
             "layers": layers, "steps": steps}
 
 
+def machine_values():
+    """判定 0ⁿ1ⁿ 那台机器的三个数 —— 正文与图形共用。"""
+    snaps, _status = _tm_run(MQ_DELTA, "0011", "q0", MQ_HALTS, MA_BLANK)
+    return {"tm_steps": len(snaps) - 1, "tm_rules": len(MQ_DELTA),
+            "tm_syms": len(MA_SYM)}
+
+
+def roots_values(n=5):
+    """正 n 边形的对称操作数 —— 正文与图形共用。"""
+    return {"roots_n": n, "roots_axes": n, "roots_rot": n, "roots_sym": 2 * n}
+
+
+def sphere_values(lon_span=90.0):
+    """球面「八分之一」三角形的角读数 —— 正文与图形共用。
+
+    注意一处**机制盖不住**的地方：页面上「八分之一 / 四分之一」是汉字写的分数，
+    本机制只替换数字，所以那两个词仍手写 —— 而当初的错恰恰就出在词上
+    （见 check_semantics 里「设计上不可查」的四类）。
+    """
+    ang = lon_span                  # 两经线在北极的交角 = 经度差；经线与赤道也正交
+    total = ang * 3
+    return {"sphere_angle": ang, "sphere_total": total,
+            "sphere_excess": total - 180.0, "sphere_lon": lon_span}
+
+
 def fig_sphere():
     """球面几何：八分之一球面三角形，内角和 270°，角盈 90°。"""
     vr, vl = _polar(0, 0), _polar(0, 90)
@@ -1777,7 +1802,7 @@ def cayley_values():
     """D₃ 的规模 —— 正文与图形共用。"""
     names, _, tbl = _d3()
     n = len(names)
-    return {"n": n, "cells": n * n}
+    return {"cayley_n": n, "cayley_cells": n * n}
 
 
 def fig_cayley():
@@ -2673,6 +2698,9 @@ PROSE = {
     "fig-curvature": curvature_values,
     "fig-dice": dice_values,
     "fig-cayley": cayley_values,
+    "fig-sphere": sphere_values,
+    "fig-roots": roots_values,
+    "fig-machine": machine_values,
 }
 
 

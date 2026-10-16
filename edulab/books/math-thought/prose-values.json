@@ -1,0 +1,41 @@
+{
+ "ch04": {
+  "exact": "3.750",
+  "n1": "1.500",
+  "n8": "3.346"
+ },
+ "ch05": {
+  "at7": "6",
+  "extreme": "1",
+  "sides": "6",
+  "total": "36"
+ },
+ "ch06": {
+  "a1": "27.35",
+  "a2": "27.35",
+  "a3": "80.06",
+  "area": "0.790",
+  "defect": "45.24",
+  "flat_angle": "38.7",
+  "flat_tot": "180.0",
+  "hyp_angle": "27.3",
+  "hyp_tot": "134.8",
+  "sph_angle": "90.0",
+  "sph_tot": "270.0",
+  "sphere_excess": "90",
+  "sphere_total": "270",
+  "tot": "134.76"
+ },
+ "ch07": {
+  "cayley_cells": "36",
+  "cayley_n": "6",
+  "roots_axes": "5",
+  "roots_rot": "5",
+  "roots_sym": "10"
+ },
+ "ch08": {
+  "tm_rules": "16",
+  "tm_steps": "20",
+  "tm_syms": "4"
+ }
+}
