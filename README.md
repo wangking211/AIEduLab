@@ -22,6 +22,7 @@ AIEduLab/
 │   │   └── sync_video_assets.py 把 shared/video 真源同步进各视频技能的 template/
 │   ├── books/math-thought/ 第一本书《数学思想：从计数到无穷》（8 章 36 图）
 │   ├── skills/             13 个学科技能（数理化生 + 初高中物理/几何 + 视频 + CS）
+│   ├── coverage-audit.md   「图解能覆盖多少知识」的可行性审计（现算，可重跑）
 │   └── demos/ out/         手写 HTML 演示
 ├── .agents/skills/         技能安装副本（**本地目录，不进版本库**；真源是 edulab/skills/）
 ├── .agents/shared/         共用层安装副本（同上；真源是 edulab/shared/）
