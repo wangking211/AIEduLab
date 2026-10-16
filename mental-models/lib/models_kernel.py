@@ -5,7 +5,7 @@ models_kernel.py — 查理·芒格思维模型：可量化部分的精确计算
 单一数据源设计：复利、贝叶斯基率、期望值与凯利仓位、安全边际击穿概率、机会成本
 全部由本模块精确算出，讲解文字只引用 tex() 输出，绝无心算误差。
 
-覆盖（v2，10 个模型）：
+覆盖（v3，16 个模型）：
  1. compound    —— 复利/单利/翻倍时间（"时间是朋友还是敌人"的数学根据）
  2. bayes       —— 贝叶斯基率更新（基率忽视 → 假阳性的数学根源）
  3. expected    —— 期望值 + 幸存者偏差 + 凯利公式 f* = (bp − q)/b
@@ -16,9 +16,17 @@ models_kernel.py — 查理·芒格思维模型：可量化部分的精确计算
  8. competence  —— 能力圈：圈外暴露比例 → σ → 击穿概率
  9. lollapalooza—— 多倾向同向叠加：乘法放大 (1+a)ⁿ vs 线性直觉 1+na
 10. checklist   —— 误判清单的拦截率 1−(1−hit)^k
+11. dcf         —— 两阶段 DCF：显性期现值 + 终值现值，终值占比
+12. scale       —— 规模优势：单位成本 u(q) = F/q + v
+13. network     —— 网络效应：连接数 n(n−1)/2（用户翻倍 → 连接数 ×4）
+14. tipping     —— 临界点：SIR 的 R₀ = βS₀/γ，解析峰值与 RK4 数值解互校
+15. sunk        —— 沉没成本：决策只看增量，已投入不该出现
+16. redundancy  —— 冗余备份：串联 rⁿ 与并联 1−(1−r)ⁿ（inversion 的对偶）
 
-依赖: sympy。自检：python models_kernel.py
+依赖: sympy（tipping 另用 math 做 RK4 数值积分）。自检：python models_kernel.py
 """
+
+import math
 
 import sympy as sp
 
@@ -364,6 +372,201 @@ def checklist(k, a, hit):
     }
 
 
+# ==================== 11) 贴现与内在价值（两阶段 DCF） ====================
+def dcf(cf0, growth, rate, years, term_growth):
+    """两阶段 DCF：前 years 年按 growth 增长，其后按 term_growth 永续增长。
+
+    内在价值 = 显性期现值 + 终值现值：
+        V = Σ_{t=1..N} CF₀(1+g)^t/(1+r)^t + [CF₀(1+g)^N(1+g∞)/(r-g∞)]/(1+r)^N
+    要求 r > g∞，否则级数发散（"永续增长快过贴现"是一个不自洽的假设）。
+    终值占比是这张图真正的重点：它衡量估值有多依赖远期假设。
+    """
+    cf0, g, r, tg = _num(cf0), _pct(growth), _pct(rate), _pct(term_growth)
+    N = _num(years)
+    assert cf0 > 0, "现金流须为正"
+    assert r > tg, "贴现率必须高于永续增长率，否则现值发散"
+    assert N >= 0, "年数须非负"
+    pv_flows = [sp.simplify(cf0 * (1 + g) ** t / (1 + r) ** t) for t in range(1, int(N) + 1)]
+    pv_explicit = sp.simplify(sum(pv_flows))
+    cash_N1 = sp.simplify(cf0 * (1 + g) ** N * (1 + tg))        # 第 N+1 年现金流
+    terminal = sp.simplify(cash_N1 / (r - tg))                   # 第 N 年末的终值
+    pv_terminal = sp.simplify(terminal / (1 + r) ** N)
+    V = sp.simplify(pv_explicit + pv_terminal)
+    # 贴现率 +1 个百分点的敏感度：估值对假设有多脆
+    r2 = r + sp.Rational(1, 100)
+    V2 = sp.simplify(sum(cf0 * (1 + g) ** t / (1 + r2) ** t for t in range(1, int(N) + 1))
+                     + (cf0 * (1 + g) ** N * (1 + tg) / (r2 - tg)) / (1 + r2) ** N)
+    return {
+        "cf0": cf0, "g": g, "r": r, "tg": tg, "years": N,
+        "pv_flows": pv_flows, "pv_explicit": pv_explicit,
+        "cash_N1": cash_N1, "terminal": terminal, "pv_terminal": pv_terminal,
+        "V": V, "terminal_share": sp.simplify(pv_terminal / V),
+        "V_rate_up": V2, "rate_sensitivity": sp.simplify((V - V2) / V),
+        "V_tex": tex(V), "terminal_share_tex": tex(sp.simplify(pv_terminal / V)),
+    }
+
+
+# ==================== 12) 规模优势（固定成本摊薄） ====================
+def scale_advantage(fixed, var, q1, k):
+    """规模优势：单位成本 u(q) = F/q + v —— 固定成本被产量摊薄。
+
+    规模是 k 倍时，单位成本优势 u(q) − u(kq) 就是大者对小者的"价格战额度"。
+    固定成本占单位成本降到 10% 所需的规模 q* = 9F/v，是一个干净的临界点。
+    """
+    F, v, q, k = _num(fixed), _num(var), _num(q1), _num(k)
+    assert F >= 0 and v > 0 and q > 0 and k >= 1, "参数越界"
+    u1 = sp.simplify(F / q + v)
+    u2 = sp.simplify(F / (k * q) + v)
+    fixed_share = sp.simplify((F / q) / u1) if F > 0 else sp.Integer(0)
+    return {
+        "fixed": F, "var": v, "q1": q, "k": k,
+        "u1": u1, "u2": u2, "advantage": sp.simplify(u1 - u2),
+        "cost_ratio": sp.simplify(u1 / u2),
+        "fixed_share": fixed_share,
+        "scale_for_10pct": sp.simplify(9 * F / v),          # 固定成本占比降到 10% 所需规模
+        "u1_tex": tex(u1), "u2_tex": tex(u2),
+        "advantage_tex": tex(sp.simplify(u1 - u2)),
+    }
+
+
+# ==================== 13) 网络效应（连接数按平方涨） ====================
+def network_value(n, target_links=1000000):
+    """网络效应：连接数 n(n−1)/2，梅特卡夫口径的价值 n(n−1)。
+
+    用户数只按 n 涨，连接数却按 n² 涨——这就是"赢家通吃"的算术。
+    """
+    n = _num(n)
+    assert n >= 1, "用户数须为正"
+    links = sp.simplify(n * (n - 1) / 2)
+    metcalfe = sp.simplify(n * (n - 1))
+    tgt = _num(target_links)
+    # n(n−1)/2 = tgt 的正根
+    n_for_target = sp.simplify((1 + sp.sqrt(1 + 8 * tgt)) / 2)
+    return {
+        "n": n, "links": links, "metcalfe": metcalfe,
+        "links_double_ratio": sp.simplify((2 * n) * (2 * n - 1) / (n * (n - 1)))
+                              if n > 1 else sp.oo,
+        "n_for_target": n_for_target, "target_links": tgt,
+        "links_tex": tex(links),
+    }
+
+
+# ==================== 14) 临界点与传染（SIR，R₀ 阈值） ====================
+def _sir_rk4(beta, gamma, s0, i0, days, steps_per_day=16):
+    """用 RK4 真实积分 SIR 方程（纯数值，非符号解）。
+
+    dS/dt = −βSI,  dI/dt = βSI − γI,  dR/dt = γI，三者之和恒为 1。
+    """
+    b, g = float(beta), float(gamma)
+    h = 1.0 / steps_per_day
+    s, i, r = float(s0), float(i0), 0.0
+    curve = [(0.0, s, i, r)]
+    peak_i, peak_t = i, 0.0
+    for step in range(int(days * steps_per_day)):
+        def d(s_, i_, r_):
+            return (-b * s_ * i_, b * s_ * i_ - g * i_, g * i_)
+        k1 = d(s, i, r)
+        k2 = d(s + h / 2 * k1[0], i + h / 2 * k1[1], r + h / 2 * k1[2])
+        k3 = d(s + h / 2 * k2[0], i + h / 2 * k2[1], r + h / 2 * k2[2])
+        k4 = d(s + h * k3[0], i + h * k3[1], r + h * k3[2])
+        s += h / 6 * (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0])
+        i += h / 6 * (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1])
+        r += h / 6 * (k1[2] + 2 * k2[2] + 2 * k3[2] + k4[2])
+        s, i, r = max(0.0, min(1.0, s)), max(0.0, min(1.0, i)), max(0.0, min(1.0, r))
+        t = (step + 1) * h
+        if i > peak_i:
+            peak_i, peak_t = i, t
+        curve.append((t, s, i, r))
+    return curve, peak_i, peak_t
+
+
+def tipping(beta, gamma, s0=1.0, i0=1e-4, days=80):
+    """临界点：基本传染数 R₀ = βS₀/γ。R₀ 略过 1，结局天翻地覆。
+
+    峰值感染有解析式 I_peak = I₀ + S₀ − S_peak + (1/R₀)·ln(S_peak/S₀)，
+    其中 S_peak = 1/R₀。这里同时给出解析值与 RK4 数值解，两者互为校验。
+    """
+    b, g = _num(beta), _num(gamma)
+    s0_, i0_ = _num(s0), _num(i0)
+    assert b > 0 and g > 0 and 0 < s0_ <= 1, "参数越界"
+    R0 = sp.simplify(b * s0_ / g)
+    exploded = bool(R0 > 1)
+    peak_frac_analytic = None
+    if exploded:
+        s_peak = sp.simplify(1 / R0)
+        peak_frac_analytic = sp.simplify(i0_ + s0_ - s_peak + sp.log(s_peak / s0_) / R0)
+    curve, peak_num, peak_t = _sir_rk4(b, g, float(s0_), float(i0_), days)
+    final_size = sp.nsimplify(curve[-1][3], rational=False)
+    # R∞ = 1 − exp(−R₀·R∞) 的二分求解（与数值积分互为校验）
+    lo, hi = 0.0, 1.0
+    for _ in range(200):
+        mid = (lo + hi) / 2
+        if 1 - math.exp(-float(R0) * mid) > mid:
+            lo = mid
+        else:
+            hi = mid
+    return {
+        "beta": b, "gamma": g, "s0": s0_, "days": _num(days),
+        "R0": R0, "exploded": exploded,
+        "peak_frac_analytic": peak_frac_analytic,
+        "peak_frac_numeric": peak_num, "peak_day": peak_t,
+        "final_size_numeric": final_size, "final_size_solved": hi,
+        "herd_threshold": sp.simplify(g / b),      # 需要压到多少易感比例以下才能熄灭
+        "R0_tex": tex(R0),
+    }
+
+
+# ==================== 15) 沉没成本（只看增量） ====================
+def sunk_cost(sunk, extra, p_success, reward):
+    """沉没成本：已经花掉的，不该进入决策。
+
+    理性算法只看未来的增量：E[继续] = p·R − C。已投入 S 完全不出现。
+    而"账面"算法把 S 也算进去，于是把一个正期望的项目算成负的——
+    这正是损失厌恶的入口。
+    """
+    S, C, p, R = _num(sunk), _num(extra), _pct(p_success), _num(reward)
+    assert C >= 0 and R >= 0, "参数越界"
+    ev_continue = sp.simplify(p * R - C)              # 正确：只看增量
+    ev_wrong = sp.simplify(p * R - C - S)             # 错误：把沉没成本算进来
+    breakeven_p = sp.simplify(C / R) if R > 0 else sp.oo
+    return {
+        "sunk": S, "extra": C, "p": p, "reward": R,
+        "ev_continue": ev_continue, "ev_wrong": ev_wrong,
+        "should_continue": bool(ev_continue > 0),
+        "breakeven_p": breakeven_p,
+        "ev_continue_tex": tex(ev_continue), "ev_wrong_tex": tex(ev_wrong),
+        "conclusions_differ": bool((ev_continue > 0) != (ev_wrong > 0)),
+    }
+
+
+# ==================== 16) 冗余备份（串联的对偶） ====================
+def redundancy(r, n):
+    """冗余备份：同一个零件，串联与并联的可靠度天差地别。
+
+    串联 R = r^n（任一坏则坏），并联 R = 1 − (1−r)^n（全坏才坏）。
+    串联系数与「反过来想」的存活率是同一个式子——这里给出它的对偶：
+    与其把每一环做得更好，不如让关键环变成并联。
+    """
+    r_, n_ = _pct(r), _num(n)
+    assert 0 <= r_ <= 1 and n_ >= 1, "参数越界"
+    series = sp.simplify(r_ ** n_)
+    parallel = sp.simplify(1 - (1 - r_) ** n_)
+    # 串联掉到 50% 以下所需的最少环数
+    n_series_half = None
+    if 0 < r_ < 1:
+        n_series_half = sp.simplify(sp.log(sp.Rational(1, 2)) / sp.log(r_))
+    # 并联达到 99% 所需的最少件数
+    n_parallel_99 = None
+    if 0 <= r_ < 1:
+        n_parallel_99 = sp.simplify(sp.log(sp.Rational(1, 100)) / sp.log(1 - r_))
+    return {
+        "r": r_, "n": n_, "series": series, "parallel": parallel,
+        "gain": sp.simplify(parallel / series) if not series.is_zero else sp.oo,
+        "n_series_half": n_series_half, "n_parallel_99": n_parallel_99,
+        "series_tex": tex(series), "parallel_tex": tex(parallel),
+    }
+
+
 # ==================== 自检 ====================
 if __name__ == "__main__":
     # 复利
@@ -451,6 +654,57 @@ if __name__ == "__main__":
     assert sp.simplify(ck_["net"] - sp.Rational(81, 256)) == 0      # 0.75^4
     assert sp.simplify(ck_["blocked"] - sp.Rational(15, 16)) == 0    # 1 − 0.5^4
 
+    # 贴现 / DCF
+    d = dcf(100, 8, 10, 10, 3)
+    assert abs(f(d["V"]) - 2130.02) < 0.02
+    assert abs(f(d["pv_explicit"]) - 905.26) < 0.02
+    assert abs(f(d["pv_terminal"]) - 1224.76) < 0.02
+    assert abs(f(d["terminal_share"]) - 0.5750) < 0.0005     # 终值占 57.5%
+    assert abs(f(d["rate_sensitivity"]) * 100 - 13.54) < 0.02  # 贴现率 +1% → 估值 −13.5%
+    assert d["V"] > d["V_rate_up"], "提高贴现率必然压低内在价值"
+
+    # 规模优势
+    sc = scale_advantage(1000, 10, 500, 3)
+    assert sp.simplify(sc["u1"] - 12) == 0
+    assert sp.simplify(sc["u2"] - sp.Rational(32, 3)) == 0    # 10 + 2/3
+    assert sp.simplify(sc["advantage"] - sp.Rational(4, 3)) == 0
+    assert abs(f(sc["cost_ratio"]) - 1.125) < 1e-9
+    assert abs(f(sc["fixed_share"]) - 1 / 6) < 1e-9
+    assert sp.simplify(sc["scale_for_10pct"] - 900) == 0
+
+    # 网络效应
+    nw = network_value(1000)
+    assert sp.simplify(nw["links"] - 499500) == 0
+    assert sp.simplify(nw["metcalfe"] - 999000) == 0
+    assert abs(f(nw["links_double_ratio"]) - 4.002) < 0.001   # 用户翻倍 → 连接数 ×4
+    assert abs(f(nw["n_for_target"]) - 1414.71) < 0.01        # 100 万连接只需 1415 人
+
+    # 临界点 / SIR
+    tp = tipping(sp.Rational(3, 5), sp.Rational(1, 5))
+    assert sp.simplify(tp["R0"] - 3) == 0
+    assert abs(f(tp["peak_frac_analytic"]) - 0.300556) < 1e-5
+    assert abs(f(tp["peak_frac_analytic"]) - tp["peak_frac_numeric"]) < 0.01, "解析峰值应与 RK4 数值解一致"
+    assert abs(tp["final_size_solved"] - 0.9405) < 0.001
+    assert abs(f(tp["herd_threshold"]) - 1 / 3) < 1e-9
+    assert tp["exploded"] is True
+    dead = tipping(sp.Rational(3, 20), sp.Rational(1, 5))     # R₀ = 0.75
+    assert dead["exploded"] is False and dead["peak_frac_analytic"] is None
+
+    # 沉没成本
+    sk = sunk_cost(100, 50, sp.Rational(2, 5), 200)
+    assert sp.simplify(sk["ev_continue"] - 30) == 0
+    assert sp.simplify(sk["ev_wrong"] + 70) == 0
+    assert sp.simplify(sk["breakeven_p"] - sp.Rational(1, 4)) == 0
+    assert sk["should_continue"] is True and sk["conclusions_differ"] is True
+
+    # 冗余备份
+    rd = redundancy(sp.Rational(9, 10), 5)
+    assert abs(f(rd["series"]) - 0.59049) < 1e-9
+    assert abs(f(rd["parallel"]) - 0.99999) < 1e-9
+    assert abs(f(rd["n_series_half"]) - 6.57881) < 1e-5
+    assert abs(f(rd["n_parallel_99"]) - 2.0) < 1e-9           # 单件 90%：并两件即 99%
+    assert rd["parallel"] > rd["series"]
+
     print("models_kernel self-check OK ✓")
     print(f"  复利 1 万 @8% 30 年 → {f(c['F']):,.0f}（单利 {f(c['F_simple']):,.0f}，翻倍需 {f(c['doubling_years']):.2f} 年）")
     print(f"  贝叶斯 1% 患病率 + 99% 灵敏度/95% 特异度 → 阳性者真实患病概率 {f(b['posterior'])*100:.1f}%")
@@ -462,3 +716,9 @@ if __name__ == "__main__":
     print(f"  能力圈 20% 暴露（σ {f(cp['sigma_in']):.0f} vs {f(cp['sigma_out']):.0f}）→ σ {f(cp['sigma']):.2f}，占方差 {f(cp['var_share_out'])*100:.0f}%")
     print(f"  Lollapalooza 4 条 ×1.5 → {f(lp['product']):.2f}（线性只给 {f(lp['linear']):.0f}），超出 {f(lp['extra_pct'])*100:.0f}%")
     print(f"  误判清单 4 条 ×1.5、拦截 50% → {f(ck_['gross']):.2f} 降到 {f(ck_['net']):.2f}，拦掉 {f(ck_['blocked'])*100:.1f}%")
+    print(f"  DCF 100/8%/r=10%/N=10/g∞=3% → V={f(d['V']):,.0f}，终值占 {f(d['terminal_share'])*100:.1f}%")
+    print(f"  规模优势 F=1000,v=10,q=500,k=3 → 单位成本 {f(sc['u1']):.2f} vs {f(sc['u2']):.2f}（省 {f(sc['advantage']):.2f}）")
+    print(f"  网络效应 n=1000 → 连接数 {f(nw['links']):,.0f}，用户翻倍变成 ×{f(nw['links_double_ratio']):.2f}")
+    print(f"  临界点 R₀={f(tp['R0']):.2f} → 峰值感染 {f(tp['peak_frac_analytic'])*100:.1f}%，最终 {tp['final_size_solved']*100:.1f}%")
+    print(f"  沉没成本 已投 100 + 追加 50、p=40%、回报 200 → 正确算法 {f(sk['ev_continue']):+.0f}，账面算成 {f(sk['ev_wrong']):+.0f}")
+    print(f"  冗余备份 r=90%, n=5 → 串联 {f(rd['series'])*100:.2f}%，并联 {f(rd['parallel'])*100:.5f}%")

@@ -145,6 +145,55 @@ ck("上清单后的残余放大", f(bi["net"]), 0.316, 0.0005)
 ck("拦截率 %", f(bi["blocked"]) * 100, 93.75, 0.005)
 ck("风险被压低倍数", f(bi["cut"]), 16.0, 1e-9)
 
+# ---- 贴现（§7.1） ----
+d = K.dcf(100, 8, 10, 10, 3)
+ck("显性期现值", f(d["pv_explicit"]), 905.26, 0.02)
+ck("终值现值", f(d["pv_terminal"]), 1224.76, 0.02)
+ck("内在价值 V", f(d["V"]), 2130.02, 0.02)
+ck("终值占比 %", f(d["terminal_share"]) * 100, 57.5, 0.05)
+ck("V(r=11%)", f(d["V_rate_up"]), 1841.71, 0.02)
+ck("贴现率 +1% 的跌幅 %", f(d["rate_sensitivity"]) * 100, 13.5, 0.05)
+
+# ---- 规模优势（§7.2） ----
+sc = K.scale_advantage(1000, 10, 500, 3)
+ck("单位成本 u(500)", f(sc["u1"]), 12.00, 0.005)
+ck("单位成本 u(1500)", f(sc["u2"]), 10.67, 0.005)
+ck("单位成本优势", f(sc["advantage"]), 1.33, 0.005)
+ck("成本比 u(q)/u(kq)", f(sc["cost_ratio"]), 1.125, 0.0005)
+ck("固定成本占比 %", f(sc["fixed_share"]) * 100, 16.7, 0.05)
+ck("占比降到 10% 所需产量", f(sc["scale_for_10pct"]), 900, 1e-9)
+
+# ---- 网络效应（§7.3） ----
+nw = K.network_value(1000)
+ck("连接数 n(n−1)/2", f(nw["links"]), 499500, 1e-9)
+ck("梅特卡夫 n(n−1)", f(nw["metcalfe"]), 999000, 1e-9)
+ck("用户翻倍 → 连接数 ×", f(nw["links_double_ratio"]), 4.002, 0.001)
+ck("100 万连接所需用户数（四舍五入）", f(nw["n_for_target"]), 1415, 0.5)
+
+# ---- 临界点（§7.4） ----
+tp = K.tipping(sp.Rational(3, 5), sp.Rational(1, 5))
+ck("基本传染数 R₀", f(tp["R0"]), 3.00, 1e-9)
+ck("峰值感染 %（解析）", f(tp["peak_frac_analytic"]) * 100, 30.06, 0.005)
+ck("峰值感染 %（RK4）", tp["peak_frac_numeric"] * 100, 30.06, 0.005)
+ck("最终累计感染 %", tp["final_size_solved"] * 100, 94.05, 0.005)
+ck("熄灭所需易感比例 γ/β", f(tp["herd_threshold"]), 0.333, 0.0005)
+
+# ---- 沉没成本（§7.5） ----
+sk = K.sunk_cost(100, 50, sp.Rational(2, 5), 200)
+ck("正确算法 E[继续]", f(sk["ev_continue"]), 30, 1e-9)
+ck("账面算法 pR−C−S", f(sk["ev_wrong"]), -70, 1e-9)
+ck("真正的平衡成功率 %", f(sk["breakeven_p"]) * 100, 25.0, 1e-9)
+ck("误算出的平衡点 %", f((50 + 100) / 200 * 100), 75.0, 1e-9)
+ck("两个平衡点之差（百分点）", f((50 + 100) / 200 * 100) - f(sk["breakeven_p"]) * 100, 50.0, 1e-9)
+
+# ---- 冗余备份（§7.6） ----
+rd = K.redundancy(sp.Rational(9, 10), 5)
+ck("串联可靠度 %", f(rd["series"]) * 100, 59.05, 0.005)
+ck("并联可靠度 %", f(rd["parallel"]) * 100, 99.999, 0.0005)
+ck("并联 / 串联", f(rd["gain"]), 1.69, 0.005)
+ck("串联掉到 50% 所需零件数", f(rd["n_series_half"]), 6.58, 0.005)
+ck("并联升到 99% 所需零件数", f(rd["n_parallel_99"]), 2.0, 1e-9)
+
 # ---- 汇总 ----
 bad = [c for c in checks if not c[0]]
 for ok, name, got, want in checks:

@@ -25,7 +25,7 @@ AIEduLab/
 │   └── demos/ out/         手写 HTML 演示
 ├── .agents/skills/         技能安装副本（**本地目录，不进版本库**；真源是 edulab/skills/）
 ├── .agents/shared/         共用层安装副本（同上；真源是 edulab/shared/）
-├── mental-models/          查理·芒格思维模型：sympy 精确内核 + 10 个交互页 + 速查文档
+├── mental-models/          查理·芒格思维模型：sympy 精确内核 + 16 个交互页 + 速查文档
 └── skills-lock.json        技能安装锁（含内容哈希）
 ```
 

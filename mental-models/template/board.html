@@ -78,9 +78,28 @@ function _erf(x){
     const y = 1 - (((((1.061405429*t - 1.453152027)*t) + 1.421413741)*t - 0.284496736)*t + 0.254829592)*t*Math.exp(-x*x);
     return s*y;
 }
+// 场景专用函数（本地可信模板；与 lib/models_kernel.py 同一套公式，
+// 浏览器实测已逐位核对过读数与内核一致）
+function _dcfExplicit(cf0, gPct, rPct, N){
+    const g=gPct/100, r=rPct/100; let s=0;
+    for (let t=1; t<=N; t++) s += cf0*Math.pow(1+g,t)/Math.pow(1+r,t);
+    return s;
+}
+function _dcfTerminal(cf0, gPct, rPct, tgPct, N){
+    const g=gPct/100, r=rPct/100, tg=tgPct/100;
+    if (r<=tg) return NaN;                       // 永续增长快过贴现 → 现值发散
+    return cf0*Math.pow(1+g,N)*(1+tg)/(r-tg)/Math.pow(1+r,N);
+}
+function _sirFinalSize(R0){                      // R∞ = 1 − exp(−R₀·R∞) 的二分求解
+    if (!(R0>1)) return 0;
+    let lo=0, hi=1;
+    for (let k=0;k<60;k++){ const m=(lo+hi)/2; if (1-Math.exp(-R0*m)>m) lo=m; else hi=m; }
+    return hi;
+}
 const MATHENV = {sqrt:Math.sqrt, abs:Math.abs, min:Math.min, max:Math.max, pow:Math.pow,
     sign:Math.sign, floor:Math.floor, ceil:Math.ceil, round:Math.round, PI:Math.PI, E:Math.E,
-    log:Math.log, log2:Math.log2, log10:Math.log10, exp:Math.exp, erf:_erf};
+    log:Math.log, log2:Math.log2, log10:Math.log10, exp:Math.exp, erf:_erf,
+    dcfExplicit:_dcfExplicit, dcfTerminal:_dcfTerminal, sirFinal:_sirFinalSize};
 const _exprCache = {};
 function evalExpr(expr, env){
     if (typeof expr !== 'string') return expr;
@@ -702,6 +721,218 @@ function drawChecklist(S){
                  +'　（压低 '+fmt(gross/net,2)+'×）', W/2, H-6);
 }
 
+// ---- 11) 贴现：逐年现值柱 + 终值柱 + 内在价值线 ----
+function drawDcf(S){
+    const H=cssH, W=cssW;
+    const N=Math.max(1, Math.round(S.years));
+    const r=S.r/100, g=S.g/100;
+    const pv=[]; for(let t=1;t<=N;t++) pv.push(S.cf0*Math.pow(1+g,t)/Math.pow(1+r,t));
+    const tv=S.pvTerminal;
+    const maxY=Math.max(...pv, tv, 1e-9)*1.14;
+    const R=panel(0, 26, W, H-58, [0.4, N+1.6], [0, maxY]);
+    R.axis('年（最后一柱＝终值）', '现值', niceTicks(0,N+2,6), niceTicks(0,maxY,4));
+    const bw=Math.min(26, R.iw/(N+2)*0.62);
+    for(let t=1;t<=N;t++) R.bar(t, 0, pv[t-1], bw, P.curve);
+    R.bar(N+1, 0, tv, Math.min(34, R.iw/(N+2)*0.8), P.bad);
+    R.line([[0.4,S.V],[N+1.6,S.V]], P.good, 2, true);
+    R.ptxt(R.ix+R.iw-4, R.sy(S.V)-10, '内在价值 '+fmt(S.V,0), P.good, 'right', 11, 'bold');
+    R.ptxt(R.sx(N+1), R.sy(tv)-10, fmt(tv,0), P.bad, 'center', 10);
+    // 图例与结论
+    ctx.font='bold 10.5px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle=P.curve; ctx.fillText('① 显性期各年现金流现值', 14, 6);
+    ctx.fillStyle=P.bad; ctx.fillText('② 终值现值（第 '+(N+1)+' 年起永续）', 14, 20);
+    ctx.textAlign='right';
+    ctx.fillStyle=P.dim; ctx.fillText('显性期合计 '+fmt(S.V-S.pvTerminal,0), W-14, 6);
+    ctx.font='bold 11.5px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillStyle=S.termShare>0.5?P.bad:P.good;
+    ctx.fillText('终值占内在价值的 '+fmt(S.termShare*100,1)+'%'
+                 +(S.termShare>0.5?'——估值一多半靠第 '+N+' 年之后的假设':''), W/2, H-6);
+}
+
+// ---- 12) 规模优势：单位成本曲线 u(q) = F/q + v ----
+function drawScale(S){
+    const H=cssH, W=cssW;
+    const F=S.fixed, v=S.vc, q1=S.q1, k=S.k;
+    const xMin=Math.max(1, q1*0.12);
+    const xMax=Math.max(q1*k*1.25, S.scale_for_10pct*1.25, q1*2.2);
+    const u=q=>F/q+v;
+    const yMax=u(xMin)*1.08;
+    const R=panel(0, 26, W, H-58, [xMin,xMax], [0,yMax]);
+    R.axis('产量 q', '单位成本', niceTicks(xMin,xMax,5), niceTicks(0,yMax,4));
+    R.line([[xMin,v],[xMax,v]], P.dim, 1.3, true);
+    R.ptxt(R.ix+4, R.sy(v)-9, '可变成本地板 v='+fmt(v,0), P.dim, 'left', 10);
+    const pts=[]; for(let i=0;i<=160;i++){const q=xMin+(xMax-xMin)*i/160; pts.push([q,u(q)]);}
+    R.line(pts, P.curve, 2.6);
+    [[q1, P.bad, '小者'], [q1*k, P.good, '大者 ×'+fmt(k,1)]].forEach(([q,c,lab])=>{
+        R.line([[q,0],[q,yMax]], c, 1.8, true);
+        const x=R.sx(q), y=R.sy(u(q));
+        ctx.fillStyle=c; ctx.beginPath(); ctx.arc(x,y,5,0,7); ctx.fill();
+        R.ptxt(x, y-15, lab+' '+fmt(u(q),2), c, 'center', 11, 'bold');
+    });
+    // 单位成本差 = 大者的价格战额度
+    const yA=R.sy(u(q1)), yB=R.sy(u(q1*k)), xA=R.sx(q1), xB=R.sx(q1*k);
+    if (Math.abs(yA-yB)>10){
+        ctx.strokeStyle=P.bad; ctx.lineWidth=2.2;
+        ctx.beginPath(); ctx.moveTo(xB+8, yA); ctx.lineTo(xB+8, yB); ctx.stroke();
+        ctx.font='bold 10.5px system-ui'; ctx.fillStyle=P.bad;
+        ctx.textAlign='left'; ctx.textBaseline='middle';
+        ctx.fillText('省 '+fmt(S.advantage,2), xB+14, (yA+yB)/2);
+    }
+    ctx.font='bold 10.5px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle=P.curve; ctx.fillText('单位成本 u(q) = F/q + v', 14, 6);
+    ctx.fillStyle=P.dim; ctx.textAlign='right';
+    ctx.fillText('固定成本占比 '+fmt(S.fixedShare*100,1)+'%', W-14, 6);
+    ctx.font='bold 11.5px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillStyle=P.good;
+    ctx.fillText('规模 ×'+fmt(k,1)+' → 单位成本省 '+fmt(S.advantage,2)
+                 +'（'+fmt(S.costRatio*100-100,1)+'%）　固定成本占比降到 10% 需 q='+fmt(S.scale_for_10pct,0),
+                 W/2, H-6);
+}
+
+// ---- 13) 网络效应：连接数 n(n−1)/2 ----
+function drawNetwork(S){
+    const H=cssH, W=cssW;
+    const n0=Math.max(2, S.n);
+    const nMax=Math.max(10, Math.ceil(n0*2.35));
+    const links=n=>n*(n-1)/2;
+    const yMax=links(nMax)*1.08;
+    const R=panel(0, 26, W, H-58, [0,nMax], [0,yMax]);
+    R.axis('用户数 n', '连接数 n(n−1)/2', niceTicks(0,nMax,5), niceTicks(0,yMax,4));
+    const pts=[]; for(let i=0;i<=160;i++){const n=nMax*i/160; pts.push([n,links(n)]);}
+    R.line(pts, P.curve, 2.8);
+    // 标记 n0 与 2n0：用户翻倍 → 连接数约 ×4
+    [[n0, P.bad, 'n='+fmt(n0,0)], [n0*2, P.good, '2n='+fmt(n0*2,0)]].forEach(([n,c,lab])=>{
+        R.line([[n,0],[n,yMax]], c, 1.6, true);
+        const y=R.sy(links(n));
+        ctx.fillStyle=c; ctx.beginPath(); ctx.arc(R.sx(n), y, 5, 0, 7); ctx.fill();
+        R.ptxt(R.sx(n), y-13, lab+' → '+fmt(links(n),0), c, 'center', 10.5, 'bold');
+    });
+    ctx.font='bold 10.5px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle=P.curve; ctx.fillText('连接数按 n² 涨，用户数只按 n 涨', 14, 6);
+    ctx.textAlign='right'; ctx.fillStyle=P.dim;
+    ctx.fillText(fmt(S.target_links,0)+' 条连接只需 '+fmt(S.nForTarget,0)+' 个用户', W-14, 6);
+    ctx.font='bold 11.5px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillStyle=P.bad;
+    ctx.fillText('用户翻一倍，连接数 ×'+fmt(S.doubleRatio,2)+' —— 这就是「赢家通吃」的算术',
+                 W/2, H-6);
+}
+
+// ---- 14) 临界点：SIR 真实积分（RK4），R₀ 略过 1 就天翻地覆 ----
+function drawTipping(S){
+    const H=cssH, W=cssW;
+    const b=S.beta, g=S.gamma, s0=S.s0, days=S.days||80;
+    const h=1/16, steps=Math.round(days/h);
+    let ss=s0, ii=1e-4, rr=0;
+    const Sarr=[[0,s0]], Iarr=[[0,ii]], Rarr=[[0,0]];
+    for(let k=0;k<steps;k++){
+        const dv=(a,c,e)=>[-b*a*c, b*a*c-g*c, g*c];
+        const k1=dv(ss,ii,rr);
+        const k2=dv(ss+h/2*k1[0], ii+h/2*k1[1], rr+h/2*k1[2]);
+        const k3=dv(ss+h/2*k2[0], ii+h/2*k2[1], rr+h/2*k2[2]);
+        const k4=dv(ss+h*k3[0], ii+h*k3[1], rr+h*k3[2]);
+        ss+= h/6*(k1[0]+2*k2[0]+2*k3[0]+k4[0]);
+        ii+= h/6*(k1[1]+2*k2[1]+2*k3[1]+k4[1]);
+        rr+= h/6*(k1[2]+2*k2[2]+2*k3[2]+k4[2]);
+        ss=Math.max(0,Math.min(1,ss)); ii=Math.max(0,Math.min(1,ii)); rr=Math.max(0,Math.min(1,rr));
+        if (k%4===0){ const t=(k+1)*h; Sarr.push([t,ss]); Iarr.push([t,ii]); Rarr.push([t,rr]); }
+    }
+    const R=panel(0, 26, W, H-58, [0,days], [0,1]);
+    R.axis('天', '人群比例', niceTicks(0,days,5), niceTicks(0,1,5));
+    R.line(Sarr, P.curve2, 2.2);
+    R.line(Rarr, P.good, 2.2);
+    R.line(Iarr, P.bad, 3.0);
+    // R₀ = 1 的临界线（在图上以文字给出阈值）
+    const r0=S.R0;
+    ctx.font='bold 10.5px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle=P.curve2; ctx.fillText('易感 S', 14, 6);
+    ctx.fillStyle=P.bad; ctx.fillText('感染 I', 14, 20);
+    ctx.fillStyle=P.good; ctx.fillText('痊愈 R', 14, 34);
+    ctx.textAlign='right'; ctx.fillStyle=r0>1?P.bad:P.good;
+    ctx.fillText('R₀ = '+fmt(r0,2)+(r0>1?' > 1':' ≤ 1'), W-14, 6);
+    ctx.font='bold 11.5px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    if (r0>1){
+        const peak=Math.max(...Iarr.map(p=>p[1]));
+        const tpk=Iarr[Iarr.findIndex(p=>p[1]===peak)][0];
+        ctx.fillStyle=P.bad;
+        ctx.fillText('峰值感染 '+fmt(peak*100,1)+'%（第 '+fmt(tpk,0)+' 天）　最终累计 '+fmt(S.finalSize,1)+'%',
+                     W/2, H-6);
+    } else {
+        ctx.fillStyle=P.good;
+        ctx.fillText('R₀ ≤ 1 —— 传染自行熄灭，峰值就只有初始的那一点', W/2, H-6);
+    }
+}
+
+// ---- 15) 沉没成本：两条平行的期望线，错的那条被下移了 sunk ----
+function drawSunk(S){
+    const H=cssH, W=cssW;
+    const Rw=S.reward, C=S.extra, sunk=S.sunk;
+    const correct=p=>p*Rw-C;
+    const wrong=p=>p*Rw-C-sunk;
+    const lo=Math.min(correct(0), wrong(0)), hi=Math.max(correct(1), wrong(1));
+    const pad=Math.max((hi-lo)*0.14, 1);
+    const Pn=panel(0, 26, W, H-58, [0,1], [lo-pad, hi+pad]);
+    Pn.axis('成功率 p', '期望增量', niceTicks(0,1,5), niceTicks(lo-pad,hi+pad,4));
+    Pn.line([[0,0],[1,0]], P.dim, 1.6, true);
+    const c1=[], c2=[];
+    for(let i=0;i<=100;i++){ const p=i/100; c1.push([p,correct(p)]); c2.push([p,wrong(p)]); }
+    Pn.line(c2, P.bad, 2.2, true);
+    Pn.line(c1, P.good, 2.8);
+    const be1=S.breakeven, be2=S.breakevenWrong;
+    if (be1<=1 && be1>=0){
+        Pn.line([[be1,lo-pad],[be1,0]], P.good, 1.4, true);
+        Pn.ptxt(Pn.sx(be1), Pn.sy(0)+13, '正确 '+fmt(be1*100,1)+'%', P.good, 'center', 10);
+    }
+    if (be2<=1 && be2>=0){
+        Pn.line([[be2,lo-pad],[be2,0]], P.bad, 1.4, true);
+        Pn.ptxt(Pn.sx(be2), Pn.sy(0)+27, '误算 '+(fmt(be2*100,1))+'%', P.bad, 'center', 10);
+    }
+    const pNow=Math.max(0,Math.min(1,S.p/100));
+    Pn.line([[pNow,lo-pad],[pNow,hi+pad]], P.curve, 1.8, true);
+    [[correct(pNow), P.good], [wrong(pNow), P.bad]].forEach(([vv,c])=>{
+        ctx.fillStyle=c; ctx.beginPath(); ctx.arc(Pn.sx(pNow), Pn.sy(vv), 5, 0, 7); ctx.fill();
+    });
+    ctx.font='bold 10.5px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle=P.good; ctx.fillText('只看增量（正确）', 14, 6);
+    ctx.fillStyle=P.bad; ctx.fillText('把已投入也算进来（错）', 14, 20);
+    ctx.textAlign='right'; ctx.fillStyle=P.dim;
+    ctx.fillText('已投入 '+fmt(sunk,0)+' 元', W-14, 6);
+    ctx.font='bold 11.5px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillStyle=S.shouldContinue>0?P.good:P.bad;
+    ctx.fillText('p='+fmt(pNow*100,0)+'%：正确算法 '+fmt(correct(pNow),1)
+                 +'，账面算成 '+fmt(wrong(pNow),1)
+                 +'　→ '+(S.shouldContinue>0?'该继续':'该止损')+'（与已投入无关）', W/2, H-6);
+}
+
+// ---- 16) 冗余备份：串联 rⁿ 与并联 1−(1−r)ⁿ ----
+function drawRedundancy(S){
+    const H=cssH, W=cssW;
+    const r=S.r/100;
+    const nMax=Math.max(5, Math.ceil(S.n*1.8));
+    const ser=n=>Math.pow(r,n), par=n=>1-Math.pow(1-r,n);
+    const R=panel(0, 26, W, H-58, [1,nMax], [0,1]);
+    R.axis('部件数 n（同一个零件）', '系统可靠度', niceTicks(1,nMax,5), niceTicks(0,1,5));
+    const a=[], b=[];
+    for(let i=0;i<=120;i++){ const n=1+(nMax-1)*i/120; a.push([n,ser(n)]); b.push([n,par(n)]); }
+    R.line(a, P.bad, 2.6);
+    R.line(b, P.good, 2.8);
+    const n0=S.n;
+    R.line([[n0,0],[n0,1]], P.curve, 1.8, true);
+    [[ser(n0), P.bad, '串联 '+fmt(ser(n0)*100,2)+'%'],
+     [par(n0), P.good, '并联 '+fmt(par(n0)*100,2)+'%']].forEach(([vv,c,lab],idx)=>{
+        ctx.fillStyle=c; ctx.beginPath(); ctx.arc(R.sx(n0), R.sy(vv), 5, 0, 7); ctx.fill();
+        R.ptxt(R.sx(n0), R.sy(vv)+(idx?16:-13), lab, c, 'center', 11, 'bold');
+    });
+    ctx.font='bold 10.5px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle=P.bad; ctx.fillText('串联：任一坏则坏  rⁿ', 14, 6);
+    ctx.fillStyle=P.good; ctx.fillText('并联：全坏才坏  1−(1−r)ⁿ', 14, 20);
+    ctx.textAlign='right'; ctx.fillStyle=P.dim;
+    ctx.fillText('单件可靠度 '+fmt(r*100,0)+'%', W-14, 6);
+    ctx.font='bold 11.5px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillStyle=P.good;
+    ctx.fillText('同一个零件：串联 '+fmt(n0,0)+' 件只剩 '+fmt(ser(n0)*100,1)+'%，'
+                 +'并联反倒升到 '+fmt(par(n0)*100,2)+'%', W/2, H-6);
+}
+
 const rangeTicks=(a,b,n,round=false)=>{
     const out=[]; for(let i=0;i<=n;i++){ const v=a+(b-a)*i/n; out.push(round? Math.round(v/10)*10 : Math.round(v*10)/10); }
     return out;
@@ -739,6 +970,12 @@ function render(){
         case 'competence': drawCompetence(S); break;
         case 'lollapalooza': drawLollapalooza(S); break;
         case 'checklist': drawChecklist(S); break;
+        case 'dcf': drawDcf(S); break;
+        case 'scale': drawScale(S); break;
+        case 'network': drawNetwork(S); break;
+        case 'tipping': drawTipping(S); break;
+        case 'sunk': drawSunk(S); break;
+        case 'redundancy': drawRedundancy(S); break;
     }
     updateReadouts(S);
 }

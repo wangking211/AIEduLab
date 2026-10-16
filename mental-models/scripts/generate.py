@@ -131,7 +131,7 @@ def build_compound():
                 "$$t_2 = \\frac{\\ln 2}{\\ln 1.08} = " + f"{_n(c['doubling_years']):.2f}" + "\\ \\text{年}$$"
                 "<p>而 72 法则给 $72/8 = " + _num_str(r72["approx"]) + "$ 年，误差仅 $"
                 + f"{abs(_n(r72['error_pct'])):.2f}" + "\\%$。所以 <b>8% 年化 ≈ 每 9 年翻一倍</b>；"
-                "30 年翻 3 次多，$1万\\to2万\\to4万\\to" + _num_str(c["F"]/10000) + "万$。</p>"
+                "30 年翻 3 次多：1 万 → 2 万 → 4 万 → " + _num_str(c["F"]/10000) + " 万。</p>"
             )},
             {"title": "反向：负债的复利", "content": (
                 "<p>把 $r$ 变成负数是不可能的（滑块最低 1%），但把同一个公式套在信用卡欠款上："
@@ -1050,6 +1050,592 @@ def build_bias():
     }
 
 
+# =====================================================================
+# 11) 贴现：今天的一块钱比明天值钱
+# =====================================================================
+def build_dcf():
+    cf0, g, r, tg, years = 100, 8, 10, 3, 10
+    d = K.dcf(cf0, g, r, years, tg)
+    share = _n(d["terminal_share"])
+    sens = _n(d["rate_sensitivity"])
+    return {
+        "lesson": {
+            "title": "贴现：今天的一块钱比明天值钱",
+            "subtitle": "芒格：「内在价值就是未来现金流的贴现。」——复利的镜像，就是贴现",
+            "problem": (
+                "<p>一个资产首年产生 <b>100</b> 的现金流，未来 10 年按 <b>8%</b> 增长，"
+                "此后按 <b>3%</b> 永续增长。你的贴现率是 <b>10%</b>。</p>"
+                "<p class='mt-2'>它值多少？先别急着求和——真正的问题是："
+                "<span class='text-rose-600 font-semibold'>这个估值里，有多大一部分来自第 10 年之后？</span></p>"
+                "<p class='mt-2'>拖动滑块，尤其是那个永续增长率。</p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "dcf", "caption": "逐年现值 + 终值现值"},
+            "view": {"xRange": [0, 12], "yRange": [0, 4000]},
+            "params": [
+                {"name": "cf0", "label": "首年现金流 CF₀", "min": 20, "max": 400, "step": 10, "value": cf0, "unit": "", "digits": 0},
+                {"name": "g", "label": "显性期增长率 g", "min": 0, "max": 20, "step": 0.5, "value": g, "unit": "%", "digits": 1},
+                {"name": "r", "label": "贴现率 r", "min": 5, "max": 25, "step": 0.5, "value": r, "unit": "%", "digits": 1},
+                {"name": "tg", "label": "永续增长率 g∞", "min": 0, "max": 4, "step": 0.5, "value": tg, "unit": "%", "digits": 1},
+                {"name": "years", "label": "显性期年数 N", "min": 3, "max": 20, "step": 1, "value": years, "unit": " 年", "digits": 0},
+            ],
+            "scalars": [
+                {"name": "pvExplicit", "expr": "dcfExplicit(cf0,g,r,years)"},
+                {"name": "pvTerminal", "expr": "dcfTerminal(cf0,g,r,tg,years)"},
+                {"name": "V", "expr": "dcfExplicit(cf0,g,r,years)+dcfTerminal(cf0,g,r,tg,years)"},
+                {"name": "termShare", "expr": "dcfTerminal(cf0,g,r,tg,years)/(dcfExplicit(cf0,g,r,years)+dcfTerminal(cf0,g,r,tg,years))"},
+                {"name": "rateSens", "expr": "1-(dcfExplicit(cf0,g,r+1,years)+dcfTerminal(cf0,g,r+1,tg,years))/(dcfExplicit(cf0,g,r,years)+dcfTerminal(cf0,g,r,tg,years))"},
+            ],
+            "readouts": [
+                {"id": "v", "label": "内在价值 V = 显性期 + 终值", "type": "expr", "expr": "V", "money": True, "unit": "", "highlight": True},
+                {"id": "pex", "label": "显性期现值合计", "type": "expr", "expr": "pvExplicit", "money": True, "color": "#b45309"},
+                {"id": "ptv", "label": "终值现值（N 年之后全部）", "type": "expr", "expr": "pvTerminal", "money": True, "color": "#dc2626"},
+                {"id": "share", "label": "终值占内在价值的比例", "type": "expr", "expr": "termShare*100", "digits": 1, "unit": "%", "color": "#dc2626"},
+                {"id": "sens", "label": "贴现率 +1% → 估值下跌", "type": "expr", "expr": "rateSens*100", "digits": 1, "unit": "%", "color": "#dc2626"},
+                {"id": "ok", "label": "终值占比是否低于一半", "type": "status", "expr": "termShare", "op": "<", "rhs": 0.5, "okText": "估值主要来自已看得见的现金流", "badText": "估值一多半靠远期假设"},
+            ],
+            "legend": [
+                {"color": "#b45309", "text": "显性期各年现金流现值"},
+                {"color": "#dc2626", "text": "终值现值"},
+                {"color": "#059669", "text": "内在价值"},
+            ],
+        },
+        "steps": [
+            {"title": "贴现：复利倒过来走", "content": (
+                "<p>复利问「今天的钱明天值多少」，贴现问「明天的钱今天值多少」——"
+                "同一个 $1/(1+r)^t$，方向相反。</p>"
+                "$$V = \\sum_{t=1}^{N}\\frac{CF_0(1+g)^t}{(1+r)^t}"
+                " + \\frac{1}{(1+r)^N}\\cdot\\frac{CF_0(1+g)^N(1+g_\\infty)}{r-g_\\infty}$$"
+                "<p>右边第二项叫<b>终值</b>：第 $N$ 年之后所有现金流的现值打包成一个数。</p>"
+                "<p>要求 $r > g_\\infty$。若不满足，级数发散——"
+                "「永续增长快过贴现」本身就是一个不自洽的假设。</p>"
+            )},
+            {"title": "代入默认参数", "content": (
+                "<p>$CF_0=100,\\ g=8\\%,\\ r=10\\%,\\ N=10,\\ g_\\infty=3\\%$：</p>"
+                "$$\\text{显性期} = \\sum_{t=1}^{10}\\frac{100\\times1.08^t}{1.10^t} = "
+                + f"{_n(d['pv_explicit']):.2f}" + "$$"
+                "$$\\text{终值} = \\frac{" + f"{_n(d['cash_N1']):.2f}" + "}{0.10-0.03}"
+                "\\cdot\\frac{1}{1.10^{10}} = " + f"{_n(d['pv_terminal']):.2f}" + "$$"
+                "$$V = " + f"{_n(d['V']):.2f}" + "$$"
+                "<p class='mt-2'>注意终值的算法：第 11 年现金流 $100\\times1.08^{10}\\times1.03 = "
+                + f"{_n(d['cash_N1']):.2f}" + "$，除以 $r-g_\\infty$，再贴现回来。</p>"
+            )},
+            {"title": "真正的重点：终值占多少", "content": (
+                "<p>$$\\frac{\\text{终值}}{V} = \\frac{" + f"{_n(d['pv_terminal']):.2f}" + "}{"
+                + f"{_n(d['V']):.2f}" + "} = " + f"{share * 100:.1f}" + "\\%$$"
+                "<p>十四个字概括：<b>估值的一多半，靠的是第 10 年之后的假设。</b>"
+                "而那部分恰恰最难验证——没人知道十年后这家公司还在不在。</p>"
+                "<p>把滑块的 $g_\\infty$ 从 3% 拖到 4%，终值会跳一大截："
+                "分母 $r-g_\\infty$ 从 7% 变成 6%，终值直接涨 1.17 倍。"
+                "<b>一个百分点的永续增长率，能改写整个估值。</b></p>"
+            )},
+            {"title": "贴现率敏感度", "content": (
+                "<p>把贴现率从 10% 上调 1 个百分点到 11%：</p>"
+                "$$V(11\\%) = " + f"{_n(d['V_rate_up']):.2f}" + "\\qquad "
+                "\\text{跌幅} = " + f"{sens * 100:.1f}" + "\\%$$"
+                "<p>利率只动了 1%，估值掉了 "
+                + f"{sens * 100:.1f}" + "%。"
+                "这就是为什么<b>贴现率的选择比现金流预测更致命</b>——"
+                "它同时影响每一项的分母，而且对最远的那几项影响最大。</p>"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3'>"
+                "「安全边际」在这里有了新的含义：既然估值一多半靠远期假设，"
+                "那么<b>能够承受假设出错的估值，才是安全的价格</b>。</p>"
+            )},
+        ],
+    }
+
+
+# =====================================================================
+# 12) 规模优势：大者为什么更大
+# =====================================================================
+def build_scale():
+    F, v, q1, k = 1000, 10, 500, 3
+    sc = K.scale_advantage(F, v, q1, k)
+    return {
+        "lesson": {
+            "title": "规模优势：大者为什么更大",
+            "subtitle": "单位成本 $u(q) = F/q + v$ —— 固定成本被产量摊薄，于是规模本身就是护城河",
+            "problem": (
+                "<p>造东西要花一笔<b>固定成本</b>（厂房、研发、品牌），再花一笔<b>可变成本</b>（原料、人工）。"
+                "固定成本 1000，每件可变成本 10。</p>"
+                "<p class='mt-2'>你产量 <b>500</b> 件，对手产量是你的 <b>3 倍</b>。</p>"
+                "<p class='mt-2'>单位成本差多少？"
+                "<span class='text-rose-600 font-semibold'>这个差值，就是对手能打的价格战额度。</span></p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "scale", "caption": "单位成本随产量下降"},
+            "view": {"xRange": [0, 2200], "yRange": [0, 16]},
+            "params": [
+                {"name": "fixed", "label": "固定成本 F", "min": 0, "max": 5000, "step": 100, "value": F, "unit": "", "digits": 0},
+                {"name": "vc", "label": "每件可变成本 v", "min": 1, "max": 50, "step": 1, "value": v, "unit": "", "digits": 0},
+                {"name": "q1", "label": "你的产量 q", "min": 50, "max": 2000, "step": 50, "value": q1, "unit": "", "digits": 0},
+                {"name": "k", "label": "对手是你的几倍 k", "min": 1, "max": 6, "step": 0.5, "value": k, "unit": " 倍", "digits": 1},
+            ],
+            "scalars": [
+                {"name": "u1", "expr": "fixed/q1 + vc"},
+                {"name": "u2", "expr": "fixed/(k*q1) + vc"},
+                {"name": "advantage", "expr": "fixed/q1 - fixed/(k*q1)"},
+                {"name": "fixedShare", "expr": "(fixed/q1)/(fixed/q1+vc)"},
+                {"name": "costRatio", "expr": "(fixed/q1+vc)/(fixed/(k*q1)+vc)"},
+                {"name": "scale_for_10pct", "expr": "9*fixed/vc"},
+            ],
+            "readouts": [
+                {"id": "u1", "label": "你的单位成本 u(q)", "type": "expr", "expr": "u1", "digits": 2, "unit": "", "color": "#dc2626"},
+                {"id": "u2", "label": "对手的单位成本 u(kq)", "type": "expr", "expr": "u2", "digits": 2, "unit": "", "highlight": True},
+                {"id": "adv", "label": "单位成本优势（价格战额度）", "type": "expr", "expr": "advantage", "digits": 2, "unit": "", "color": "#dc2626"},
+                {"id": "ratio", "label": "成本比 u(q)/u(kq)", "type": "expr", "expr": "costRatio", "digits": 3, "unit": " 倍"},
+                {"id": "share", "label": "固定成本占你单位成本的比例", "type": "expr", "expr": "fixedShare*100", "digits": 1, "unit": "%", "color": "#78716c"},
+                {"id": "s10", "label": "占比降到 10% 所需产量 9F/v", "type": "expr", "expr": "scale_for_10pct", "money": True, "unit": ""},
+                {"id": "ok", "label": "固定成本是否已被摊薄（占比<10%）", "type": "status", "expr": "fixedShare", "op": "<", "rhs": 0.1, "okText": "规模已经足够大", "badText": "固定成本还很重"},
+            ],
+            "legend": [
+                {"color": "#b45309", "text": "单位成本 u(q)"},
+                {"color": "#78716c", "text": "可变成本地板 v"},
+                {"color": "#dc2626", "text": "小者 q"},
+                {"color": "#059669", "text": "大者 kq"},
+            ],
+        },
+        "steps": [
+            {"title": "单位成本 = 摊薄的固定成本 + 可变成本", "content": (
+                "$$u(q) = \\frac{F}{q} + v$$"
+                "<p>固定成本 $F$ 除以产量 $q$——这一项随产量<b>下降</b>；"
+                "可变成本 $v$ 是地板，产量再大也降不下去。</p>"
+                "<p>所以规模优势<b>不是无限的</b>：它只能把 $F/q$ 压小，压不到零。"
+                "这也是「规模优势」与「网络效应」的根本区别（见下一节）。</p>"
+            )},
+            {"title": "代入默认参数", "content": (
+                "<p>$F=1000,\\ v=10,\\ q=500,\\ k=3$：</p>"
+                "$$u(500) = \\frac{1000}{500} + 10 = " + f"{_n(sc['u1']):.2f}" + "$$"
+                "$$u(1500) = \\frac{1000}{1500} + 10 = " + f"{_n(sc['u2']):.4f}" + "$$"
+                "$$\\text{优势} = " + f"{_n(sc['advantage']):.4f}" + "$$"
+                "<p>对手每卖一件，就比你便宜 "
+                + f"{_n(sc['advantage']):.2f}" + "。"
+                "他可以把售价压到你的成本线以下，自己仍然赚钱——"
+                "<b>这就是价格战的额度。</b></p>"
+            )},
+            {"title": "正反馈：为什么大者更大", "content": (
+                "<p>把四个环节串起来看：</p>"
+                "<blockquote class='border-l-4 border-amber-400 pl-3 text-stone-600'>"
+                "更大规模 → 更低单位成本 → 能定更低价格（或更多研发/广告）→ "
+                "抢到更大份额 → 更大规模</blockquote>"
+                "<p>这是一个<b>自我强化</b>的回路。芒格把它叫做"
+                "「规模优势」，也是他偏爱「有护城河的生意」的原因。</p>"
+                "<p class='mt-2'>但回路要成立，前提是固定成本足够重。"
+                "拖动滑块把 $F$ 拉到 0：优势立刻消失——"
+                "没有固定成本，就没有规模效应。</p>"
+            )},
+            {"title": "临界规模：固定成本占比", "content": (
+                "<p>固定成本占单位成本的比例是个干净的进度条：</p>"
+                "$$\\frac{F/q}{F/q+v} = " + f"{_n(sc['fixed_share']) * 100:.1f}" + "\\%$$"
+                "<p>想把它压到 10% 以下，产量必须达到</p>"
+                "$$q^{*} = \\frac{9F}{v} = \\frac{9 \\times 1000}{10} = "
+                + f"{_n(sc['scale_for_10pct']):.0f}" + "$$"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3'>"
+                "这个 $q^{*}$ 是判断「这门生意能不能靠规模取胜」的门槛："
+                "<b>如果行业总容量都到不了 $9F/v$，那么谁都摊不薄固定成本，"
+                "规模优势也就不存在。</b></p>"
+            )},
+        ],
+    }
+
+
+# =====================================================================
+# 13) 网络效应：连接数按平方涨
+# =====================================================================
+def build_network():
+    n = 1000
+    nw = K.network_value(n)
+    return {
+        "lesson": {
+            "title": "网络效应：连接数按平方涨",
+            "subtitle": "用户只按 n 涨，连接数却按 n² 涨——这就是「赢家通吃」的算术",
+            "problem": (
+                "<p>一个电话网有 <b>1000</b> 个用户。理论上能建立多少条<b>双向连接</b>？</p>"
+                "<p class='mt-2'>直觉会答「大约 1000 条」。实际是 "
+                "<span class='text-rose-600 font-semibold'>499,500 条</span>。</p>"
+                "<p class='mt-2'>拖动滑块：用户数<b>翻一倍</b>，连接数会变成几倍？</p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "network", "caption": "连接数 n(n−1)/2"},
+            "view": {"xRange": [0, 2400], "yRange": [0, 3000000]},
+            "params": [
+                {"name": "n", "label": "用户数 n", "min": 10, "max": 5000, "step": 10, "value": n, "unit": "", "digits": 0},
+            ],
+            "scalars": [
+                {"name": "links", "expr": "n*(n-1)/2"},
+                {"name": "metcalfe", "expr": "n*(n-1)"},
+                {"name": "doubleRatio", "expr": "(2*n)*(2*n-1)/(n*(n-1))"},
+                {"name": "target_links", "expr": "1000000"},
+                {"name": "nForTarget", "expr": "(1+sqrt(1+8*1000000))/2"},
+            ],
+            "readouts": [
+                {"id": "links", "label": "连接数 n(n−1)/2", "type": "expr", "expr": "links", "money": True, "unit": " 条", "highlight": True},
+                {"id": "met", "label": "梅特卡夫口径 n(n−1)", "type": "expr", "expr": "metcalfe", "money": True, "unit": " 条", "color": "#0891b2"},
+                {"id": "ratio", "label": "用户翻倍 → 连接数 ×", "type": "expr", "expr": "doubleRatio", "digits": 3, "unit": " 倍", "color": "#dc2626"},
+                {"id": "nft", "label": "100 万条连接所需用户数", "type": "expr", "expr": "nForTarget", "digits": 0, "unit": " 人", "color": "#78716c"},
+                {"id": "ok", "label": "是否已进入平方区间", "type": "status", "expr": "n", "op": ">", "rhs": 100, "okText": "n 够大，平方项已占主导", "badText": "n 还小，近似线性"},
+            ],
+            "legend": [
+                {"color": "#b45309", "text": "连接数 n(n−1)/2"},
+                {"color": "#dc2626", "text": "当前 n"},
+                {"color": "#059669", "text": "2n"},
+            ],
+        },
+        "steps": [
+            {"title": "连接数不是 n，而是 n(n−1)/2", "content": (
+                "<p>每两个用户之间可以有一条连接。从 $n$ 个人里选 2 个：</p>"
+                "$$\\binom{n}{2} = \\frac{n(n-1)}{2}$$"
+                "<p>代入 $n=1000$：$\\dfrac{1000 \\times 999}{2} = "
+                + f"{_n(nw['links']):,.0f}$ 条。</p>"
+                "<p class='mt-2'>这里没有任何魔法——只是<b>组合数天然是二次的</b>。"
+                "而人对「网络价值」的直觉通常是线性的，这正是低估的来源。</p>"
+            )},
+            {"title": "翻倍的威力", "content": (
+                "<p>把 $n$ 换成 $2n$：</p>"
+                "$$\\frac{\\binom{2n}{2}}{\\binom{n}{2}}"
+                " = \\frac{2n(2n-1)}{n(n-1)} = " + f"{_n(nw['links_double_ratio']):.3f}" + "$$"
+                "<p>$n$ 很大时这个比值趋于 <b>4</b>。也就是说："
+                "<b>用户翻一倍，连接数变成四倍。</b></p>"
+                "<p class='mt-2'>反向看更刺眼：如果对手的用户是你的两倍，"
+                "他手上的「连接资产」是你的四倍。要追上他，你得先缩小这个四倍的差距——"
+                "而每缩小一点，他还在继续提速。</p>"
+            )},
+            {"title": "所以它比规模优势更狠", "content": (
+                "<p>上一节的规模优势是 $F/q$，随产量<b>衰减</b>——优势有上限。"
+                "网络效应的连接数是 $n^2$，随用户数<b>加速</b>——优势没有上限。</p>"
+                "<div class='mt-3 overflow-x-auto'><table class='w-full text-sm'>"
+                "<thead><tr class='border-b-2 border-stone-300 text-left text-xs uppercase text-stone-400'>"
+                "<th class='py-2 pr-3'>模型</th><th class='py-2 pr-3'>随规模怎么变</th>"
+                "<th class='py-2'>结局</th></tr></thead><tbody>"
+                "<tr class='border-b border-stone-100'><td class='py-1.5 pr-3'>规模优势</td>"
+                "<td class='py-1.5 pr-3'>单位成本 $F/q+v$，优势<b>收敛</b></td>"
+                "<td class='py-1.5'>寡头几家共存</td></tr>"
+                "<tr><td class='py-1.5 pr-3'>网络效应</td>"
+                "<td class='py-1.5 pr-3'>连接数 $n(n-1)/2$，优势<b>发散</b></td>"
+                "<td class='py-1.5'>赢家通吃</td></tr>"
+                "</tbody></table></div>"
+                "<p class='mt-2'>芒格偏爱「有网络效应的生意」，理由就在这里："
+                "<b>它是少数几个优势会自己长大的结构。</b></p>"
+            )},
+            {"title": "一个直觉校准：100 万条连接需要多少人", "content": (
+                "<p>解 $\\dfrac{n(n-1)}{2} = 10^{6}$：</p>"
+                "$$n = \\frac{1+\\sqrt{1+8\\times10^{6}}}{2} = "
+                + f"{_n(nw['n_for_target']):.0f}" + "$$"
+                "<p>只要 <b>" + f"{_n(nw['n_for_target']):,.0f}" + " 个人</b>，两两之间的潜在连接就超过一百万条。</p>"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3'>"
+                "反过来读这句话：<b>当你的网络只有几千人时，"
+                "你已经在处理百万级的连接关系了。</b>"
+                "这也解释了为什么网络型业务的复杂度会突然失控——"
+                "不是用户变多了，是关系数按平方涨了。</p>"
+            )},
+        ],
+    }
+
+
+# =====================================================================
+# 14) 临界点：R₀ 略过 1 就天翻地覆
+# =====================================================================
+def build_tipping():
+    beta, gamma = 0.6, 0.2
+    tp = K.tipping(beta, gamma)
+    peak = _n(tp["peak_frac_analytic"])
+    final = tp["final_size_solved"]
+    return {
+        "lesson": {
+            "title": "临界点：R₀ 略过 1 就天翻地覆",
+            "subtitle": "芒格：「巴甫洛夫联想加上社会认同，能让一场荒谬像传染病一样扩散。」",
+            "problem": (
+                "<p>把一件事的传播看成传染：接触率 $\\beta$，恢复率 $\\gamma$。"
+                "定义<b>基本传染数</b> $R_0 = \\beta S_0/\\gamma$——"
+                "一个感染者平均能传染几个人。</p>"
+                "<p class='mt-2'>现在取 $\\beta = 0.6$、$\\gamma = 0.2$，"
+                "于是 $R_0 = 3$。</p>"
+                "<p class='mt-2'>拖动两个滑块，把 $R_0$ 从 3 一路压到 1 以下看会发生什么："
+                "<span class='text-rose-600 font-semibold'>不是慢慢变小，是整条曲线塌掉。</span></p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "tipping", "caption": "SIR：易感 / 感染 / 痊愈"},
+            "view": {"xRange": [0, 80], "yRange": [0, 1]},
+            "params": [
+                {"name": "beta", "label": "接触率 β", "min": 0.05, "max": 1.2, "step": 0.05, "value": beta, "unit": "", "digits": 2},
+                {"name": "gamma", "label": "恢复率 γ", "min": 0.05, "max": 0.8, "step": 0.05, "value": gamma, "unit": "", "digits": 2},
+            ],
+            "scalars": [
+                {"name": "s0", "expr": "1"},
+                {"name": "days", "expr": "80"},
+                {"name": "i0", "expr": "0.0001"},
+                {"name": "R0", "expr": "beta*s0/gamma"},
+                {"name": "peak", "expr": "R0>1 ? i0 + s0 - gamma/beta + (gamma/beta)*log((gamma/beta)/s0) : i0"},
+                {"name": "finalSize", "expr": "sirFinal(beta*s0/gamma)*100"},
+                {"name": "herd", "expr": "gamma/beta"},
+            ],
+            "readouts": [
+                {"id": "r0", "label": "基本传染数 R₀ = βS₀/γ", "type": "expr", "expr": "R0", "digits": 2, "unit": "", "highlight": True},
+                {"id": "peak", "label": "峰值感染比例", "type": "expr", "expr": "peak*100", "digits": 2, "unit": "%", "color": "#dc2626"},
+                {"id": "final", "label": "最终累计感染比例", "type": "expr", "expr": "finalSize", "digits": 2, "unit": "%", "color": "#059669"},
+                {"id": "herd", "label": "熄灭所需的易感比例上界 γ/β", "type": "expr", "expr": "herd", "digits": 3, "unit": ""},
+                {"id": "ok", "label": "会不会爆发（R₀ > 1）", "type": "status", "expr": "1-R0", "op": ">", "rhs": 0, "okText": "R₀ 未超过 1，传染自行熄灭", "badText": "R₀ 超过 1，指数扩散"},
+            ],
+            "legend": [
+                {"color": "#0891b2", "text": "易感 S"},
+                {"color": "#dc2626", "text": "感染 I"},
+                {"color": "#059669", "text": "痊愈 R"},
+            ],
+        },
+        "steps": [
+            {"title": "三个方程，一条临界线", "content": (
+                "<p>SIR 模型把人群分成三段（比例之和恒为 1）：</p>"
+                "$$\\frac{dS}{dt} = -\\beta SI \\qquad "
+                "\\frac{dI}{dt} = \\beta SI - \\gamma I \\qquad "
+                "\\frac{dR}{dt} = \\gamma I$$"
+                "<p>感染者变化率 $= I(\\beta S - \\gamma)$。"
+                "只要 $\\beta S > \\gamma$，感染就涨；否则就跌。</p>"
+                "<p>初始 $S \\approx 1$，于是临界条件写成：</p>"
+                "$$R_0 = \\frac{\\beta S_0}{\\gamma} > 1$$"
+                "<p class='mt-2'>这一页的曲线是用 <b>RK4 真实积分</b>出来的，"
+                "不是画一条预设的钟形线——拖动滑块，方程会重新跑一遍。</p>"
+            )},
+            {"title": "代入 β=0.6、γ=0.2", "content": (
+                "$$R_0 = \\frac{0.6}{0.2} = " + f"{_n(tp['R0']):.0f}" + "$$"
+                "<p>峰值感染有解析解。令 $S_{peak} = \\gamma/\\beta$，则</p>"
+                "$$I_{peak} = I_0 + S_0 - S_{peak} + \\frac{\\gamma}{\\beta}"
+                "\\ln\\frac{S_{peak}}{S_0} = " + f"{peak * 100:.2f}" + "\\%$$"
+                "<p>最终累计感染（解 $R_\\infty = 1 - e^{-R_0 R_\\infty}$）是 "
+                "<b>" + f"{final * 100:.1f}" + "%</b>。</p>"
+                "<p class='mt-2 text-stone-500 text-xs'>解析峰值与上面 RK4 画出的数值解对比过，"
+                "两者相差不到 0.01——一个公式、一个积分，互为校验。</p>"
+            )},
+            {"title": "临界点的行为：不是渐变，是塌方", "content": (
+                "<p>把 $\\gamma$ 从 0.2 拖到 0.65（$R_0$ 从 3 掉到 0.92）：</p>"
+                "<ul class='list-disc pl-5 space-y-1'>"
+                "<li>$R_0 = 1$ 之前：整条感染曲线一路爬升，最终 "
+                + f"{final * 100:.0f}" + "% 的人被卷进去；</li>"
+                "<li>$R_0$ 刚跌破 1：感染数<b>单调下降</b>，峰值就是最初始的那一点点。</li>"
+                "</ul>"
+                "<p>中间没有任何过渡。这就是<b>临界点</b>（tipping point）的数学含义："
+                "在阈值的一侧，扰动会自己消失；在另一侧，扰动会自己放大。</p>"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3'>"
+                "芒格讲 Lollapalooza 说的是「多个倾向同向叠加」，"
+                "这一页补上了它的动力学：<b>当叠加把 $R_0$ 推过 1，"
+                "系统就换了一种行为模式。</b></p>"
+            )},
+            {"title": "为什么它和「心理倾向」是一回事", "content": (
+                "<p>把 $\\beta$ 读成「一个已经激动的人感染别人的速率」，"
+                "$\\gamma$ 读成「冷静下来的速率」，SIR 就变成了情绪扩散的模型。</p>"
+                "<ul class='list-disc pl-5 space-y-1'>"
+                "<li><b>降低 β</b>：远离人群、减少接触（不看那个群聊）；</li>"
+                "<li><b>提高 γ</b>：给情绪留恢复时间（睡一觉再决定）。</li>"
+                "</ul>"
+                "<p>两者都只要把 $R_0$ 压到 1 以下，传播就会自行熄灭——"
+                "<b>不需要把它压到 0</b>。</p>"
+                "<p class='mt-2'>这也是「能力圈」和「清单」在时间维度上的同伴："
+                "它们做的事，就是让一次冲动在 $R_0$ 上到 1 之前停下来。</p>"
+            )},
+        ],
+    }
+
+
+# =====================================================================
+# 15) 沉没成本：已经花掉的，不该进入决策
+# =====================================================================
+def build_sunk():
+    sunk, extra, p, reward = 100, 50, 40, 200
+    sk = K.sunk_cost(sunk, extra, p / 100, reward)
+    return {
+        "lesson": {
+            "title": "沉没成本：已经花掉的，不该进入决策",
+            "subtitle": "「不要为了翻本而继续投入」——但这条原则在数学上比听起来更彻底",
+            "problem": (
+                "<p>一个项目你已经投了 <b>100</b>，现在需要再投 <b>50</b> 才能完成。"
+                "成功概率 <b>40%</b>，成功后值 <b>200</b>。</p>"
+                "<p class='mt-2'>该继续吗？</p>"
+                "<p class='mt-2'>大多数人会说「已经亏了 100，再投 50 太亏了」。"
+                "而正确答案是：<span class='text-rose-600 font-semibold'>该继续</span>。"
+                "拖动滑块，看正确的算法和账面的算法在哪一点上给出相反结论。</p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "sunk", "caption": "期望增量 vs 成功率"},
+            "view": {"xRange": [0, 1], "yRange": [-150, 200]},
+            "params": [
+                {"name": "sunk", "label": "已投入（沉没成本）", "min": 0, "max": 400, "step": 10, "value": sunk, "unit": "", "digits": 0},
+                {"name": "extra", "label": "还需再投", "min": 0, "max": 300, "step": 10, "value": extra, "unit": "", "digits": 0},
+                {"name": "p", "label": "成功概率 p", "min": 0, "max": 100, "step": 1, "value": p, "unit": "%", "digits": 0},
+                {"name": "reward", "label": "成功后的收益 R", "min": 0, "max": 600, "step": 10, "value": reward, "unit": "", "digits": 0},
+            ],
+            "scalars": [
+                {"name": "evContinue", "expr": "p/100*reward - extra"},
+                {"name": "evWrong", "expr": "p/100*reward - extra - sunk"},
+                {"name": "breakeven", "expr": "extra/reward"},
+                {"name": "breakevenWrong", "expr": "(extra+sunk)/reward"},
+            ],
+            "readouts": [
+                {"id": "evc", "label": "正确算法 E[继续] = pR − C", "type": "expr", "expr": "evContinue", "digits": 1, "unit": "", "highlight": True},
+                {"id": "evw", "label": "账面算法（把已投入算进来）", "type": "expr", "expr": "evWrong", "digits": 1, "unit": "", "color": "#dc2626"},
+                {"id": "be", "label": "真正的盈亏平衡成功率 C/R", "type": "expr", "expr": "breakeven*100", "digits": 1, "unit": "%", "color": "#059669"},
+                {"id": "bew", "label": "误算出来的平衡点 (C+S)/R", "type": "expr", "expr": "breakevenWrong*100", "digits": 1, "unit": "%", "color": "#dc2626"},
+                {"id": "gap", "label": "两个平衡点之差（纯粹由沉没成本造成）", "type": "expr", "expr": "(breakevenWrong-breakeven)*100", "digits": 1, "unit": " 个百分点", "color": "#78716c"},
+                {"id": "ok", "label": "仅按增量看是否该继续", "type": "status", "expr": "evContinue", "op": ">", "rhs": 0, "okText": "该继续（与已投入无关）", "badText": "该止损"},
+            ],
+            "legend": [
+                {"color": "#059669", "text": "只看增量（正确）"},
+                {"color": "#dc2626", "text": "把已投入也算进来（错）"},
+                {"color": "#78716c", "text": "盈亏平衡线"},
+            ],
+        },
+        "steps": [
+            {"title": "决策只问增量", "content": (
+                "<p>沉没成本的定义就是「已经花掉、拿不回来」的钱。"
+                "任何<b>未来的</b>选择都改变不了它，所以它在决策里的系数必然是 0。</p>"
+                "$$E[\\text{继续}] = pR - C$$"
+                "<p>注意这个式子里<b>没有 S</b>。已投入 100 还是 100 万，"
+                "答案都完全一样。</p>"
+                "<p class='mt-2'>那已经花掉的钱该去哪里？去<b>复盘</b>，不去<b>决策</b>。</p>"
+            )},
+            {"title": "代入默认参数", "content": (
+                "<p>$S=100,\\ C=50,\\ p=40\\%,\\ R=200$：</p>"
+                "$$E[\\text{继续}] = 0.4 \\times 200 - 50 = "
+                + f"{_n(sk['ev_continue']):.0f}" + "$$"
+                "<p>正期望，<b>该继续</b>。</p>"
+                "<p>而如果错误地把沉没成本算进来：</p>"
+                "$$0.4 \\times 200 - 50 - 100 = " + f"{_n(sk['ev_wrong']):.0f}" + "$$"
+                "<p>同一个项目，两个符号。<b>这就是损失厌恶的入口</b>——"
+                "不是因为你算错了乘法，而是因为你在式子里放进了一个不该出现的数。</p>"
+            )},
+            {"title": "两个平衡点", "content": (
+                "<p>让期望为零，解出成功率门槛：</p>"
+                "$$\\text{正确：}\\quad p^{*} = \\frac{C}{R} = \\frac{50}{200} = "
+                + f"{_n(sk['breakeven_p']) * 100:.0f}" + "\\%$$"
+                "$$\\text{误算：}\\quad p^{*} = \\frac{C+S}{R} = "
+                + f"{(extra + sunk) / reward * 100:.0f}" + "\\%$$"
+                "<p>后者比前者高出 "
+                + f"{(extra + sunk) / reward * 100 - _n(sk['breakeven_p']) * 100:.0f}"
+                + " 个百分点——<b>这个差值完全由沉没成本制造，与项目本身毫无关系。</b></p>"
+                "<p class='mt-2'>拖动「已投入」滑块，看这个差值怎么被拉开："
+                "已投入越大，你要求的成功率就越离谱，于是越容易错过本来划算的事。</p>"
+            )},
+            {"title": "它如何伪装成「理性」", "content": (
+                "<p>沉没成本最危险的地方在于，它总是以「负责任」的面目出现：</p>"
+                "<ul class='list-disc pl-5 space-y-1'>"
+                "<li>「已经投了这么多，不能半途而废」——但半途而废和继续，"
+                "花的都是<b>未来</b>的钱；</li>"
+                "<li>「不继续就等于承认之前错了」——承认错误是<b>信息</b>，不是成本；</li>"
+                "<li>「再等等就回本了」——市场不知道你的成本线在哪。</li>"
+                "</ul>"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3'>"
+                "配合前面的模型一起用：<b>用「机会成本」问这笔追加的钱还能拿去做什么，"
+                "用「能力圈」问自己是不是真的看得懂这个项目。</b>"
+                "两把尺子都不含 S。</p>"
+            )},
+        ],
+    }
+
+
+# =====================================================================
+# 16) 冗余备份：串得少，并得多
+# =====================================================================
+def build_redundancy():
+    r, n = 90, 5
+    rd = K.redundancy(r / 100, n)
+    return {
+        "lesson": {
+            "title": "冗余备份：串得少，并得多",
+            "subtitle": "同一个 90% 可靠的零件，串联 5 个只剩 59%，并联 5 个却有 99.999%",
+            "problem": (
+                "<p>工程上「可靠度 90%」的零件很常见。现在要把几个这样的零件组成一个系统。</p>"
+                "<p class='mt-2'>两种接法：<b>串联</b>（一个接一个，任一个坏则全坏）、"
+                "<b>并联</b>（并排干同一件事，全坏才坏）。</p>"
+                "<p class='mt-2'>各用 5 个零件，系统可靠度分别是多少？"
+                "<span class='text-rose-600 font-semibold'>差的不是一点。</span></p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "redundancy", "caption": "串联系数 rⁿ 与并联 1−(1−r)ⁿ"},
+            "view": {"xRange": [1, 9], "yRange": [0, 1]},
+            "params": [
+                {"name": "r", "label": "单件可靠度 r", "min": 50, "max": 99, "step": 1, "value": r, "unit": "%", "digits": 0},
+                {"name": "n", "label": "零件数 n", "min": 1, "max": 9, "step": 1, "value": n, "unit": " 个", "digits": 0},
+            ],
+            "scalars": [
+                {"name": "series", "expr": "(r/100)^n"},
+                {"name": "parallel", "expr": "1-(1-r/100)^n"},
+                {"name": "gain", "expr": "(1-(1-r/100)^n)/((r/100)^n)"},
+                {"name": "nHalf", "expr": "log(0.5)/log(r/100)"},
+                {"name": "nNinety9", "expr": "log(0.01)/log(1-r/100)"},
+            ],
+            "readouts": [
+                {"id": "par", "label": "并联可靠度 1−(1−r)ⁿ", "type": "expr", "expr": "parallel*100", "digits": 3, "unit": "%", "highlight": True},
+                {"id": "ser", "label": "串联可靠度 rⁿ", "type": "expr", "expr": "series*100", "digits": 2, "unit": "%", "color": "#dc2626"},
+                {"id": "gain", "label": "并联 / 串联", "type": "expr", "expr": "gain", "digits": 2, "unit": " 倍", "color": "#059669"},
+                {"id": "nh", "label": "串联掉到 50% 所需的零件数", "type": "expr", "expr": "nHalf", "digits": 2, "unit": " 个", "color": "#dc2626"},
+                {"id": "nn", "label": "并联升到 99% 所需的零件数", "type": "expr", "expr": "nNinety9", "digits": 2, "unit": " 个", "color": "#059669"},
+                {"id": "ok", "label": "系统是否比单件更可靠", "type": "status", "expr": "parallel - r/100", "op": ">", "rhs": 0, "okText": "并联让它更可靠", "badText": "更不可靠"},
+            ],
+            "legend": [
+                {"color": "#dc2626", "text": "串联 rⁿ（任一坏则坏）"},
+                {"color": "#059669", "text": "并联 1−(1−r)ⁿ（全坏才坏）"},
+            ],
+        },
+        "steps": [
+            {"title": "两个公式，方向相反", "content": (
+                "$$\\text{串联：}\\quad R = r^{n} \\qquad\\qquad "
+                "\\text{并联：}\\quad R = 1 - (1-r)^{n}$$"
+                "<p>串联是「<b>全部都要成功</b>」，并联是「<b>不能全部失败</b>」。</p>"
+                "<p class='mt-2'>注意串联那个式子——它就是第 6.1 节「反过来想」里的存活率 $\\prod(1-p_i)$。"
+                "同一个公式，工程学叫可靠性，投资学叫存活率。</p>"
+            )},
+            {"title": "代入 r=90%、n=5", "content": (
+                "$$\\text{串联} = 0.9^{5} = " + f"{_n(rd['series']):.4f}"
+                " = " + f"{_n(rd['series']) * 100:.2f}" + "\\%$$"
+                "$$\\text{并联} = 1 - 0.1^{5} = " + f"{_n(rd['parallel']):.6f}"
+                " = " + f"{_n(rd['parallel']) * 100:.3f}" + "\\%$$"
+                "<p>同一个「90% 可靠」的零件：</p>"
+                "<ul class='list-disc pl-5 space-y-1'>"
+                "<li>串 5 个 → 掉到 <b>" + f"{_n(rd['series']) * 100:.1f}" + "%</b>，比单件还差得多；</li>"
+                "<li>并 5 个 → 升到 <b>" + f"{_n(rd['parallel']) * 100:.3f}" + "%</b>，几乎等于必然成功。</li>"
+                "</ul>"
+                "<p>相差 <b>" + f"{_n(rd['gain']):.0f}" + " 倍</b>。"
+                "这就是「冗余备份」为什么是工程与投资里的同一件事。</p>"
+            )},
+            {"title": "两个有用的门槛", "content": (
+                "<p>把两个公式分别置为 50% 和 99%，解出零件数：</p>"
+                "$$\\text{串联掉到一半：}\\quad n = \\frac{\\ln 0.5}{\\ln 0.9} = "
+                + f"{_n(rd['n_series_half']):.2f}" + " \\Rightarrow 7\\ \\text{个}$$"
+                "$$\\text{并联升到 99\\%：}\\quad n = \\frac{\\ln 0.01}{\\ln 0.1} = "
+                + f"{_n(rd['n_parallel_99']):.0f}" + "\\ \\text{个}$$"
+                "<p>换句话说：<b>串联 7 个就和抛硬币差不多；并联只要 2 个就到 99%。</b></p>"
+                "<p class='mt-2'>拖动滑块把 $r$ 从 90% 调到 99%：串联的门槛立刻放宽到 69 个，"
+                "并联则 1 个就够。所以提高单件质量与增加冗余，两条路都通——"
+                "但<b>冗余更便宜</b>。</p>"
+            )},
+            {"title": "怎么用在决策上", "content": (
+                "<ul class='list-disc pl-5 space-y-1'>"
+                "<li><b>减少串联环节</b>：一件事如果需要连续过关，"
+                "每加一环都在做乘法削减（回到 6.1 的「反过来想」）；</li>"
+                "<li><b>给关键环加并联</b>：多个供应商、多份备份、多重验证、"
+                "多条收入来源——都是把「全坏才坏」变成现实；</li>"
+                "<li><b>分清哪些在串联、哪些在并联</b>：很多失败不是环节不够好，"
+                "而是把本该并联的东西串起来了。</li>"
+                "</ul>"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3'>"
+                "芒格说「反过来想」：如果一件事<b>必然失败只需要一个条件</b>，"
+                "那它就是串联结构，你要做的是先找出最弱的那一环；"
+                "如果一件事<b>成功只需要一个条件</b>，那它是并联结构，你要做的是多备几条路。</p>"
+            )},
+        ],
+    }
+
+
 REGISTRY = {
     "compound": build_compound,
     "bayes": build_bayes,
@@ -1061,10 +1647,17 @@ REGISTRY = {
     "competence": build_competence,
     "lollapalooza": build_lollapalooza,
     "bias": build_bias,
+    "dcf": build_dcf,
+    "scale": build_scale,
+    "network": build_network,
+    "tipping": build_tipping,
+    "sunk": build_sunk,
+    "redundancy": build_redundancy,
 }
 
 ORDER = ["compound", "bayes", "expected", "safety", "opportunity",
-         "inversion", "incentive", "competence", "lollapalooza", "bias"]
+         "inversion", "incentive", "competence", "lollapalooza", "bias",
+         "dcf", "scale", "network", "tipping", "sunk", "redundancy"]
 
 META = {
     "compound": ("复利", "时间是朋友还是敌人", "指数增长 · 72 法则 · 负债的另一面"),
@@ -1077,6 +1670,12 @@ META = {
     "competence": ("能力圈", "边界比大小重要", "暴露比例 · σ 预算 · 击穿概率"),
     "lollapalooza": ("Lollapalooza", "多个倾向同向叠加", "乘法放大 · 互相喂养 · 超线性"),
     "bias": ("误判清单", "把风险指数级压下去", "25 条倾向 · 拦截率 · 逐条自检"),
+    "dcf": ("贴现与内在价值", "今天的一块钱比明天值钱", "两阶段 DCF · 终值占比 · 贴现率敏感度"),
+    "scale": ("规模优势", "大者为什么更大", "固定成本摊薄 · 单位成本差 · 正反馈"),
+    "network": ("网络效应", "连接数按平方涨", "梅特卡夫 · n(n−1)/2 · 赢家通吃"),
+    "tipping": ("临界点与传染", "R₀ 略过 1 就天翻地覆", "SIR · 传染阈值 · 峰值感染"),
+    "sunk": ("沉没成本", "已经花掉的，不该进入决策", "增量决策 · 两个平衡点 · 损失厌恶"),
+    "redundancy": ("冗余备份", "串得少，并得多", "串联 rⁿ · 并联 1−(1−r)ⁿ · 与「反过来想」对偶"),
 }
 
 
@@ -1105,9 +1704,10 @@ def build_index(out):
     <h1 class="text-3xl font-bold mb-3">思维模型：可算的那一部分</h1>
     <p class="text-stone-600 leading-relaxed max-w-2xl">
         芒格说：「你必须知道重要学科的重要理论，并经常使用它们——要全部都用上，而不是只用几个。」
-        下面 <b>10 个模型</b>是这套格栅里<b>能算清楚</b>的部分：前 5 个是数学地基
-        （复利、贝叶斯、凯利、安全边际、机会成本），后 5 个把芒格最常说的四句话
-        （反过来想 · 看激励 · 守能力圈 · 用清单）落成了可计算的形状。
+        下面 <b>16 个模型</b>是这套格栅里<b>能算清楚</b>的部分，分三批：
+        前 5 个是数学地基（复利、贝叶斯、凯利、安全边际、机会成本）；
+        中间 5 个把芒格最常说的几句话落成算式（反过来想 · 看激励 · 守能力圈 · 提防 Lollapalooza · 用清单）；
+        最后 6 个是系统与结构（贴现、规模优势、网络效应、临界点、沉没成本、冗余备份）。
         拖动滑块，看数字如何改变你的判断——所有数值由 sympy 精确计算，与配套文档同源。
     </p>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
