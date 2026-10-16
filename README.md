@@ -19,7 +19,10 @@ AIEduLab/
 │   ├── tools/
 │   │   ├── check_skills.py     技能闸门：可运行 + 可复现（跨哈希种子）+ 与基线一致
 │   │   ├── compose_templates.py 用「共享骨架 + 各自片段」组装 template/board.html
-│   │   └── sync_video_assets.py 把 shared/video 真源同步进各视频技能的 template/
+│   │   ├── sync_video_assets.py 把 shared/video 真源同步进各视频技能的 template/
+│   │   ├── check_semantics.py  语义校验：图注里的数字必须在内核/画布上找得到出处
+│   │   │                       （含回归测试与校准记录；见 semantics-report.md）
+│   │   └── audit_diagramability.py 「图解能覆盖多少知识」的可行性审计（见 coverage-audit.md）
 │   ├── books/math-thought/ 第一本书《数学思想：从计数到无穷》（8 章 36 图）
 │   ├── skills/             13 个学科技能（数理化生 + 初高中物理/几何 + 视频 + CS）
 │   ├── coverage-audit.md   「图解能覆盖多少知识」的可行性审计（现算，可重跑）
