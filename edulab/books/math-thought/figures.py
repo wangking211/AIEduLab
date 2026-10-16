@@ -1409,11 +1409,28 @@ def fig_sphere():
             "layers": layers, "steps": steps}
 
 
-def fig_poincare():
-    """庞加莱圆盘：测地线三角形的内角和小于 180°。"""
+def poincare_values():
+    """庞加莱三角形的那几个数 —— **正文与图形共用同一份计算**。
+
+    这是「生成路径」的样板：正文里原本手写的三个角与角亏，改由 @@tot@@ / @@defect@@
+    这类记号引用，装配时用本函数的返回值替换 —— 图文同源，不可能不一致。
+    """
     A, B, C = (-0.5, 0.0), (0.5, 0.0), (0.0, 0.4)
     aa, ab, ac = _disk_angles(A, B, C)
     tot = aa + ab + ac
+    return {
+        "a1": aa, "a2": ab, "a3": ac, "tot": tot,
+        "defect": 180.0 - tot,                    # 角亏（度）
+        "area": math.pi - math.radians(tot),      # K = −1 时的双曲面积
+    }
+
+
+def fig_poincare():
+    """庞加莱圆盘：测地线三角形的内角和小于 180°。"""
+    _v = poincare_values()
+    A, B, C = (-0.5, 0.0), (0.5, 0.0), (0.0, 0.4)
+    aa, ab, ac = _v["a1"], _v["a2"], _v["a3"]
+    tot = _v["tot"]
     layers = [
         {"geom": "line", "data": _circle(0, 0, 1), "stroke": DIM, "width": 1.6, "dash": True},
         {"geom": "text", "when": "k >= 1", "x": -1.42, "y": 1.00, "text": "圆周 = 无穷远",
@@ -2589,6 +2606,35 @@ FIGS.update({
 
 def build(ids=None):
     return {k: FIGS[k]() for k in (ids or FIGS)}
+
+
+# =====================================================================
+# 生成路径：正文可引用的具名数值
+# =====================================================================
+# 章节 JSON 里写 @@name@@（可带精度：@@name:3@@），build.py 装配时用本表替换。
+# 目的：让**正文与图形共用同一份计算**，把「图文不符」从源头消掉 ——
+# 书稿正文原本 0% 生成（见 edulab/generated-prose-report.md），这是第一步。
+# 约定：
+#   · 只有在这里注册过的名字才能在正文里用；拼错会在装配时**报错**，不会静默留白。
+#   · 展示单位（度/百分比/元）由正文写，这里只给数值。
+#   · 只登记「正文确实引用」的值，不做无目的的搬运。
+PROSE = {
+    "fig-poincare": poincare_values,
+}
+
+
+def prose_values(fig_ids):
+    """收集若干张图可供正文引用的具名数值；重名会报错（避免张冠李戴）。"""
+    out = {}
+    for fid in fig_ids:
+        fn = PROSE.get(fid)
+        if not fn:
+            continue
+        for k, val in fn().items():
+            if k in out:
+                raise KeyError(f"正文记号冲突：{k}（{fid}）已在别处定义")
+            out[k] = val
+    return out
 
 if __name__ == "__main__":
     figs = build()

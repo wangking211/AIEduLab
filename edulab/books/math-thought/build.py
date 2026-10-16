@@ -17,6 +17,7 @@ build.py — 把《数学思想：从计数到无穷》装配成一套可离线�
     python build.py <输出目录>
 """
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -38,9 +39,45 @@ def esc(s):
             .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
 
+PROSE_TOKEN = re.compile(r"@@([a-z_][a-z0-9_]*)(?::(\d+))?@@")
+
+
+def subst_prose(text, values, where):
+    """把正文里的 @@name@@ / @@name:3@@ 换成 figures.py 现算出来的值。
+
+    这是「生成路径」的落地：正文里凡是图形也算得出的数，都不再手写。
+    拼错的名字**直接报错**（而不是静默留白）—— 留白比错误更危险。
+    """
+    if not isinstance(text, str) or "@@" not in text:
+        return text
+
+    def one(m):
+        name, prec = m.group(1), m.group(2)
+        if name not in values:
+            raise KeyError(f"{where}：正文引用了未注册的记号 @@{name}@@"
+                           f"（可用：{', '.join(sorted(values)) or '无'}）")
+        return f"{values[name]:.{int(prec) if prec else 2}f}"
+    return PROSE_TOKEN.sub(one, text)
+
+
+def subst_chapter(ch, values):
+    """递归地把一章里所有字符串字段都过一遍替换。"""
+    if isinstance(ch, str):
+        return subst_prose(ch, values, "章节正文")
+    if isinstance(ch, list):
+        return [subst_chapter(x, values) for x in ch]
+    if isinstance(ch, dict):
+        return {k: subst_chapter(v, values) for k, v in ch.items()}
+    return ch
+
+
 def build_chapter(book, ch, fig_specs, out_dir):
+    values = FIGS.prose_values(ch.get("figs", []))
+    ch = subst_chapter(ch, values)
     data = {"book": book, "chapter": ch, "figures": {k: fig_specs[k] for k in ch.get("figs", []) if k in fig_specs}}
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    if "@@" in payload:
+        raise ValueError("装配后仍残留 @@ 记号：正文里有未替换的占位符")
     html = (PAGE_T
             .replace("__PAGE_TITLE__", esc(f"{ch['num']} {ch['title']} · {book['title']}"))
             .replace("__VIZ_JS__", VIZ_JS)
