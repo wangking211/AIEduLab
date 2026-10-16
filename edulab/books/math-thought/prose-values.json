@@ -1,4 +1,8 @@
 {
+ "ch01": {
+  "cplx_half": "180",
+  "cplx_quarter": "90"
+ },
  "ch04": {
   "exact": "3.750",
   "n1": "1.500",
@@ -6,7 +10,12 @@
  },
  "ch05": {
   "at7": "6",
+  "bt_p1": "1/3",
+  "bt_p2": "1/2",
+  "bt_p3": "1/4",
   "extreme": "1",
+  "galton_balls": "200",
+  "lln_flips": "500",
   "sides": "6",
   "total": "36"
  },
@@ -31,11 +40,32 @@
   "cayley_n": "6",
   "roots_axes": "5",
   "roots_rot": "5",
-  "roots_sym": "10"
+  "roots_sym": "10",
+  "sym_ops": "6",
+  "tower_a5": "60",
+  "tower_q3_0": "2",
+  "tower_q3_1": "3",
+  "tower_q4_0": "2",
+  "tower_q4_1": "3",
+  "tower_q4_2": "4",
+  "tower_q5_0": "2"
  },
  "ch08": {
+  "bb_machines1": "64",
+  "bb_machines2": "20,736",
+  "bb_rules3": "6",
+  "bb_sig1": "1",
+  "bb_sig2": "4",
+  "bb_sig3_ones": "6",
+  "bb_sig3_steps": "11",
+  "bb_states3": "3",
+  "bb_t1": "1",
+  "bb_t2": "6",
+  "bb_t3_ones": "4",
+  "bb_t3_steps": "21",
   "tm_rules": "16",
   "tm_steps": "20",
-  "tm_syms": "4"
+  "tm_syms": "4",
+  "uni_bits": "5"
  }
 }

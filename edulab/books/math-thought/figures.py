@@ -949,7 +949,8 @@ def fig_dice():
 
 def fig_galton():
     """高尔顿钉板：每一步都随机，总体却是确定的钟形（真实模拟，固定种子）。"""
-    rows, balls = 8, 200
+    _v = galton_values()
+    rows, balls = _v["galton_rows"], _v["galton_balls"]
     counts, paths = _galton(rows, balls, seed=2502)   # 该种子下模拟柱形与理论曲线贴合最紧
     mx = max(counts)
     base, hmax = -11.4, 3.4
@@ -1012,7 +1013,7 @@ def fig_galton():
 
 def fig_lln():
     """大数定律：抛硬币的频率收敛到 1/2（真实模拟，固定种子）。"""
-    flips = 500
+    flips = lln_values()["lln_flips"]
     seq = _coin_flips(flips)
     runs, h = [], 0
     for n, x in enumerate(seq, 1):
@@ -1394,6 +1395,66 @@ def sphere_values(lon_span=90.0):
     total = ang * 3
     return {"sphere_angle": ang, "sphere_total": total,
             "sphere_excess": total - 180.0, "sphere_lon": lon_span}
+
+
+def bb_values():
+    """忙碌海狸前三个值的那些数 —— 正文与图形共用（真穷举 + 真跑）。"""
+    sig1, t1, _c1, _l1, tot1, _h1 = _bb_enum(1, 100)
+    sig2, t2, _c2, _l2, tot2, hal2 = _bb_enum(2, 400)
+    _ta, ones3, steps3, _ha = _bb_prog(BB3_SIGMA_PROG, 3)
+    _tb, ones3t, steps3t, _hb = _bb_prog(BB3_T_PROG, 3)
+    return {
+        "bb_sig1": sig1, "bb_t1": t1, "bb_machines1": tot1,
+        "bb_sig2": sig2, "bb_t2": t2, "bb_machines2": tot2, "bb_halted2": hal2,
+        "bb_sig3_ones": ones3, "bb_sig3_steps": steps3,
+        "bb_t3_ones": ones3t, "bb_t3_steps": steps3t,
+        "bb_states3": 3, "bb_rules3": 6,        # 获胜机：3 状态 × 2 符号
+    }
+
+
+def tower_values():
+    """可解塔的各级商与 A₅ 的阶 —— 正文与图形共用。"""
+    return {
+        "tower_q3_0": TOWER_QUOT[0][0], "tower_q3_1": TOWER_QUOT[0][1],
+        "tower_q4_0": TOWER_QUOT[1][0], "tower_q4_1": TOWER_QUOT[1][1],
+        "tower_q4_2": TOWER_QUOT[1][2],
+        "tower_q5_0": TOWER_QUOT[2][0],
+        "tower_a5": math.factorial(5) // 2,      # A₅ 的阶 = 5!/2 = 60
+    }
+
+
+def complex_values():
+    """i 的几何解释：旋转的角度 —— 正文与图形共用。"""
+    return {"cplx_half": 180, "cplx_quarter": 90}
+
+
+def galton_values(rows=8, balls=200):
+    """高尔顿钉板的规模 —— 正文与图形共用。"""
+    return {"galton_rows": rows, "galton_balls": balls}
+
+
+def lln_values(flips=500):
+    """大数定律模拟的抛掷次数 —— 正文与图形共用。"""
+    return {"lln_flips": flips}
+
+
+def symmetry_values():
+    """D₃ 的操作个数 —— 正文与图形共用。"""
+    names, _, _ = _d3()
+    return {"sym_ops": len(names)}
+
+
+def universal_values():
+    """通用图灵机的编码位宽 —— 正文与图形共用。
+
+    每条转移定长五位：旧状态、旧符号、新状态、新符号、移动方向。
+    """
+    return {"uni_bits": 5}
+
+
+def bertrand_values():
+    """伯特兰悖论的三个答案 —— 正文与图形共用（用分数，免得写成小数）。"""
+    return {"bt_p1": Fraction(1, 3), "bt_p2": Fraction(1, 2), "bt_p3": Fraction(1, 4)}
 
 
 def fig_sphere():
@@ -1923,18 +1984,22 @@ def fig_galois():
             "layers": layers, "steps": steps}
 
 
+# 可解塔的盒子与各级商 —— 图与正文共用同一份定义
+TOWER_BOXES = {
+    0: [("S₃", math.factorial(3)), ("A₃", math.factorial(3) // 2), ("{e}", 1)],
+    1: [("S₄", math.factorial(4)), ("A₄", math.factorial(4) // 2), ("V₄", 4), ("{e}", 1)],
+    2: [("S₅", math.factorial(5)), ("A₅", math.factorial(5) // 2), ("{e}", 1)],
+}
+TOWER_QUOT = {0: [2, 3], 1: [2, 3, 4], 2: [2, None]}   # None = 塔断了
+
+
 def fig_tower():
     """可解塔：三次、四次修得通，五次断在 A₅。"""
-    fact = math.factorial
     COLS = [-2.9, 0.0, 2.9]
     CW_, CH_ = 2.1, 1.0
     # 每一列从上往下的盒子（最上面是 S_n）
-    TOWERS = {
-        0: [("S₃", fact(3)), ("A₃", fact(3) // 2), ("{e}", 1)],
-        1: [("S₄", fact(4)), ("A₄", fact(4) // 2), ("V₄", 4), ("{e}", 1)],
-        2: [("S₅", fact(5)), ("A₅", fact(5) // 2), ("{e}", 1)],
-    }
-    QUOT = {0: [2, 3], 1: [2, 3, 4], 2: [2, None]}   # None = 塔断了
+    TOWERS = TOWER_BOXES
+    QUOT = TOWER_QUOT
     layers, nodes = [], []
 
     def slot(i, n):
@@ -2701,6 +2766,14 @@ PROSE = {
     "fig-sphere": sphere_values,
     "fig-roots": roots_values,
     "fig-machine": machine_values,
+    "fig-bb": bb_values,
+    "fig-tower": tower_values,
+    "fig-complex": complex_values,
+    "fig-galton": galton_values,
+    "fig-lln": lln_values,
+    "fig-symmetry": symmetry_values,
+    "fig-universal": universal_values,
+    "fig-bertrand": bertrand_values,
 }
 
 

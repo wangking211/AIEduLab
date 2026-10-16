@@ -19,6 +19,7 @@ build.py — 把《数学思想：从计数到无穷》装配成一套可离线�
 import json
 import re
 import sys
+from fractions import Fraction
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -62,10 +63,13 @@ def subst_prose(text, values, where, seen=None):
             raise KeyError(f"{where}：正文引用了未注册的记号 @@{name}@@"
                            f"（可用：{', '.join(sorted(values)) or '无'}）")
         v = values[name]
-        if prec is not None:                      # 显式指定精度（如需 0.790 这类保留位）
+        if isinstance(v, Fraction):
+            rendered = f"{v.numerator}/{v.denominator}"     # 1/3 这类分式，别写成 0.33
+        elif prec is not None:                            # 显式指定精度（如需 0.790 这类保留位）
             rendered = f"{v:.{int(prec)}f}"
-        elif abs(v - round(v)) < 1e-9:            # 默认：整数就写整数，别写成 6.00
-            rendered = str(int(round(v)))
+        elif abs(v - round(v)) < 1e-9:                    # 默认：整数就写整数，别写成 6.00
+            i = int(round(v))
+            rendered = f"{i:,}" if abs(i) >= 10000 else str(i)   # 五位以上用千分位，随正文习惯
         else:
             rendered = f"{v:.2f}"
         if seen is not None:
