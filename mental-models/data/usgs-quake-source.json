@@ -1,0 +1,20 @@
+{
+ "title": "Earthquake catalog (ANSS Comprehensive Catalog, ComCat)",
+ "source": "U.S. Geological Survey (USGS) Earthquake Hazards Program",
+ "queryUrl": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=csv&starttime=1900-01-01&endtime=2024-12-31&minmagnitude=6.0",
+ "params": {
+  "format": "csv",
+  "starttime": "1900-01-01",
+  "endtime": "2024-12-31",
+  "minmagnitude": "6.0"
+ },
+ "minMagnitude": 6.0,
+ "requestedStart": "1900-01-01",
+ "actualCoverage": "1900-2024",
+ "actualStartNote": "USGS 默认目录不含 1969 年以前的全球数字化记录；请求 1900 年起的目的是让服务端回传它所拥有的全部数据，脚本如实记录实际起点。",
+ "eventCount": 14211,
+ "contentSha256": "f581277f54b0ace100332a822f46699f165b4aa24756a6a01e2f37e22e7de262",
+ "dateDownloaded": "2026-10-16",
+ "license": "U.S. public domain（USGS 官方说明：USGS-authored or produced data and information are considered to be in the U.S. public domain）",
+ "creditsUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+}

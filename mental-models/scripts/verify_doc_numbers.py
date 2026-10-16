@@ -227,6 +227,54 @@ ck("中国 [1000,2020] 年化 %", K.f(K.window_growth(md["China"], 1000, 2020)["
 ck("数据单位（出处守卫）", 1 if meta8["unit"] == "international-$ in 2011 prices" else 0, 1, 0)
 ck("数据许可可再分发（CC BY）", 1 if "Maddison" in meta8["citationShort"] else 0, 1, 0)
 
+# ---- 尾部风险（§9，数据驱动） ----
+qk = K.load_quakes()
+qm = K.quake_meta()
+qb = K.quake_bins(qk)
+ck("地震目录事件数", len(qk), 14211, 0)
+ck("目录起点年", min(y for y, _ in qk), 1900, 0)
+ck("目录终点年", max(y for y, _ in qk), 2024, 0)
+ck("分箱数", qb["n_bins"], 36, 0)
+for thr, cnt, cs, es, conc in [(6.5, 4648, 32.71, 97.72, 3), (7.0, 1591, 11.20, 93.57, 8),
+                               (7.5, 497, 3.50, 85.75, 25), (8.0, 99, 0.70, 69.17, 99),
+                               (8.5, 16, 0.11, 52.81, 469), (9.0, 5, 0.04, 41.42, 1177)]:
+    t = K.tail_share(qb, thr)
+    ck(f"M>={thr} 次数", t["count"], cnt, 0)
+    ck(f"M>={thr} 数量占比 %", K.f(t["count_share"]) * 100, cs, 0.005)
+    ck(f"M>={thr} 能量占比 %", K.f(t["energy_share"]) * 100, es, 0.005)
+    ck(f"M>={thr} 集中度 ×", round(K.f(t["concentration"])), conc, 1)
+ck("M 6.0-6.5 次数（bins 0..4）", sum(qb["counts"][:5]), 9563, 0)
+ck("M 6.0-6.5 数量占比 %", sum(qb["counts"][:5]) / qb["totalCount"] * 100, 67.29, 0.005)
+ck("M 6.0-6.5 能量占比 %", sum(qb["energies"][:5]) / qb["totalEnergy"] * 100, 2.28, 0.005)
+fit9 = K.gr_fit(qb, 6.0, 8.2)
+ck("GR 拟合 b（全样本）", fit9["b"], 1.0754, 0.0005)
+ck("震级每差 1 级频次 ×", fit9["per_decade"], 11.90, 0.02)
+bt9 = K.quake_backtest(qk)
+ck("回测前段年数 T1", bt9["T1"], 27, 0)
+ck("回测后段年数 T2", bt9["T2"], 28, 0)
+ck("回测拟合 b（1970-1996）", bt9["b"], 1.2602, 0.0005)
+for i, M in enumerate((8.0, 8.5, 9.0, 9.5)):
+    r = bt9["rows"][i]
+    ck(f"回测 M>={M} 预测", r["predicted"],
+       {8.0: 15.63, 8.5: 3.66, 9.0: 0.86, 9.5: 0.20}[M], 0.01)
+    ck(f"回测 M>={M} 实测", r["observed"], {8.0: 28, 8.5: 5, 9.0: 2, 9.5: 0}[M], 0)
+ck("回测前段最大震级", bt9["obs_max_pre"], 8.3, 1e-9)
+ck("回测后段最大震级", bt9["obs_max_post"], 9.1, 1e-9)
+ck("回测方向=低估", 1 if bt9["underestimated"] else 0, 1, 0)
+fx9 = K.quake_full_extrapolation(qb)
+for i, M in enumerate((8.0, 8.5, 9.0)):
+    r = fx9["rows"][i]
+    ck(f"全样本外推 M>={M} 预测", r["predicted"],
+       {8.0: 118.6, 8.5: 34.4, 9.0: 9.98}[M], 0.02)
+    ck(f"全样本外推 M>={M} 实测", r["observed"], {8.0: 99, 8.5: 16, 9.0: 5}[M], 0)
+ck("全样本外推方向=高估", 1 if fx9["overestimates"] else 0, 1, 0)
+ck("外推误差方向不唯一（既低估又高估）",
+   1 if (bt9["underestimated"] and fx9["overestimates"]) else 0, 1, 0)
+for lo_yr, es8 in ((1930, 72.47), (1970, 59.59)):
+    sub = K.quake_bins([(y, m) for y, m in qk if y >= lo_yr])
+    ck(f"{lo_yr} 起 M>=8.0 能量占比 %", K.f(K.tail_share(sub, 8.0)["energy_share"]) * 100, es8, 0.005)
+ck("数据许可=美国公有领域", 1 if "public domain" in qm["license"] else 0, 1, 0)
+
 # ---- 汇总 ----
 bad = [c for c in checks if not c[0]]
 for ok, name, got, want in checks:

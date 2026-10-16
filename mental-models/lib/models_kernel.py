@@ -658,6 +658,144 @@ def great_divergence(series=None, pivot=1820):
     return out
 
 
+# ==================== 18) 尾部风险（数据驱动） ====================
+# 与 17 同属数据驱动：数值来自 data/usgs-quakes.csv（USGS 地震目录，公有领域）。
+# 这里用浮点而非 sympy —— 能量-震级关系 log10 E = 1.5M + 4.8 是经验标定式，
+# 没有"精确"可言；真正需要精确的是「哪些事件被算进去」，那由数据集决定。
+QUAKE_CSV = SKILL_DIR / "data" / "usgs-quakes.csv"
+QUAKE_META = SKILL_DIR / "data" / "usgs-quake-source.json"
+QUAKE_BIN0, QUAKE_BINW = 6.0, 0.1
+
+
+def quake_energy(mag):
+    """地震释放能量（焦耳）：log10 E = 1.5M + 4.8（Gutenberg-Richter / 花森经验式）。"""
+    return 10.0 ** (1.5 * float(mag) + 4.8)
+
+
+def load_quakes(path=None):
+    """读 (年, 震级) 列表，按年升序。"""
+    p = pathlib.Path(path) if path else QUAKE_CSV
+    assert p.exists(), f"缺少数据集：{p}（先跑 python scripts/fetch_quakes.py）"
+    rows = []
+    with io.open(p, encoding="utf-8", newline="") as f:
+        for r in csv.DictReader(f):
+            rows.append((int(r["year"]), float(r["magnitude"])))
+    rows.sort()
+    return rows
+
+
+def quake_meta(path=None):
+    p = pathlib.Path(path) if path else QUAKE_META
+    assert p.exists(), f"缺少元数据：{p}"
+    import json
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+def quake_bins(rows=None, bin0=QUAKE_BIN0, binw=QUAKE_BINW):
+    """按震级分箱：每箱给出事件数与能量之和。
+
+    分箱用 floor((m-bin0)/binw + eps)，避免 9.5 因浮点落到 34.9999… 而被归错箱。
+    """
+    rows = load_quakes() if rows is None else rows
+    top = max(m for _, m in rows)
+    n = int(math.floor((top - bin0) / binw + 1e-7)) + 1
+    counts = [0] * n
+    energies = [0.0] * n
+    for _, m in rows:
+        i = int(math.floor((m - bin0) / binw + 1e-7))
+        if i < 0 or i >= n:
+            continue
+        counts[i] += 1
+        energies[i] += quake_energy(m)
+    return {
+        "bin0": bin0, "binw": binw, "counts": counts, "energies": energies,
+        "totalCount": sum(counts), "totalEnergy": sum(energies),
+        "n_bins": n,
+    }
+
+
+def tail_share(bins, threshold):
+    """阈值之上：事件的**数量占比**与**能量占比**。这是本页的核心读数。"""
+    i = int(math.floor((threshold - bins["bin0"]) / bins["binw"] + 1e-7))
+    i = max(0, min(i, len(bins["counts"])))
+    c = sum(bins["counts"][i:])
+    e = sum(bins["energies"][i:])
+    return {
+        "threshold": threshold, "count": c, "energy": e,
+        "count_share": c / bins["totalCount"], "energy_share": e / bins["totalEnergy"],
+        "concentration": (e / bins["totalEnergy"]) / (c / bins["totalCount"]),
+    }
+
+
+def gr_fit(bins, lo=6.0, hi=8.2, step=0.1):
+    """Gutenberg-Richter：log10 N(≥M) = a − bM，对累计计数做最小二乘。"""
+    xs, ys = [], []
+    m = lo
+    while m <= hi + 1e-9:
+        n = tail_share(bins, m)["count"]
+        if n > 0:
+            xs.append(m)
+            ys.append(math.log10(n))
+        m += step
+    k = len(xs)
+    assert k >= 3, "拟合点不足"
+    sx, sy = sum(xs), sum(ys)
+    sxx = sum(x * x for x in xs)
+    sxy = sum(x * y for x, y in zip(xs, ys))
+    b = -(k * sxy - sx * sy) / (k * sxx - sx * sx)
+    a = (sy + b * sx) / k
+    return {"a": a, "b": b, "lo": lo, "hi": hi, "n_points": k,
+            "per_decade": 10.0 ** b}
+
+
+def quake_backtest(rows=None, fit_from=1970, split_year=1997, fit_hi=8.2):
+    """尾部外推检验：用前半段拟合 GR，预测后半段该出现多少次大震。
+
+    这一条是整页的转折：**外推会系统性低估尾部**。
+    """
+    rows = load_quakes() if rows is None else rows
+    years = [y for y, _ in rows]
+    pre = [(y, m) for y, m in rows if fit_from <= y < split_year]
+    post = [m for y, m in rows if y >= split_year]
+    assert pre and post, "分割年份越界"
+    fit = gr_fit(quake_bins(pre), QUAKE_BIN0, fit_hi)
+    T1 = split_year - fit_from
+    T2 = max(years) - split_year + 1
+    out_rows = []
+    for M in (8.0, 8.5, 9.0, 9.5):
+        predicted = (10.0 ** (fit["a"] - fit["b"] * M)) * T2 / T1
+        observed = sum(1 for m in post if m >= M)
+        out_rows.append({
+            "M": M, "predicted": predicted, "observed": observed,
+            "ratio": (observed / predicted) if predicted > 0 else None,
+        })
+    return {
+        "fit_from": fit_from, "split_year": split_year, "T1": T1, "T2": T2,
+        "a": fit["a"], "b": fit["b"],
+        "obs_max_pre": max(m for _, m in pre), "obs_max_post": max(post),
+        "rows": out_rows,
+        "underestimated": bool(out_rows[0]["observed"] > out_rows[0]["predicted"]),
+    }
+
+
+def quake_full_extrapolation(bins=None, fit_hi=8.2):
+    """全样本拟合后外推整个观测期 —— 方向可能与分段回测**相反**。
+
+    分段回测（前段拟合 → 后段）会低估；全样本拟合反而高估（尾部比 GR 直线更早弯下来，
+    因为地球有物理上限）。两个方向并存，正是「外推不可靠」的实证。
+    """
+    bins = quake_bins() if bins is None else bins
+    fit = gr_fit(bins, QUAKE_BIN0, fit_hi)
+    out = []
+    for M in (8.0, 8.5, 9.0):
+        predicted = 10.0 ** (fit["a"] - fit["b"] * M)
+        observed = tail_share(bins, M)["count"]
+        out.append({"M": M, "predicted": predicted, "observed": observed,
+                    "ratio": (observed / predicted) if predicted > 0 else None})
+    return {"a": fit["a"], "b": fit["b"], "rows": out,
+            "overestimates": bool(out[-1]["observed"] < out[-1]["predicted"])}
+
+
 # ==================== 自检 ====================
 if __name__ == "__main__":
     # 复利
@@ -819,6 +957,47 @@ if __name__ == "__main__":
     assert order == ["United States", "France", "United Kingdom", "Japan",
                      "China", "India"], f"2022 年次序变了：{order}"
 
+    # 尾部风险（数据驱动：全部来自 data/usgs-quakes.csv）
+    qk = load_quakes()
+    qm = quake_meta()
+    assert len(qk) == 14211, "地震目录事件数变了"
+    assert (min(y for y, _ in qk), max(y for y, _ in qk)) == (1900, 2024)
+    assert "public domain" in qm["license"], "许可说明变了"
+    qb = quake_bins(qk)
+    assert qb["n_bins"] == 36, f"分箱数应为 36，实得 {qb['n_bins']}"
+    assert qb["totalCount"] == 14211
+    t7, t8, t85, t9 = (tail_share(qb, x) for x in (7.0, 8.0, 8.5, 9.0))
+    assert t7["count"] == 1591 and abs(t7["count_share"] * 100 - 11.20) < 0.01
+    assert abs(t7["energy_share"] * 100 - 93.57) < 0.02
+    assert t8["count"] == 99 and abs(t8["count_share"] * 100 - 0.70) < 0.01
+    assert abs(t8["energy_share"] * 100 - 69.17) < 0.05, "0.7% 的事件应释放近七成能量"
+    assert abs(t85["energy_share"] * 100 - 52.81) < 0.05
+    assert abs(t9["energy_share"] * 100 - 41.42) < 0.05
+    assert t8["energy_share"] > t8["count_share"] * 90, "能量集中度：能量占比应是数量占比的百倍量级"
+    # 能量集中度在三个时段都稳健（鲁棒性）
+    for lo_yr, lo_share in ((1930, 72.47), (1970, 59.59)):
+        sub = quake_bins([(y, m) for y, m in qk if y >= lo_yr])
+        got = tail_share(sub, 8.0)["energy_share"] * 100
+        assert abs(got - lo_share) < 0.05, f"{lo_yr} 起的 M>=8 能量占比变了：{got}"
+    # GR 拟合
+    fit = gr_fit(qb, 6.0, 8.2)
+    assert abs(fit["b"] - 1.0754) < 0.0005, f"b 值变了：{fit['b']}"
+    assert abs(fit["per_decade"] - 11.90) < 0.02
+    # 尾部外推检验：必须显示系统性低估
+    bt = quake_backtest(qk)
+    assert (bt["T1"], bt["T2"]) == (27, 28)
+    assert abs(bt["b"] - 1.2602) < 0.0005
+    assert bt["rows"][0]["observed"] == 28 and abs(bt["rows"][0]["predicted"] - 15.626) < 0.01
+    assert bt["obs_max_pre"] == 8.3 and bt["obs_max_post"] == 9.1, "两段实测最大震级变了"
+    assert bt["underestimated"] is True, "外推应当低估尾部"
+    assert bt["rows"][0]["observed"] > bt["rows"][0]["predicted"] * 1.5
+    # 但全样本外推的方向相反 —— 必须两个方向都钉住，页面才诚实
+    fx = quake_full_extrapolation(qb)
+    assert fx["overestimates"] is True, "全样本外推应当高估尾部"
+    assert abs(fx["rows"][2]["predicted"] - 9.975) < 0.01   # M>=9.0 预测 9.98 次
+    assert fx["rows"][2]["observed"] == 5                   # 实测 5 次
+    assert abs(fx["rows"][2]["ratio"] - 0.501) < 0.005
+
     print("models_kernel self-check OK ✓")
     print(f"  复利 1 万 @8% 30 年 → {f(c['F']):,.0f}（单利 {f(c['F_simple']):,.0f}，翻倍需 {f(c['doubling_years']):.2f} 年）")
     print(f"  贝叶斯 1% 患病率 + 99% 灵敏度/95% 特异度 → 阳性者真实患病概率 {f(b['posterior'])*100:.1f}%")
@@ -840,3 +1019,8 @@ if __name__ == "__main__":
           f"英国前段 {f(gd['United Kingdom']['pre_cagr'])*100:.4f}%/年、"
           f"后段 {f(gd['United Kingdom']['post_cagr'])*100:.4f}%/年；"
           f"中国前段 {f(gd['China']['pre_cagr'])*100:+.4f}%/年")
+    print(f"  尾部风险 {len(qk)} 次地震（{min(y for y,_ in qk)}–{max(y for y,_ in qk)}）→ "
+          f"M>={8.0} 占数量 {t8['count_share']*100:.2f}%、占能量 {t8['energy_share']*100:.2f}%")
+    print(f"    尾部外推 1970–96 拟合 b={bt['b']:.3f} → 预测后段 M>=8.0 出现 "
+          f"{bt['rows'][0]['predicted']:.1f} 次，实测 {bt['rows'][0]['observed']} 次"
+          f"（最大震级 {bt['obs_max_pre']} → {bt['obs_max_post']}）")

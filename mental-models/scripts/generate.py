@@ -1787,6 +1787,189 @@ def build_divergence():
     }
 
 
+# =====================================================================
+# 18) 尾部风险：少数事件支配总量（数据驱动）
+# =====================================================================
+def build_tailexpo():
+    rows = K.load_quakes()
+    meta = K.quake_meta()
+    qb = K.quake_bins(rows)
+    fit = K.gr_fit(qb, 6.0, 8.2)
+    bt = K.quake_backtest(rows)
+    fx = K.quake_full_extrapolation(qb)
+    t8 = K.tail_share(qb, 8.0)
+    years = (min(y for y, _ in rows), max(y for y, _ in rows))
+
+    share_rows = "".join(
+        "<tr class='border-b border-stone-100'>"
+        f"<td class='py-1.5 pr-3 font-mono font-semibold'>M≥{thr:.1f}</td>"
+        f"<td class='py-1.5 pr-3 text-right font-mono'>{t['count']:,}</td>"
+        f"<td class='py-1.5 pr-3 text-right font-mono text-stone-500'>{_n(t['count_share']) * 100:.2f}%</td>"
+        f"<td class='py-1.5 pr-3 text-right font-mono font-bold "
+        f"{'text-rose-700' if _n(t['energy_share']) > 0.5 else 'text-stone-700'}'>"
+        f"{_n(t['energy_share']) * 100:.2f}%</td>"
+        f"<td class='py-1.5 text-right font-mono text-stone-500'>×{_n(t['concentration']):,.0f}</td>"
+        "</tr>"
+        for thr, t in [(6.0, K.tail_share(qb, 6.0)), (6.5, K.tail_share(qb, 6.5)),
+                       (7.0, K.tail_share(qb, 7.0)), (7.5, K.tail_share(qb, 7.5)),
+                       (8.0, t8), (8.5, K.tail_share(qb, 8.5)), (9.0, K.tail_share(qb, 9.0))])
+
+    bt_rows = "".join(
+        "<tr class='border-b border-stone-100'>"
+        f"<td class='py-1.5 pr-3 font-mono font-semibold'>M≥{r['M']:.1f}</td>"
+        f"<td class='py-1.5 pr-3 text-right font-mono text-stone-500'>{_n(r['predicted']):.2f}</td>"
+        f"<td class='py-1.5 pr-3 text-right font-mono font-bold text-rose-700'>{r['observed']}</td>"
+        f"<td class='py-1.5 text-right font-mono'>"
+        + (f"×{_n(r['ratio']):.1f}" if r["ratio"] is not None else "—") + "</td></tr>"
+        for r in bt["rows"])
+
+    return {
+        "lesson": {
+            "title": "尾部：0.7% 的事件释放了 69% 的能量",
+            "subtitle": "数量上是零头，能量上是全部——用 USGS 的 14,211 次地震量一遍尾部的重量",
+            "problem": (
+                "<p>USGS 记录了 " + f"{qb['totalCount']:,}" + " 次 "
+                f"M≥6.0 的地震（{years[0]}–{years[1]}）。</p>"
+                "<p class='mt-2'>问一个结构问题："
+                "<b>M≥8.0 的那些，在数量和能量上各占多少？</b></p>"
+                "<p class='mt-2'>拖动阈值滑杆，看两条差得离谱的曲线："
+                "<span class='text-rose-600 font-semibold'>数量是零头，能量是大头。</span></p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "tailexpo", "caption": "累计频次（半对数）与能量份额"},
+            "view": {"xRange": [6.0, 9.6], "yRange": [0, 4.4]},
+            "data": {"bin0": _n(qb["bin0"]), "binw": _n(qb["binw"]),
+                     "counts": qb["counts"], "energies": qb["energies"],
+                     "totalCount": qb["totalCount"], "totalEnergy": _n(qb["totalEnergy"])},
+            "params": [
+                {"name": "mthr", "label": "震级阈值 M", "min": 6.0, "max": 8.5, "step": 0.1, "value": 8.0, "unit": "", "digits": 1},
+            ],
+            "scalars": [],
+            "readouts": [
+                {"id": "es", "label": "阈值之上的能量占比", "type": "expr", "expr": "qEnergyShare(mthr)", "digits": 2, "unit": "%", "highlight": True},
+                {"id": "cs", "label": "阈值之上的数量占比", "type": "expr", "expr": "qCountShare(mthr)", "digits": 2, "unit": "%", "color": "#78716c"},
+                {"id": "conc", "label": "能量/数量 集中度", "type": "expr", "expr": "qConcentration(mthr)", "digits": 0, "unit": " 倍", "color": "#dc2626"},
+                {"id": "cnt", "label": "阈值以上的事件数", "type": "expr", "expr": "qCount(mthr)", "digits": 0, "unit": " 次"},
+                {"id": "b", "label": "GR 拟合 b（log₁₀N = a − bM）", "type": "expr", "expr": "qFittedB()", "digits": 3, "unit": ""},
+                {"id": "dec", "label": "震级每差 1 级，频次 ×", "type": "expr", "expr": "qPerDecade()", "digits": 2, "unit": " 倍", "color": "#059669"},
+                {"id": "ok", "label": "能量是否已高度集中", "type": "status", "expr": "qConcentration(mthr)", "op": ">", "rhs": 10, "okText": "能量高度集中：少数事件支配总量", "badText": "还没进入尾部主导区"},
+            ],
+            "legend": [
+                {"color": "#b45309", "text": "实测累计次数 N(≥M)"},
+                {"color": "#059669", "text": "Gutenberg-Richter 拟合"},
+                {"color": "#dc2626", "text": "阈值游标 / 能量占比"},
+                {"color": "#78716c", "text": "数量占比"},
+            ],
+        },
+        "steps": [
+            {"title": "这一页的纪律：数据驱动，且有内容指纹", "content": (
+                "<p>和前 16 页一样，这一页也不手写数据。全部来自 USGS 地震目录：</p>"
+                "<ul class='list-disc pl-5 space-y-1'>"
+                "<li><b>来源</b>：" + meta["source"] + "（" + meta["title"] + "）</li>"
+                "<li><b>许可</b>：美国公有领域——USGS 官方说明「USGS-authored or produced data "
+                "and information are considered to be in the U.S. public domain」</li>"
+                "<li><b>覆盖</b>：" + meta["actualCoverage"] + "，M≥6.0，共 "
+                + f"{meta['eventCount']:,}" + " 次</li>"
+                "</ul>"
+                "<p class='mt-2 text-stone-500 text-xs'>抓取脚本 <code>fetch_quakes.py</code> 有一个"
+                "和上一页不同的处理：USGS 的 API 是<b>动态生成</b>响应的，同一请求两次的字节并不相同，"
+                "所以 sha256 对原始响应没有意义。这里改用<b>内容指纹</b>"
+                "（把解析后的 (年, 震级) 规范化再取哈希）——它锚定的是<b>数据集内容</b>，"
+                "而不是某一次 HTTP 传输的字节，这才是真正要保的东西。</p>"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3 text-stone-600'>"
+                "如实交代一个局限：按十年统计，1900 年代只有 350 次、1910 年代 684 次，"
+                "而 1930 年代以后稳定在 1000–1600 次——<b>早期存在系统性漏记</b>。"
+                "所以结论只在<b>量级</b>上成立，并且下面会给出跨时段的鲁棒性对照。</p>"
+            )},
+            {"title": "Gutenberg-Richter：一条直线统治两个数量级", "content": (
+                "<p>把「累计次数」放在对数轴上、震级放在线性轴上，数据落成一条直线：</p>"
+                "$$\\log_{10} N(\\ge M) = a - bM$$"
+                "<p>对 " + f"{years[0]}–{years[1]}" + " 全样本拟合得 "
+                "$b = " + f"{_n(fit['b']):.3f}" + "$，也就是"
+                "<b>震级每高 1 级，频次就少 " + f"{_n(fit['per_decade']):.2f}" + " 倍</b>。</p>"
+                "<p class='mt-2'>注意图上那条拟合线：<b>实线</b>是 6.0–8.2 的拟合区间，"
+                "<b>虚线</b>是把它往外推。整页最关键的一步就在这条虚线上。</p>"
+                "<p class='mt-2 text-stone-500 text-xs'>另一个等价的读法：释放能量 "
+                "$\\log_{10}E = 1.5M + 4.8$，所以震级高 1 级 = 能量大 "
+                "$10^{1.5} \\approx 31.6$ 倍。<b>频次除以十几，能量乘三十几</b>——"
+                "这个不对称就是尾部风险的全部来源。</p>"
+            )},
+            {"title": "两副面孔：数量是零头，能量是大头", "content": (
+                "<div class='mt-3 overflow-x-auto'><table class='w-full text-sm'>"
+                "<thead><tr class='border-b-2 border-stone-300 text-left text-xs uppercase text-stone-400'>"
+                "<th class='py-2 pr-3'>阈值</th><th class='py-2 pr-3 text-right'>次数</th>"
+                "<th class='py-2 pr-3 text-right'>数量占比</th>"
+                "<th class='py-2 pr-3 text-right'>能量占比</th>"
+                "<th class='py-2 text-right'>集中度</th></tr></thead><tbody>"
+                + share_rows + "</tbody></table></div>"
+                "<p class='mt-3'><b>M≥8.0 的只有 " + f"{t8['count']}" + " 次——占数量的 "
+                + f"{_n(t8['count_share']) * 100:.2f}" + "%，却释放了全部能量的 "
+                + f"{_n(t8['energy_share']) * 100:.1f}" + "%。</b>"
+                "换算成倍数：能量占比是数量占比的 <b>"
+                + f"{_n(t8['concentration']):,.0f}" + " 倍</b>。</p>"
+                "<p class='mt-2'>反过来看最下面那一档：M 6.0–6.5 有 "
+                + f"{sum(qb['counts'][:5]):,}" + " 次（占 "
+                + f"{sum(qb['counts'][:5]) / qb['totalCount'] * 100:.2f}" + "%），"
+                "能量却只有 " + f"{sum(qb['energies'][:5]) / qb['totalEnergy'] * 100:.2f}" + "%。"
+                "<b>绝大多数事件在能量上根本不重要。</b></p>"
+                "<p class='mt-2 text-stone-500 text-xs'>鲁棒性对照：M≥8.0 的能量占比，"
+                "1900 年起算 69.17%、1930 年起算 72.47%、1970 年起算 59.59%——"
+                "三段都在 60–72%，<b>漏记影响不了这个量级。</b></p>"
+            )},
+            {"title": "转折：外推的误差，连符号都不稳定", "content": (
+                "<p>用 1970–1996（" + f"{bt['T1']}" + " 年）的数据拟合 GR 律，"
+                "然后预测 1997–2024（" + f"{bt['T2']}" + " 年）该出现多少次大震：</p>"
+                "<div class='mt-3 overflow-x-auto'><table class='w-full text-sm'>"
+                "<thead><tr class='border-b-2 border-stone-300 text-left text-xs uppercase text-stone-400'>"
+                "<th class='py-2 pr-3'>阈值</th><th class='py-2 pr-3 text-right'>外推预测</th>"
+                "<th class='py-2 pr-3 text-right'>实际发生</th>"
+                "<th class='py-2 text-right'>实际/预测</th></tr></thead><tbody>"
+                + bt_rows + "</tbody></table></div>"
+                "<p class='mt-3'>预测 M≥8.0 会出现 <b>" + f"{_n(bt['rows'][0]['predicted']):.1f}"
+                + "</b> 次，实际来了 <b>" + f"{bt['rows'][0]['observed']}" + "</b> 次——"
+                "<b>低估了 1.8 倍</b>；预测的最大震级是 <b>" + f"{bt['obs_max_pre']}" + "</b> 级，"
+                "实际最大是 <b>" + f"{bt['obs_max_post']}" + "</b> 级。</p>"
+                "<p class='mt-3'><b>但先别急着下结论——换个拟合窗口，方向就反了。</b>"
+                "图上那条虚线用的是<b>全样本</b>拟合（$b = " + f"{_n(fx['b']):.3f}" + "$）。"
+                "拿它外推整个观测期：</p>"
+                "<p class='mt-2'>预测 M≥9.0 该有 <b>" + f"{_n(fx['rows'][2]['predicted']):.2f}"
+                + "</b> 次，实测只有 <b>" + f"{fx['rows'][2]['observed']}" + "</b> 次——"
+                "<b>这次是高估了近一倍</b>（实际/预测 "
+                + f"{_n(fx['rows'][2]['ratio']):.2f}" + "）。</p>"
+                "<p class='mt-2 border-l-4 border-rose-400 pl-3'>"
+                "两个方向同时成立，是因为<b>b 值本身在漂移</b>："
+                "1970–1996 拟合出 " + f"{_n(bt['b']):.3f}" + "，全样本只有 "
+                + f"{_n(fx['b']):.3f}" + "。斜率陡一点，外推的尾部就被砍掉一大截；"
+                "缓一点，就凭空多出一堆。</p>"
+                "<p class='mt-2'><b>所以尾部风险的真相不是「外推总是低估」，"
+                "而是「你无法知道自己这次偏哪边、偏多少」。</b>"
+                "注意：地震是这个世界上样本最好的重尾过程之一（14,211 次），"
+                "连它都这样；大规模战争、金融崩溃的样本只有几十次——"
+                "<b>样本越小，幂律越不可外推。</b></p>"
+            )},
+            {"title": "和前面几页拼起来", "content": (
+                "<ul class='list-disc pl-5 space-y-1'>"
+                "<li><b>与「安全边际」</b>：那一页说 σ 越大越要留冗余。"
+                "这一页给了 σ 之外的另一件事——<b>分布形状本身</b>。"
+                "只要尾部是重尾，「按平均值准备」就是错的，无论平均值算得多准。</li>"
+                "<li><b>与「冗余备份」</b>：串联系数 $\\prod r$ 和幂律尾部是同一枚硬币——"
+                "前者说「多次独立风险会累积」，后者说「单次极端事件能一次清盘」。"
+                "所以工程上既要不串联，也要能承受最坏的那一次。</li>"
+                "<li><b>与「期望值与凯利」</b>：凯利公式的前提是能估计 $p$ 和 $b$。"
+                "在重尾世界里，几何增长率由<b>最坏的那一次</b>决定——"
+                "$g = p\\ln(1+xb) + q\\ln(1-x)$ 里，$q\\ln(1-x) \\to -\\infty$ 只要 $x \\to 1$。"
+                "<b>重尾把「全押必输」从数学变成了物理。</b></li>"
+                "</ul>"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3'>"
+                "一句话总结这一页：<b>你可以事先知道大震会来（GR 律就是这么说的），"
+                "却依然无法用外推算出它有多大。</b>承认这一点，才是安全边际与冗余的真正理由。</p>"
+            )},
+        ],
+    }
+
+
 REGISTRY = {
     "compound": build_compound,
     "bayes": build_bayes,
@@ -1805,11 +1988,13 @@ REGISTRY = {
     "sunk": build_sunk,
     "redundancy": build_redundancy,
     "divergence": build_divergence,
+    "tailexpo": build_tailexpo,
 }
 
 ORDER = ["compound", "bayes", "expected", "safety", "opportunity",
          "inversion", "incentive", "competence", "lollapalooza", "bias",
-         "dcf", "scale", "network", "tipping", "sunk", "redundancy", "divergence"]
+         "dcf", "scale", "network", "tipping", "sunk", "redundancy",
+         "divergence", "tailexpo"]
 
 META = {
     "compound": ("复利", "时间是朋友还是敌人", "指数增长 · 72 法则 · 负债的另一面"),
@@ -1829,6 +2014,7 @@ META = {
     "sunk": ("沉没成本", "已经花掉的，不该进入决策", "增量决策 · 两个平衡点 · 损失厌恶"),
     "redundancy": ("冗余备份", "串得少，并得多", "串联 rⁿ · 并联 1−(1−r)ⁿ · 与「反过来想」对偶"),
     "divergence": ("大分叉", "人类是在 1820 年前后分手的", "Maddison 长期序列 · 数据驱动 · 用复利量历史"),
+    "tailexpo": ("尾部风险", "0.7% 的事件释放 69% 的能量", "USGS 地震目录 · 幂律 · 尾部外推会低估"),
 }
 
 
@@ -1857,12 +2043,13 @@ def build_index(out):
     <h1 class="text-3xl font-bold mb-3">思维模型：可算的那一部分</h1>
     <p class="text-stone-600 leading-relaxed max-w-2xl">
         芒格说：「你必须知道重要学科的重要理论，并经常使用它们——要全部都用上，而不是只用几个。」
-        下面 <b>17 个模型</b>是这套格栅里<b>能算清楚或能查证</b>的部分，分四批：
+        下面 <b>18 个模型</b>是这套格栅里<b>能算清楚或能查证</b>的部分，分五批：
         前 5 个是数学地基（复利、贝叶斯、凯利、安全边际、机会成本）；
         中间 5 个把芒格最常说的几句话落成算式（反过来想 · 看激励 · 守能力圈 · 提防 Lollapalooza · 用清单）；
         接着 6 个是系统与结构（贴现、规模优势、网络效应、临界点、沉没成本、冗余备份）；
-        最后 1 个不同凡响：<b>大分叉</b>——它不走公式，走<b>数据</b>
-        （Maddison Project Database 的长期人均 GDP，可重跑脚本取回并做 sha256 校验）。
+        最后 2 个不同凡响，走<b>数据</b>而不是公式：
+        <b>大分叉</b>（Maddison 长期人均 GDP）与<b>尾部风险</b>（USGS 地震目录），
+        两个数据集都由可重跑脚本取回，并做 sha256 / 内容指纹校验。
         拖动滑块，看数字如何改变你的判断——公式页的数值由 sympy 精确计算，数据页的数值来自可查证的数据集。
     </p>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">

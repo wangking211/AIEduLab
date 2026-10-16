@@ -1,11 +1,20 @@
 # 数据出处与许可
 
-本目录只有一个数据集：**大分叉（`divergence.html`）** 所用的长期人均 GDP 序列。
-这是 `mental-models` 里唯一一个**数据驱动**而非公式驱动的模型，所以纪律不同：
+本目录有两个数据集，分别服务于两个**数据驱动**的模型（其余 16 个模型是公式驱动，
+数值由 `lib/models_kernel.py` 用 sympy 现算）：
+
+| 数据集 | 用于 | 文件 |
+|---|---|---|
+| Maddison 长期人均 GDP | 大分叉 `divergence.html` | `maddison-gdp-per-capita.csv` |
+| USGS 全球地震目录 | 尾部风险 `tailexpo.html` | `usgs-quakes.csv` |
+
+数据页的纪律与公式页不同：
 
 > **公式页的纪律是不手写数字（全部现算）；数据页的纪律是不手写数据（全部现取）。**
 
 ---
+
+# 第一部分：Maddison 长期人均 GDP
 
 ## 1. 数据集
 
@@ -115,3 +124,63 @@ Maddison Project Database 2023 采用 **Creative Commons Attribution 4.0 Interna
 > —— 经 Our World in Data 轻度加工；本页另按 MPD 归属要求列出第 5 节的逐国原始论文。
 
 本页为教学演示，数据经再分发（CC BY 4.0），不构成任何投资或政策建议。
+
+---
+
+# 第二部分：USGS 全球地震目录
+
+## 8. 数据集
+
+| 项 | 值 |
+|---|---|
+| 名称 | Earthquake catalog（ANSS Comprehensive Catalog，ComCat） |
+| 来源 | **U.S. Geological Survey（USGS）** Earthquake Hazards Program |
+| 接口 | `https://earthquake.usgs.gov/fdsnws/event/1/query`（FDSN Event Web Service） |
+| 请求参数 | `format=csv`、`starttime=1900-01-01`、`endtime=2024-12-31`、`minmagnitude=6.0` |
+| 实际覆盖 | **1900–2024**，M 6.0–9.5，共 **14,211** 次 |
+| 许可 | **美国公有领域** —— USGS 官方说明：「USGS-authored or produced data and information are considered to be in the U.S. public domain and can be freely used without permission.」 |
+| 致谢要求 | USGS 请使用者注明出处（courtesy，非强制）。本页在文档与页面中均标注 |
+
+## 9. 抓取方式（可复现）
+
+```bash
+python scripts/fetch_quakes.py                # 下载 → 内容指纹校验 → 蒸馏
+python scripts/fetch_quakes.py --accept-new-fingerprint   # 数据更新后重新锁定
+```
+
+**这里与第一部分有一个关键差别**：USGS 的 API 是**动态生成**响应的 ——
+同一个请求发两次，字节并不相同（实测两次 sha256 不同）。
+所以 sha256 对「原始响应」没有意义。本项目改用**内容指纹**：
+
+> 把解析后的 `(年, 震级)` 规范化成文本再取 sha256。
+> 它锚定的是**数据集内容**，而不是某一次 HTTP 传输的字节 —— 这才是真正要保的东西。
+
+- 内容指纹（抓取当时）：`f581277f54b0ace100332a822f46699f165b4aa24756a6a01e2f37e22e7de262`
+- 已实测：连续两次抓取，指纹一致（可复现）；而原始字节哈希不一致（已弃用）
+
+## 10. 蒸馏结果
+
+`usgs-quakes.csv`（14,211 行；列 `year,magnitude`）。
+
+页面上传的数据岛是同源分箱直方图（36 箱 × {数量, 能量之和}），
+由内核从这份 CSV 现算 —— 单一数据源不变。
+
+## 11. 已知局限（页面与文档须如实交代）
+
+1. **早期系统性漏记**：按十年统计，1900 年代仅 350 次、1910 年代 684 次，
+   而 1930 年代以后稳定在 1000–1600 次。故结论只在**量级**上成立；
+   文档给出跨时段鲁棒性对照（M≥8.0 的能量占比：1900 起 69.17%、1930 起 72.47%、1970 起 59.59%）。
+2. **震级不是连续量**：目录里的震级精度不统一（多数一位小数，少数更多），
+   所以分箱采用 `floor((M−6.0)/0.1 + ε)`，而不是四舍五入。
+3. **能量是换算量**：释放能量按经验式 $\log_{10}E = 1.5M + 4.8$（焦耳）折算，
+   不是直接观测值。它影响的是「能量占比」这一列，不影响「数量占比」。
+4. **目录会持续修订**：USGS 会回溯修订历史事件，故内容指纹可能变化；
+   脚本会拒绝继续并要求人工核对。
+
+## 12. 引用格式
+
+> U.S. Geological Survey, Earthquake Hazards Program — ANSS Comprehensive Catalog (ComCat),
+> accessed via the FDSN Event Web Service on 2026-10-16.
+> Data are in the U.S. public domain; credit: USGS.
+
+本页为教学演示，不构成任何工程、保险或投资建议。

@@ -111,11 +111,43 @@ function _mdCagr(key, t0, t1){
     if (!a || !b || b[0]<=a[0] || a[1]<=0) return NaN;
     return (Math.pow(b[1]/a[1], 1/(b[0]-a[0])) - 1) * 100;
 }
+// 尾部风险：阈值之上的数量/能量份额（数据在 BOARD.data 的分箱直方图里）
+function _qTail(thr){
+    const D = BOARD.data || {};
+    if (!D.counts) return null;
+    let i = Math.floor((thr - D.bin0) / D.binw + 1e-7);
+    i = Math.max(0, Math.min(i, D.counts.length));
+    let c=0, e=0;
+    for (let k=i;k<D.counts.length;k++){ c+=D.counts[k]; e+=D.energies[k]; }
+    return { count:c, energy:e,
+             countShare: c/D.totalCount, energyShare: e/D.totalEnergy,
+             concentration: (e/D.totalEnergy)/(c/D.totalCount) };
+}
+// Gutenberg-Richter 拟合：log10 N(≥M) = a − bM（对 6.0–8.2 的累计计数做最小二乘）
+function _qFit(){
+    const xs=[], ys=[];
+    for (let i=0;i<=22;i++){
+        const m = 6.0 + i*0.1, v = _qTail(m);
+        if (!v || v.count<=0) continue;
+        xs.push(m); ys.push(Math.log10(v.count));
+    }
+    const k=xs.length; if (k<3) return null;
+    let sx=0,sy=0,sxx=0,sxy=0;
+    for (let i=0;i<k;i++){ sx+=xs[i]; sy+=ys[i]; sxx+=xs[i]*xs[i]; sxy+=xs[i]*ys[i]; }
+    const b = -(k*sxy - sx*sy)/(k*sxx - sx*sx);
+    return { a:(sy+b*sx)/k, b:b };
+}
 const MATHENV = {sqrt:Math.sqrt, abs:Math.abs, min:Math.min, max:Math.max, pow:Math.pow,
     sign:Math.sign, floor:Math.floor, ceil:Math.ceil, round:Math.round, PI:Math.PI, E:Math.E,
     log:Math.log, log2:Math.log2, log10:Math.log10, exp:Math.exp, erf:_erf,
     dcfExplicit:_dcfExplicit, dcfTerminal:_dcfTerminal, sirFinal:_sirFinalSize,
-    cagr:_mdCagr};
+    cagr:_mdCagr,
+    qCount: t => { const r=_qTail(t); return r ? r.count : NaN; },
+    qCountShare: t => { const r=_qTail(t); return r ? r.countShare*100 : NaN; },
+    qEnergyShare: t => { const r=_qTail(t); return r ? r.energyShare*100 : NaN; },
+    qConcentration: t => { const r=_qTail(t); return r ? r.concentration : NaN; },
+    qFittedB: () => { const x=_qFit(); return x ? x.b : NaN; },
+    qPerDecade: () => { const x=_qFit(); return x ? Math.pow(10,x.b) : NaN; }};
 const _exprCache = {};
 function evalExpr(expr, env){
     if (typeof expr !== 'string') return expr;
@@ -1024,6 +1056,78 @@ function drawDivergence(S){
     }
 }
 
+// ---- 18) 尾部风险：半对数累计频次 + 数量/能量双条 ----
+function drawTailexpo(S){
+    const H=cssH, W=cssW;
+    const D=BOARD.data||{};
+    if (!D.counts) return;
+    const lg=Math.log10;
+    const yMax=lg(D.totalCount);
+    const topH=Math.round(H*0.60);
+    const R=panel(0, 30, W, topH-30, [6.0, 9.6], [0, yMax*1.06]);
+    R.axis('震级 M', '', niceTicks(6.0, 9.5, 6), []);
+    [1,10,100,1000,10000].forEach(v=>{
+        const t=lg(v); if (t>yMax*1.06) return;
+        const y=R.sy(t);
+        ctx.strokeStyle='rgba(168,162,158,.26)'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(R.ix,y); ctx.lineTo(R.ix+R.iw,y); ctx.stroke();
+        R.ptxt(R.ix-5, y, v>=1000 ? (v/1000)+'k' : String(v), P.dim, 'right', 9.5);
+    });
+    ctx.save(); ctx.translate(10, R.iy+R.ih/2); ctx.rotate(-Math.PI/2);
+    ctx.font='bold 10px system-ui'; ctx.fillStyle=P.dim;
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText('N(≥M) 累计次数（对数）', 0, 0); ctx.restore();
+    // 实测阶梯
+    const pts=[];
+    for (let i=0;i<D.counts.length;i++){
+        const v=_qTail(+(D.bin0+i*D.binw).toFixed(4));
+        if (v && v.count>0) pts.push([D.bin0+i*D.binw, lg(v.count)]);
+    }
+    R.line(pts, P.curve, 2.6);
+    // 拟合线：6.0–8.2 实线，8.2 之后虚线（外推）
+    const fit=_qFit();
+    if (fit){
+        const at=m=>fit.a - fit.b*m;
+        R.line([[6.0,at(6.0)],[8.2,at(8.2)]], P.good, 2.2);
+        R.line([[8.2,at(8.2)],[9.6,at(9.6)]], P.good, 1.8, true);
+        R.ptxt(R.sx(8.35), R.sy(at(8.35))-8, '外推', P.good, 'left', 10);
+    }
+    // 阈值游标
+    const t8=_qTail(S.mthr);
+    R.line([[S.mthr,0],[S.mthr,yMax]], P.bad, 1.8, true);
+    if (t8 && t8.count>0){
+        ctx.fillStyle=P.bad; ctx.beginPath();
+        ctx.arc(R.sx(S.mthr), R.sy(lg(t8.count)), 5, 0, 7); ctx.fill();
+        R.ptxt(R.sx(S.mthr), R.sy(lg(t8.count))-13, fmt(t8.count,0)+' 次', P.bad, 'center', 10.5, 'bold');
+    }
+    ctx.font='bold 10.5px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillStyle=P.curve; ctx.fillText('实测累计次数（'+D.totalCount.toLocaleString('zh-CN')+' 次地震）', 14, 6);
+    ctx.fillStyle=P.good; ctx.fillText('Gutenberg-Richter 拟合（实线 6.0–8.2，虚线为外推）', 14, 20);
+
+    // 下栏：数量占比 vs 能量占比
+    const split=topH+16;
+    const rowH=Math.max(26, (H-split-40)/2);
+    const barX=Math.min(112, W*0.34), barW=W-barX-70;
+    ctx.font='bold 10.5px system-ui'; ctx.fillStyle=P.dim;
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText('阈值 M≥'+fmt(S.mthr,1)+' 的两副面孔', 14, split-16);
+    [[t8.countShare, P.dim, '数量占比'], [t8.energyShare, P.bad, '能量占比']].forEach(([v,c,lab],i)=>{
+        const cy=split+rowH*i+rowH*0.5, bh=Math.min(30, rowH*0.42);
+        ctx.font='11px system-ui'; ctx.fillStyle=P.text;
+        ctx.textAlign='left'; ctx.textBaseline='middle';
+        ctx.fillText(lab, 14, cy);
+        const w=Math.max(2, barW*Math.max(0,Math.min(1,v)));
+        ctx.fillStyle=c; ctx.fillRect(barX, cy-bh/2, w, bh);
+        ctx.font='bold 12px system-ui'; ctx.fillStyle=P.text;
+        ctx.fillText(fmt(v*100,2)+'%', barX+w+7, cy);
+    });
+    ctx.font='bold 11.5px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillStyle=t8.energyShare>t8.countShare*10 ? P.bad : P.good;
+    ctx.fillText('同样的 '+fmt(S.mthr,1)+' 以上：数量只占 '+fmt(t8.countShare*100,2)
+                 +'%，能量却占 '+fmt(t8.energyShare*100,1)+'%（×'
+                 +fmt(t8.concentration,0)+'）', W/2, H-6);
+}
+
 const rangeTicks=(a,b,n,round=false)=>{
     const out=[]; for(let i=0;i<=n;i++){ const v=a+(b-a)*i/n; out.push(round? Math.round(v/10)*10 : Math.round(v*10)/10); }
     return out;
@@ -1068,6 +1172,7 @@ function render(){
         case 'sunk': drawSunk(S); break;
         case 'redundancy': drawRedundancy(S); break;
         case 'divergence': drawDivergence(S); break;
+        case 'tailexpo': drawTailexpo(S); break;
     }
     updateReadouts(S);
 }
