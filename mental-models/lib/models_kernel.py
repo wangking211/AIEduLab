@@ -5,7 +5,7 @@ models_kernel.py — 查理·芒格思维模型：可量化部分的精确计算
 单一数据源设计：复利、贝叶斯基率、期望值与凯利仓位、安全边际击穿概率、机会成本
 全部由本模块精确算出，讲解文字只引用 tex() 输出，绝无心算误差。
 
-覆盖（v3，16 个模型）：
+覆盖（v4，17 个模型）：
  1. compound    —— 复利/单利/翻倍时间（"时间是朋友还是敌人"的数学根据）
  2. bayes       —— 贝叶斯基率更新（基率忽视 → 假阳性的数学根源）
  3. expected    —— 期望值 + 幸存者偏差 + 凯利公式 f* = (bp − q)/b
@@ -22,13 +22,25 @@ models_kernel.py — 查理·芒格思维模型：可量化部分的精确计算
 14. tipping     —— 临界点：SIR 的 R₀ = βS₀/γ，解析峰值与 RK4 数值解互校
 15. sunk        —— 沉没成本：决策只看增量，已投入不该出现
 16. redundancy  —— 冗余备份：串联 rⁿ 与并联 1−(1−r)ⁿ（inversion 的对偶）
+17. divergence  —— 大分叉（**数据驱动**）：读 data/maddison-gdp-per-capita.csv，
+                   用复利公式量 1820 年前后两段的年化增长率
 
-依赖: sympy（tipping 另用 math 做 RK4 数值积分）。自检：python models_kernel.py
+依赖: sympy（tipping 另用 math 做 RK4 数值积分）。
+数据: data/maddison-gdp-per-capita.csv + data/SOURCES.md（出处/许可/归属要求）。
+自检：python models_kernel.py
 """
 
+import collections
+import csv
+import io
 import math
+import pathlib
 
 import sympy as sp
+
+SKILL_DIR = pathlib.Path(__file__).resolve().parent.parent
+MADDISON_CSV = SKILL_DIR / "data" / "maddison-gdp-per-capita.csv"
+MADDISON_META = SKILL_DIR / "data" / "maddison-source.json"
 
 
 # ---------------- 通用工具 ----------------
@@ -567,6 +579,85 @@ def redundancy(r, n):
     }
 
 
+# ==================== 17) 大分叉（数据驱动） ====================
+# 这是唯一一个「数据驱动」而非公式驱动的模型：数值来自 data/maddison-gdp-per-capita.csv，
+# 而不是推导。纪律因此从「不手写数字」升级为「不手写数据」——见 data/SOURCES.md。
+def load_maddison(path=None):
+    """读蒸馏后的 Maddison 序列 → {实体: [(年, 人均 GDP 2011 国际元), ...]}，按年升序。
+
+    刻意不做插值：1820 年前的点本来就稀疏，补出来的平滑曲线会假装比史料更确定。
+    """
+    p = pathlib.Path(path) if path else MADDISON_CSV
+    assert p.exists(), f"缺少数据集：{p}（先跑 python scripts/fetch_maddison.py）"
+    series = collections.OrderedDict()
+    with io.open(p, encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            series.setdefault(row["entity"], []).append(
+                (int(row["year"]), sp.Rational(row["gdp_pc_2011intl"])))
+    for k in series:
+        series[k].sort()
+    return series
+
+
+def maddison_meta(path=None):
+    """读 data/maddison-source.json（单位、引用、更新时间）。"""
+    p = pathlib.Path(path) if path else MADDISON_META
+    assert p.exists(), f"缺少元数据：{p}"
+    import json
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+def nearest_point(series, t):
+    """取最接近 t 的**实测点**（宁可换年，也不插值）。"""
+    assert series, "序列为空"
+    return min(series, key=lambda pt: (abs(pt[0] - t), pt[0]))
+
+
+def cagr(v0, v1, years):
+    """年化复合增长率 = (v1/v0)^(1/年数) − 1 —— 就是第 1 页复利公式反过来用。"""
+    assert v0 > 0 and v1 > 0, "两端取值须为正"
+    assert years > 0, "年数须为正"
+    return sp.simplify((v1 / v0) ** (sp.Rational(1, years)) - 1)
+
+
+def window_growth(series, t0, t1):
+    """区间 [t0, t1] 的年化增长率；两端各自吸附到最近的实测点，并如实回报用了哪两年。"""
+    a, b = nearest_point(series, t0), nearest_point(series, t1)
+    if b[0] <= a[0]:
+        return None
+    yrs = b[0] - a[0]
+    return {
+        "y0": a[0], "v0": a[1], "y1": b[0], "v1": b[1], "years": yrs,
+        "multiple": sp.simplify(b[1] / a[1]),
+        "cagr": cagr(a[1], b[1], yrs),
+        "cagr_pct": cagr(a[1], b[1], yrs) * 100,
+    }
+
+
+def great_divergence(series=None, pivot=1820):
+    """大分叉：把每条序列在 pivot（默认 1820）处切成两段，比较年化增长率。
+
+    返回逐实体的两段 CAGR 与所用年份 —— 全由数据集现算。
+    """
+    series = series or load_maddison()
+    out = []
+    for name, pts in series.items():
+        first, last = pts[0], pts[-1]
+        mid = nearest_point(pts, pivot)
+        pre = cagr(first[1], mid[1], mid[0] - first[0]) if mid[0] > first[0] else None
+        post = cagr(mid[1], last[1], last[0] - mid[0]) if last[0] > mid[0] else None
+        out.append({
+            "entity": name,
+            "first_year": first[0], "first_value": first[1],
+            "pivot_year": mid[0], "pivot_value": mid[1],
+            "last_year": last[0], "last_value": last[1],
+            "pre_cagr": pre, "post_cagr": post,
+            "pre_years": mid[0] - first[0], "post_years": last[0] - mid[0],
+            "ratio": sp.simplify(post / pre) if (pre and pre != 0) else None,
+        })
+    return out
+
+
 # ==================== 自检 ====================
 if __name__ == "__main__":
     # 复利
@@ -705,6 +796,29 @@ if __name__ == "__main__":
     assert abs(f(rd["n_parallel_99"]) - 2.0) < 1e-9           # 单件 90%：并两件即 99%
     assert rd["parallel"] > rd["series"]
 
+    # 大分叉（数据驱动：全部来自 data/maddison-gdp-per-capita.csv）
+    md = load_maddison()
+    assert list(md) == ["United Kingdom", "France", "United States",
+                        "Japan", "China", "India"], "实体集合变了"
+    assert sum(len(v) for v in md.values()) == 2188, "数据集行数变了？"
+    assert maddison_meta()["unit"] == "international-$ in 2011 prices", "单位变了"
+    gd = {r["entity"]: r for r in great_divergence(md)}
+    assert abs(f(gd["United Kingdom"]["pre_cagr"]) * 100 - 0.1288) < 0.0005
+    assert abs(f(gd["United Kingdom"]["post_cagr"]) * 100 - 1.2215) < 0.0005
+    assert abs(f(gd["Japan"]["post_cagr"]) * 100 - 1.6819) < 0.0005
+    assert f(gd["China"]["pre_cagr"]) < 0, "中国 1820 年前是负增长——大分叉的一半真相"
+    assert f(gd["India"]["pre_cagr"]) < 0, "印度 1820 年前同样是负增长"
+    assert gd["India"]["pivot_year"] == 1821, "印度最接近 1820 的实测点是 1821（宁可换年，不插值）"
+    assert all(f(gd[e]["post_cagr"]) > 0 for e in md), "1820 之后六国全部转正"
+    assert abs(f(window_growth(md["United Kingdom"], 1820, 2020)["cagr_pct"]) - 1.1817) < 0.0005
+    assert abs(f(window_growth(md["China"], 1820, 2020)["multiple"]) - 19.53) < 0.01
+    assert abs(f(window_growth(md["China"], 1000, 2020)["cagr_pct"]) - 0.2595) < 0.0005
+    assert [e for e in md][0] == "United Kingdom"
+    # 2022 年的高低次序（数据不插值、不修改，直接来自源文件）
+    order = sorted(md, key=lambda e: -f(md[e][-1][1]))
+    assert order == ["United States", "France", "United Kingdom", "Japan",
+                     "China", "India"], f"2022 年次序变了：{order}"
+
     print("models_kernel self-check OK ✓")
     print(f"  复利 1 万 @8% 30 年 → {f(c['F']):,.0f}（单利 {f(c['F_simple']):,.0f}，翻倍需 {f(c['doubling_years']):.2f} 年）")
     print(f"  贝叶斯 1% 患病率 + 99% 灵敏度/95% 特异度 → 阳性者真实患病概率 {f(b['posterior'])*100:.1f}%")
@@ -722,3 +836,7 @@ if __name__ == "__main__":
     print(f"  临界点 R₀={f(tp['R0']):.2f} → 峰值感染 {f(tp['peak_frac_analytic'])*100:.1f}%，最终 {tp['final_size_solved']*100:.1f}%")
     print(f"  沉没成本 已投 100 + 追加 50、p=40%、回报 200 → 正确算法 {f(sk['ev_continue']):+.0f}，账面算成 {f(sk['ev_wrong']):+.0f}")
     print(f"  冗余备份 r=90%, n=5 → 串联 {f(rd['series'])*100:.2f}%，并联 {f(rd['parallel'])*100:.5f}%")
+    print(f"  大分叉 {len(md)} 国 {sum(len(v) for v in md.values())} 点 → "
+          f"英国前段 {f(gd['United Kingdom']['pre_cagr'])*100:.4f}%/年、"
+          f"后段 {f(gd['United Kingdom']['post_cagr'])*100:.4f}%/年；"
+          f"中国前段 {f(gd['China']['pre_cagr'])*100:+.4f}%/年")

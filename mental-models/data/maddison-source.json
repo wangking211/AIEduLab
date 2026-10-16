@@ -1,0 +1,15 @@
+{
+ "title": "GDP per capita",
+ "unit": "international-$ in 2011 prices",
+ "shortUnit": "$",
+ "timespan": "1-2022",
+ "citationShort": "Bolt and van Zanden – Maddison Project Database 2023 – with minor processing by Our World in Data",
+ "citationLong": "Bolt and van Zanden – Maddison Project Database 2023 – with minor processing by Our World in Data. “GDP per capita – Maddison Project Database – Long-run data in constant international-$” [dataset]. Bolt and van Zanden, “Maddison Project Database 2023” [original data].",
+ "originalChartUrl": "https://ourworldindata.org/grapher/gdp-per-capita-maddison-project-database",
+ "owidVariableId": 900793,
+ "lastUpdated": "2024-04-26",
+ "dateDownloaded": "2026-10-16",
+ "csvUrl": "https://ourworldindata.org/grapher/gdp-per-capita-maddison-project-database.csv",
+ "csvSha256": "0545ad6ca37529206af49f9f964f17af927e8c154c1fe8d3813c523e0d2f43f8",
+ "note": "This data is expressed in international-$ at 2011 prices."
+}

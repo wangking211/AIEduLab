@@ -1636,6 +1636,157 @@ def build_redundancy():
     }
 
 
+# =====================================================================
+# 17) 大分叉：数据驱动的一页
+# =====================================================================
+MADDISON_ENTITIES = [
+    {"key": "United Kingdom", "zh": "英国", "color": "#b45309"},
+    {"key": "France", "zh": "法国", "color": "#0891b2"},
+    {"key": "United States", "zh": "美国", "color": "#dc2626"},
+    {"key": "Japan", "zh": "日本", "color": "#7c3aed"},
+    {"key": "China", "zh": "中国", "color": "#059669"},
+    {"key": "India", "zh": "印度", "color": "#64748b"},
+]
+
+
+def build_divergence():
+    series = K.load_maddison()
+    meta = K.maddison_meta()
+    gd = {r["entity"]: r for r in K.great_divergence(series)}
+    uk, cn, ind = gd["United Kingdom"], gd["China"], gd["India"]
+    rows = "".join(
+        "<tr class='border-b border-stone-100'>"
+        f"<td class='py-1.5 pr-3 font-semibold text-stone-800'>{zh}</td>"
+        f"<td class='py-1.5 pr-3 text-stone-500'>{gd[key]['first_year']} → {gd[key]['pivot_year']}</td>"
+        f"<td class='py-1.5 pr-3 font-mono' style='color:{'#dc2626' if _n(gd[key]['pre_cagr']) < 0 else '#78716c'}'>"
+        f"{_n(gd[key]['pre_cagr']) * 100:+.4f}%</td>"
+        f"<td class='py-1.5 pr-3 font-mono text-emerald-700'>"
+        f"+{_n(gd[key]['post_cagr']) * 100:.4f}%</td>"
+        f"<td class='py-1.5 pr-3 text-stone-500'>{gd[key]['pivot_year']} → {gd[key]['last_year']}</td>"
+        f"<td class='py-1.5 font-mono font-bold'>"
+        + (f"×{_n(gd[key]['ratio']):.1f}" if _n(gd[key]['pre_cagr']) > 0 else "—")
+        + "</td></tr>"
+        for key, zh in [("United Kingdom", "英国"), ("France", "法国"),
+                        ("United States", "美国"), ("Japan", "日本"),
+                        ("China", "中国"), ("India", "印度")])
+    return {
+        "lesson": {
+            "title": "大分叉：人类是在 1820 年前后分手的",
+            "subtitle": "这一页与前 16 页不同——它不是公式驱动，而是**数据驱动**",
+            "problem": (
+                "<p>前面 16 页的数字都由公式现算。这一页的数字来自<b>史料</b>："
+                "Maddison Project Database 的长期人均 GDP 序列，覆盖公元 1 年到 2022 年。</p>"
+                "<p class='mt-2'>拖动两个滑杆选一段时间，看六国的<b>年化增长率</b>"
+                "（用的就是第 1 页那个复利公式，反过来用）。</p>"
+                "<p class='mt-2'>把窗口拖到 1820 年<b>之前</b>试试："
+                "<span class='text-rose-600 font-semibold'>你会看到零，甚至是负数。</span></p>"
+            ),
+            "ui": {},
+        },
+        "board": {
+            "scene": {"kind": "divergence", "caption": "六国长期人均 GDP（对数刻度）",
+                      "entities": MADDISON_ENTITIES},
+            "view": {"xRange": [1000, 2035], "yRange": [2.6, 4.9]},
+            "data": {k: [[y, _n(v)] for y, v in pts] for k, pts in series.items()},
+            "params": [
+                {"name": "t0", "label": "窗口起始年", "min": 1, "max": 2000, "step": 1, "value": 1820, "unit": " 年", "digits": 0},
+                {"name": "t1", "label": "窗口终止年", "min": 2, "max": 2022, "step": 1, "value": 2020, "unit": " 年", "digits": 0},
+            ],
+            "scalars": [
+                {"name": "span", "expr": "t1-t0"},
+            ],
+            "readouts": [
+                {"id": "span", "label": "窗口长度", "type": "expr", "expr": "t1-t0", "digits": 0, "unit": " 年"},
+                {"id": "uk", "label": "英国 年化", "type": "expr", "expr": 'cagr("United Kingdom", t0, t1)', "digits": 4, "unit": "%", "color": "#b45309"},
+                {"id": "fr", "label": "法国 年化", "type": "expr", "expr": 'cagr("France", t0, t1)', "digits": 4, "unit": "%", "color": "#0891b2"},
+                {"id": "us", "label": "美国 年化", "type": "expr", "expr": 'cagr("United States", t0, t1)', "digits": 4, "unit": "%", "color": "#dc2626"},
+                {"id": "jp", "label": "日本 年化", "type": "expr", "expr": 'cagr("Japan", t0, t1)', "digits": 4, "unit": "%", "color": "#7c3aed"},
+                {"id": "cn", "label": "中国 年化", "type": "expr", "expr": 'cagr("China", t0, t1)', "digits": 4, "unit": "%", "color": "#059669"},
+                {"id": "in", "label": "印度 年化", "type": "expr", "expr": 'cagr("India", t0, t1)', "digits": 4, "unit": "%", "color": "#64748b"},
+                {"id": "ok", "label": "这段窗口里有没有人在倒退", "type": "status",
+                 "expr": 'min(cagr("United Kingdom",t0,t1), cagr("France",t0,t1), cagr("United States",t0,t1), cagr("Japan",t0,t1), cagr("China",t0,t1), cagr("India",t0,t1))',
+                 "op": ">", "rhs": 0, "okText": "六国都在增长", "badText": "有国家在人越少钱越少"},
+            ],
+            "legend": [
+                {"color": "#b45309", "text": "英国"},
+                {"color": "#0891b2", "text": "法国"},
+                {"color": "#dc2626", "text": "美国"},
+                {"color": "#7c3aed", "text": "日本"},
+                {"color": "#059669", "text": "中国"},
+                {"color": "#64748b", "text": "印度"},
+            ],
+        },
+        "steps": [
+            {"title": "这一页违反了本项目的常规——故意的", "content": (
+                "<p>前 16 页的纪律是<b>不手写数字</b>：每个数都由 sympy 现算。"
+                "但历史不是推导出来的，是<b>记录</b>下来的。</p>"
+                "<p>所以这一页换一条同样严格的纪律：<b>不手写数据</b>。全部数值来自一个"
+                "可重跑脚本取回、并做过 sha256 校验的数据集：</p>"
+                "<ul class='list-disc pl-5 space-y-1'>"
+                "<li><b>出处</b>：" + meta["citationShort"] + "</li>"
+                "<li><b>单位</b>：" + meta["unit"] + "（已按通胀与各国生活成本差异调整）</li>"
+                "<li><b>覆盖</b>：公元 1–2022 年；原始件 sha256 "
+                "<code class='text-xs'>" + meta["csvSha256"][:16] + "…</code></li>"
+                "</ul>"
+                "<p class='mt-2 text-stone-500 text-xs'>出处、许可（CC BY 4.0）、"
+                "以及 MPD 要求的逐国原始论文，全部记在 <code>data/SOURCES.md</code>。"
+                "源站一旦更新，<code>fetch_maddison.py</code> 会拒绝继续——"
+                "不让数字被悄悄换掉。</p>"
+            )},
+            {"title": "怎么量「起飞」：把复利公式反着用", "content": (
+                "<p>第 1 页讲的是 $F = P(1+r)^t$。反过来解 $r$，就得到<b>年化增长率</b>：</p>"
+                "$$r = \\left(\\frac{V_1}{V_0}\\right)^{1/T} - 1$$"
+                "<p>用它去量任何一段历史：只要给我「起点值、终点值、年数」，"
+                "就能算出一个可比的数。</p>"
+                "<p class='mt-2'>注意图上的纵轴是<b>对数刻度</b>。"
+                "人均 GDP 从 600 涨到 58000，跨了近两个数量级；"
+                "用线性轴的话，1820 年前的一切都会压成一条贴底的直线，看不出差别。"
+                "<b>对数轴上，等速增长才是直线。</b></p>"
+                "<p class='mt-2 text-stone-500 text-xs'>曲线只连<b>实测点</b>，不做任何插值——"
+                "1820 年前的点本身就稀疏，补出的平滑曲线会假装比史料更确定。</p>"
+            )},
+            {"title": "大分叉：1820 年前后，两套年化增长率", "content": (
+                "<p>把每条序列在 1820 年（取最接近的实测点）切成两段：</p>"
+                "<div class='mt-3 overflow-x-auto'><table class='w-full text-sm'>"
+                "<thead><tr class='border-b-2 border-stone-300 text-left text-xs uppercase text-stone-400'>"
+                "<th class='py-2 pr-3'>国家</th><th class='py-2 pr-3'>前段</th>"
+                "<th class='py-2 pr-3'>年化</th><th class='py-2 pr-3'>后段年化</th>"
+                "<th class='py-2 pr-3'>后段</th><th class='py-2'>加速</th></tr></thead>"
+                "<tbody>" + rows + "</tbody></table></div>"
+                "<p class='mt-3'>英国在前 820 年里年化 "
+                "<b>" + f"{_n(uk['pre_cagr']) * 100:.4f}%" + "</b>，"
+                "此后 202 年化 <b>" + f"{_n(uk['post_cagr']) * 100:.4f}%" + "</b> —— "
+                "快了 <b>" + f"{_n(uk['ratio']):.1f} 倍</b>。</p>"
+                "<p class='mt-2'>但真正的新闻在右边两行："
+                "<b>中国在这 820 年里是 " + f"{_n(cn['pre_cagr']) * 100:+.4f}%，"
+                "印度在 1600–1821 年间是 " + f"{_n(ind['pre_cagr']) * 100:+.4f}%</b>。"
+                "不是「增长得慢」，是<b>人越少钱越少</b>——"
+                "经济总量在长，人口长得更快。</p>"
+            )},
+            {"title": "怎么读这张表（三条纪律）", "content": (
+                "<p><b>一、别把「起飞」当必然。</b>"
+                "在 1820 年之前的整整一千八百年里，"
+                "最发达地区的人均收入年化不到 0.7%。"
+                "把它画在对数轴上就是一条水平线——"
+                "<b>复利不是自然常数，它是近代才启动的机制。</b></p>"
+                "<p><b>二、倍数最小的那行最难读。</b>"
+                "美国的「加速」只有 " + f"{_n(gd['United States']['ratio']):.1f}" + " 倍，"
+                "不是因为它慢，而是因为它 1650 年的起点已经有 897 国际元、"
+                "而且前段（1650–1820）本身就跑了 0.64%。"
+                "<b>看倍数之前先看起点。</b></p>"
+                "<p><b>三、这是基率，不是预言。</b>"
+                "这一页回答的是「历史上通常长什么样」，"
+                "不回答「接下来会怎样」。<b>用历史建立基率，不用历史预测下一次</b>——"
+                "这正是第 2 节贝叶斯那一页要的输入，也是芒格说的「用基率，不用记忆」。</p>"
+                "<p class='mt-2 border-l-4 border-amber-400 pl-3 text-stone-600'>"
+                "最后交代局限：1820 年前的数值是学术<b>估算</b>，年份不连续；"
+                "1990 与 2011 两套 PPP 基准做了平滑衔接。<b>结论在量级上稳健，"
+                "在小数点后不稳健。</b></p>"
+            )},
+        ],
+    }
+
+
 REGISTRY = {
     "compound": build_compound,
     "bayes": build_bayes,
@@ -1653,11 +1804,12 @@ REGISTRY = {
     "tipping": build_tipping,
     "sunk": build_sunk,
     "redundancy": build_redundancy,
+    "divergence": build_divergence,
 }
 
 ORDER = ["compound", "bayes", "expected", "safety", "opportunity",
          "inversion", "incentive", "competence", "lollapalooza", "bias",
-         "dcf", "scale", "network", "tipping", "sunk", "redundancy"]
+         "dcf", "scale", "network", "tipping", "sunk", "redundancy", "divergence"]
 
 META = {
     "compound": ("复利", "时间是朋友还是敌人", "指数增长 · 72 法则 · 负债的另一面"),
@@ -1676,6 +1828,7 @@ META = {
     "tipping": ("临界点与传染", "R₀ 略过 1 就天翻地覆", "SIR · 传染阈值 · 峰值感染"),
     "sunk": ("沉没成本", "已经花掉的，不该进入决策", "增量决策 · 两个平衡点 · 损失厌恶"),
     "redundancy": ("冗余备份", "串得少，并得多", "串联 rⁿ · 并联 1−(1−r)ⁿ · 与「反过来想」对偶"),
+    "divergence": ("大分叉", "人类是在 1820 年前后分手的", "Maddison 长期序列 · 数据驱动 · 用复利量历史"),
 }
 
 
@@ -1704,11 +1857,13 @@ def build_index(out):
     <h1 class="text-3xl font-bold mb-3">思维模型：可算的那一部分</h1>
     <p class="text-stone-600 leading-relaxed max-w-2xl">
         芒格说：「你必须知道重要学科的重要理论，并经常使用它们——要全部都用上，而不是只用几个。」
-        下面 <b>16 个模型</b>是这套格栅里<b>能算清楚</b>的部分，分三批：
+        下面 <b>17 个模型</b>是这套格栅里<b>能算清楚或能查证</b>的部分，分四批：
         前 5 个是数学地基（复利、贝叶斯、凯利、安全边际、机会成本）；
         中间 5 个把芒格最常说的几句话落成算式（反过来想 · 看激励 · 守能力圈 · 提防 Lollapalooza · 用清单）；
-        最后 6 个是系统与结构（贴现、规模优势、网络效应、临界点、沉没成本、冗余备份）。
-        拖动滑块，看数字如何改变你的判断——所有数值由 sympy 精确计算，与配套文档同源。
+        接着 6 个是系统与结构（贴现、规模优势、网络效应、临界点、沉没成本、冗余备份）；
+        最后 1 个不同凡响：<b>大分叉</b>——它不走公式，走<b>数据</b>
+        （Maddison Project Database 的长期人均 GDP，可重跑脚本取回并做 sha256 校验）。
+        拖动滑块，看数字如何改变你的判断——公式页的数值由 sympy 精确计算，数据页的数值来自可查证的数据集。
     </p>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
         {''.join(cards)}

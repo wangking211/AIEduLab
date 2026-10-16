@@ -67,6 +67,7 @@
 "use strict";
 const DATA = JSON.parse(document.getElementById('lesson-data').textContent);
 const BOARD = DATA.board || {};
+const MDATA = BOARD.data || {};          // 大分叉页的数据集（其余页为空）
 
 // ===================== 数学环境（安全表达式求值） =====================
 // 表达式由 generate.py 生成（可信本地内容）：@param 名 + 白名单函数。
@@ -96,10 +97,25 @@ function _sirFinalSize(R0){                      // R∞ = 1 − exp(−R₀·R�
     for (let k=0;k<60;k++){ const m=(lo+hi)/2; if (1-Math.exp(-R0*m)>m) lo=m; else hi=m; }
     return hi;
 }
+// 大分叉：在实测点里找最接近 t 的那个（与内核 nearest_point 同一策略：不插值）
+function _mdNear(key, t){
+    const s = MDATA[key];
+    if (!s || !s.length) return null;
+    let best = s[0];
+    for (let i=1;i<s.length;i++) if (Math.abs(s[i][0]-t) < Math.abs(best[0]-t)) best = s[i];
+    return best;
+}
+// 年化复合增长率（%）：就是第 1 页的复利公式反过来用
+function _mdCagr(key, t0, t1){
+    const a=_mdNear(key,t0), b=_mdNear(key,t1);
+    if (!a || !b || b[0]<=a[0] || a[1]<=0) return NaN;
+    return (Math.pow(b[1]/a[1], 1/(b[0]-a[0])) - 1) * 100;
+}
 const MATHENV = {sqrt:Math.sqrt, abs:Math.abs, min:Math.min, max:Math.max, pow:Math.pow,
     sign:Math.sign, floor:Math.floor, ceil:Math.ceil, round:Math.round, PI:Math.PI, E:Math.E,
     log:Math.log, log2:Math.log2, log10:Math.log10, exp:Math.exp, erf:_erf,
-    dcfExplicit:_dcfExplicit, dcfTerminal:_dcfTerminal, sirFinal:_sirFinalSize};
+    dcfExplicit:_dcfExplicit, dcfTerminal:_dcfTerminal, sirFinal:_sirFinalSize,
+    cagr:_mdCagr};
 const _exprCache = {};
 function evalExpr(expr, env){
     if (typeof expr !== 'string') return expr;
@@ -933,6 +949,81 @@ function drawRedundancy(S){
                  +'并联反倒升到 '+fmt(par(n0)*100,2)+'%', W/2, H-6);
 }
 
+// ---- 17) 大分叉：六国长期人均 GDP（对数轴，只连实测点） ----
+function drawDivergence(S){
+    const H=cssH, W=cssW;
+    const ents = S.entities || [];
+    let lo=Infinity, hi=0;
+    ents.forEach(e=>{ (MDATA[e.key]||[]).forEach(p=>{ if(p[1]<lo)lo=p[1]; if(p[1]>hi)hi=p[1]; }); });
+    if (!isFinite(lo) || !(hi>0) || !ents.length) return;
+    const lg=Math.log10;
+    const yLo=lg(Math.max(400, lo*0.85)), yHi=lg(hi*1.30);
+    const R=panel(0, 50, W, H-84, [1000,2035], [yLo,yHi]);
+    R.axis('公元', '', niceTicks(1000,2000,5), []);
+    // 对数刻度线（标签用原值，不用 log 值）
+    [500,1000,2000,5000,10000,20000,50000].forEach(v=>{
+        const y=R.sy(lg(v));
+        if (y<R.iy-1 || y>R.iy+R.ih+1) return;
+        ctx.strokeStyle='rgba(168,162,158,.26)'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(R.ix,y); ctx.lineTo(R.ix+R.iw,y); ctx.stroke();
+        R.ptxt(R.ix-5, y, v>=1000 ? (v/1000)+'k' : String(v), P.dim, 'right', 9.5);
+    });
+    ctx.save(); ctx.translate(10, R.iy+R.ih/2); ctx.rotate(-Math.PI/2);
+    ctx.font='bold 10px system-ui'; ctx.fillStyle=P.dim;
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText('人均 GDP（对数刻度）', 0, 0); ctx.restore();
+
+    // 窗口阴影 + 两条分界竖线
+    const x0=R.sx(S.t0), x1=R.sx(S.t1);
+    if (x1 > x0){
+        ctx.fillStyle='rgba(180,83,9,.16)';
+        ctx.fillRect(x0, R.iy, x1-x0, R.ih);
+        ctx.strokeStyle=P.curve; ctx.lineWidth=1.6; ctx.setLineDash([4,4]);
+        [x0,x1].forEach(x=>{ ctx.beginPath(); ctx.moveTo(x,R.iy); ctx.lineTo(x,R.iy+R.ih); ctx.stroke(); });
+        ctx.setLineDash([]);
+        R.ptxt((x0+x1)/2, R.iy+11, '窗口 '+fmt(S.t0,0)+'–'+fmt(S.t1,0)+' 年', P.curve, 'center', 10, 'bold');
+    }
+    // 1820 分界线（大分叉的那一刀）
+    const xp=R.sx(1820);
+    if (xp>R.ix && xp<R.ix+R.iw){
+        ctx.strokeStyle='rgba(231,229,228,.55)'; ctx.lineWidth=1.4; ctx.setLineDash([2,3]);
+        ctx.beginPath(); ctx.moveTo(xp,R.iy); ctx.lineTo(xp,R.iy+R.ih); ctx.stroke(); ctx.setLineDash([]);
+        R.ptxt(xp+4, R.iy+26, '1820', 'rgba(231,229,228,.75)', 'left', 9.5);
+    }
+    // 六条曲线（只连实测点，不插值）
+    ents.forEach(e=>{
+        const s=MDATA[e.key]||[]; if (s.length<2) return;
+        const pts=s.map(p=>[p[0], lg(p[1])]);
+        R.line(pts, e.color, 2.2);
+        // 窗口两端吸附到的实测点
+        const a=_mdNear(e.key,S.t0), b=_mdNear(e.key,S.t1);
+        [a,b].forEach(p=>{ if(!p) return;
+            ctx.fillStyle=e.color; ctx.beginPath();
+            ctx.arc(R.sx(p[0]), R.sy(lg(p[1])), 3.4, 0, 7); ctx.fill(); });
+    });
+    // 图例（两行三列）
+    ents.forEach((e,i)=>{
+        const cx=14+(i%3)*Math.min(140,(W-28)/3), cy=8+Math.floor(i/3)*18;
+        ctx.fillStyle=e.color; ctx.fillRect(cx, cy, 14, 4);
+        ctx.font='bold 10px system-ui'; ctx.textAlign='left'; ctx.textBaseline='middle';
+        ctx.fillStyle=P.text; ctx.fillText(e.zh, cx+19, cy+2);
+    });
+    // 结论：窗口内谁在天上、谁在地下
+    if (x1>x0){
+        let best=null, worst=null;
+        ents.forEach(e=>{ const g=_mdCagr(e.key,S.t0,S.t1);
+            if(!isFinite(g)) return;
+            if(!best||g>best.g) best={e,g};
+            if(!worst||g<worst.g) worst={e,g}; });
+        if (best && worst){
+            ctx.font='bold 11.5px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+            ctx.fillStyle = worst.g<0 ? P.bad : P.good;
+            ctx.fillText('这 '+fmt(S.t1-S.t0,0)+' 年里：'+best.e.zh+' '+fmt(best.g,3)+'%/年　'
+                         +worst.e.zh+' '+fmt(worst.g,3)+'%/年', W/2, H-6);
+        }
+    }
+}
+
 const rangeTicks=(a,b,n,round=false)=>{
     const out=[]; for(let i=0;i<=n;i++){ const v=a+(b-a)*i/n; out.push(round? Math.round(v/10)*10 : Math.round(v*10)/10); }
     return out;
@@ -976,6 +1067,7 @@ function render(){
         case 'tipping': drawTipping(S); break;
         case 'sunk': drawSunk(S); break;
         case 'redundancy': drawRedundancy(S); break;
+        case 'divergence': drawDivergence(S); break;
     }
     updateReadouts(S);
 }
