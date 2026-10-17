@@ -26,7 +26,7 @@ import figures as FIGS       # noqa: E402
 
 OUT = HERE / "output"
 OVERRIDES = OUT / "overrides.json"
-PAGE_CANVAS_W = 783
+PAGE_CANVAS_W = vk.PAGE_CANVAS_W            # 书页 canvas 真实内容宽度（实测，单一真源在 vizkit）
 
 
 def figure_sizes():

@@ -166,7 +166,7 @@ def make_validator(book_dir):
             else:
                 merged[fid] = dict(p)
         for fid, p in merged.items():
-            _, rep = vk.validate_patch({fid: base[fid]}, p, W=783, H=sz.get(fid, 300))
+            _, rep = vk.validate_patch({fid: base[fid]}, p, W=vk.PAGE_CANVAS_W, H=sz.get(fid, 300))
             if rep is not None and not rep.ok:
                 return False, f"[{fid}]\n" + rep.format()
         return True, "ok"

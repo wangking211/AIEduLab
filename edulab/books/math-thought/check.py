@@ -5,7 +5,8 @@ check.py — 书稿校验：把 vizkit.validate 跑在本书全部插图上（�
     python check.py            # 校验全部插图
     python check.py -v         # 连警告一起打印
 
-校验用的画布尺寸取自章节 JSON 里每个 figure 块的 height（宽度按书页正文列宽 783 估算）。
+校验用的画布尺寸取自章节 JSON 里每个 figure 块的 height（宽度取 vizkit.PAGE_CANVAS_W ——
+实测值 693.8，推导见 vizkit 里的说明）。改了页面版式必须同步那个常量。
 """
 import json
 import sys
@@ -18,7 +19,7 @@ sys.path.insert(0, str(HERE))
 import vizkit as vk          # noqa: E402
 import figures as FIGS       # noqa: E402
 
-PAGE_CANVAS_W = 783          # 书页正文里 canvas 的实际宽度（CSS 像素）
+PAGE_CANVAS_W = vk.PAGE_CANVAS_W          # 书页 canvas 真实内容宽度（实测，单一真源在 vizkit）
 
 
 def figure_sizes():

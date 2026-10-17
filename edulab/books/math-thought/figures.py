@@ -1045,10 +1045,10 @@ def fig_lln():
         {"geom": "text", "when": "k >= 2", "x": 130, "y": 0.10,
          "text": f"100 次：≈ 0.5（{runs[99][1]:.2f}）", "align": "left", "size": 10.5,
          "color": ACCENT, "dy": 0, "weight": "normal"},
-        {"geom": "text", "when": "k >= 3", "x": 300, "y": 0.80,
+        {"geom": "text", "when": "k >= 3", "x": 294, "y": 0.80,
          "text": f"{flips} 次：贴住 0.5（{h / flips:.3f}）", "align": "left", "size": 10.5,
          "color": GOOD, "dy": 0},
-        {"geom": "text", "when": "k >= 4", "x": 300, "y": 0.22,
+        {"geom": "text", "when": "k >= 4", "x": 294, "y": 0.22,
          "text": f"|正 − 反| 典型 ≈ 0.8√n：{typical[0]:.1f} → {typical[1]:.1f} → {typical[2]:.1f}（在变大）",
          "align": "left", "size": 10.5, "color": BAD, "dy": 0},
     ]

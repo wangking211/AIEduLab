@@ -156,12 +156,23 @@
     this._boxes = [];   // 供审计：记录绘制过的图元包围盒
   }
   Renderer.prototype.resize = function () {
-    const rect = this.canvas.parentElement.getBoundingClientRect();
+    // 容器**边框盒**的高度 = canvas 高 + figbox 的 padding/border。用它当 canvas 高，
+    // 再把结果写回 canvas.style.height，就构成正反馈：每次 resize 图都长高一圈，
+    // 无上界（实测 314.4 → 328.8 → 343.2 → 357.6，每次 +14.4px）。
+    // 同理，宽度要的是容器**内容盒**：直接写 style.width = 边框盒宽度会让 canvas
+    // 溢出 figbox 的左右 padding。
+    // 因此：宽取内容盒，高取 canvas 自己已声明的 CSS 高度，且**不回写 style.height**。
+    const parent = this.canvas.parentElement;
+    const pcs = global.getComputedStyle(parent);
+    const contentW = parent.clientWidth - (parseFloat(pcs.paddingLeft) || 0)
+                                         - (parseFloat(pcs.paddingRight) || 0);
+    const declaredH = this.canvas.getBoundingClientRect().height
+                   || parent.getBoundingClientRect().height;
     const dpr = Math.min(global.devicePixelRatio || 1, 2);
-    this.canvas.width = Math.max(1, Math.round(rect.width * dpr));
-    this.canvas.height = Math.max(1, Math.round(rect.height * dpr));
-    this.canvas.style.width = rect.width + "px";
-    this.canvas.style.height = rect.height + "px";
+    const w = Math.max(1, contentW), h = Math.max(1, declaredH);
+    this.canvas.width = Math.round(w * dpr);
+    this.canvas.height = Math.round(h * dpr);
+    this.canvas.style.width = w + "px";
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.scale(dpr, dpr);
     this.W = rect.width; this.H = rect.height;

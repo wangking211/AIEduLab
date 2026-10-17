@@ -258,12 +258,30 @@ def spec(layers, view, theme="dark", steps_=None, params=None, scalars=None,
 CHA_WIDTH = 1.0      # 中文字符宽度 / 字号
 ASCII_WIDTH = 0.56   # ASCII 字符宽度 / 字号
 
+# 书页里 canvas 的**真实**内容宽度（CSS 像素）。这个数不是估的，是量出来的：
+#   page.html  的 <main class="max-w-[720px]"> 减去它自己的左右 padding，
+#   figure .figbox 再减去左右 padding 9.6px 与 1px 边框 → 693.8。
+# 早先这里写 783（"正文列宽"），宽了 13%，等于所有越界/重叠检查都在一个比
+# 真实画布宽 13% 的虚拟画布上做 —— 只会漏报，不会报错，所以长期没人发现。
+# 校验口径必须跟着实测走：改了页面版式就改这个数，并用 check_output.py 复量。
+PAGE_CANVAS_W = 693.8
+
 
 def est_text_width(s, size):
-    w = 0.0
-    for ch in str(s):
-        w += (CHA_WIDTH if ord(ch) > 0x2E80 else ASCII_WIDTH) * size
-    return w
+    """按**最宽的一行**估宽。
+
+    多行标签（含 `\\n`）若把所有字符加在一起算，等于把两行叠成一行，宽度会翻倍。
+    图上的标注大多是两行（年代 / 事件），所以这不是边角情况：fig-timeline 的
+    「公元前 6 世纪\\n发现 √2 不可通约」被算成 147px，真值约 78px —— 于是 E6 报
+    文本冲出左边界，而实际留白还有 20 多像素。
+    """
+    best = 0.0
+    for line in str(s).split("\n"):
+        w = 0.0
+        for ch in line:
+            w += (CHA_WIDTH if ord(ch) > 0x2E80 else ASCII_WIDTH) * size
+        best = max(best, w)
+    return best
 
 
 class Report:
@@ -333,8 +351,10 @@ def _pix(v, spec_):
     return W, H
 
 
-def validate(spec_, W=800, H=350):
-    """校验一份 viz spec。W/H 是预期的画布像素尺寸（默认 800×350）。"""
+def validate(spec_, W=PAGE_CANVAS_W, H=350):
+    # W/H 是预期的画布像素尺寸。默认宽度取实测的书页 canvas 宽（PAGE_CANVAS_W），
+    # 而不是随手写的 800 —— 校验口径必须等于真实渲染口径，否则只会漏报不会报错。
+    # 本仓库按 W=800、H=350 校验过的图，在真实宽度 693.8 下立刻多出 2 处溢出。
     r = Report()
     if not isinstance(spec_, dict):
         r.err("E1", "spec", "spec 必须是对象", "用 vizkit.spec(...) 构造")
@@ -359,8 +379,16 @@ def validate(spec_, W=800, H=350):
     sy = (H - pad.get("t", 16) - pad.get("b", 34)) / spany
     if view.get("equalAspect"):
         s = min(sx, sy); sx = sy = s
-    ox = pad.get("l", 58) - xr[0] * sx
-    oy = (H - pad.get("b", 34)) + yr[0] * sy
+    if view.get("equalAspect"):
+        # 与 viz.js `compute()` 的 equalAspect 分支逐字对齐：等比时两个方向都富余，
+        # 富余量要**居中**分掉。漏掉这个居中偏移，所有等比图的坐标映射都会系统性
+        # 偏移（宽图偏、窄图不偏），底下的越界/重叠判断就都建在错的坐标上。
+        ox = pad.get("l", 58) + ((W - pad.get("l", 58) - pad.get("r", 14)) - spanx * sx) / 2 - xr[0] * sx
+        oy = pad.get("t", 16) + ((H - pad.get("t", 16) - pad.get("b", 34)) - spany * sy) / 2 \
+             + spany * sy + yr[0] * sy
+    else:
+        ox = pad.get("l", 58) - xr[0] * sx
+        oy = (H - pad.get("b", 34)) + yr[0] * sy
     X = lambda x: ox + x * sx
     Y = lambda y: oy - y * sy
 
@@ -632,7 +660,7 @@ def Report_with_err(msg):
     return r
 
 
-def validate_patch(specs, patch, W=783, H=300):
+def validate_patch(specs, patch, W=PAGE_CANVAS_W, H=300):
     """施加补丁 → 校验结果 spec。返回 (新集合, 报告)。出错时集合保持原样。"""
     try:
         new_specs, err = apply_patch(specs, patch)
