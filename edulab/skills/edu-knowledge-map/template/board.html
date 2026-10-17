@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知识结构图 · 前置关系与学习路径</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+    <style>
+        body { background-color: #f8fafc; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .katex { font-size: 1.02em; }
+        .viewbtn.on { background:#4338ca; color:#fff; border-color:#4338ca; }
+    </style>
+</head>
+<body class="min-h-screen lg:h-screen text-slate-800 lg:overflow-hidden">
+<div class="flex flex-col lg:flex-row gap-3 p-3 min-h-screen lg:h-screen lg:overflow-hidden">
+
+    <!-- ===== 左栏：题目 + 控制台 ===== -->
+    <aside class="w-full lg:w-[340px] flex-shrink-0 flex flex-col gap-3 lg:overflow-hidden">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-300 p-5 flex-shrink-0">
+            <h2 id="prob-title" class="text-xl font-bold mb-4 text-slate-900"></h2>
+            <div id="prob-body" class="prose text-slate-600 leading-relaxed space-y-3 text-sm md:text-base"></div>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-300 p-5 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+            <h3 class="text-base font-bold text-slate-900 flex items-center gap-2 mb-4">
+                <span class="w-2.5 h-2.5 bg-blue-500 rounded-full"></span>
+                <span id="console-title">动态控制台</span>
+            </h3>
+            <div class="space-y-6">
+                <div id="param-block" class="hidden">
+                    <div class="flex justify-between items-center mb-2">
+                        <label id="param-label" class="text-sm font-semibold text-slate-600"></label>
+                        <span id="param-val" class="bg-blue-50 text-blue-600 px-2.5 py-1 rounded-md text-xs font-mono font-bold border border-blue-100"></span>
+                    </div>
+                    <input type="range" id="param-slider" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 focus:outline-none">
+                    <div id="param-ticks" class="flex justify-between text-[11px] text-slate-400 mt-1.5 font-mono"></div>
+                </div>
+                <div id="readouts" class="bg-slate-50 border border-slate-200/60 rounded-xl p-4 space-y-3 text-xs md:text-sm font-mono text-slate-700"></div>
+            </div>
+            <div id="constant-block" class="hidden mt-6 border-t border-slate-100 pt-4">
+                <div class="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm">
+                    <span class="text-emerald-600">💡</span>
+                    <span class="text-slate-700">定值</span>
+                    <span id="constant-val" class="ml-auto font-bold text-emerald-700"></span>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ===== 中栏：分步解析 ===== -->
+    <section class="w-full lg:w-[360px] flex-shrink-0 lg:overflow-y-auto bg-white rounded-2xl shadow-sm border border-slate-300 p-5 space-y-5">
+        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <span class="w-2.5 h-2.5 bg-indigo-500 rounded-full"></span>
+            <span>详细解析</span>
+        </h3>
+        <div id="solution-body" class="space-y-5"></div>
+    </section>
+
+    <!-- ===== 右栏：画板 ===== -->
+    <main class="w-full lg:flex-1 min-w-0 bg-white rounded-2xl shadow-sm border border-slate-300 p-5 flex flex-col lg:overflow-hidden">
+        <div class="flex justify-between items-center mb-4 flex-shrink-0 gap-3">
+            <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h6v4H4zM14 14h6v4h-6zM7 10v4h7"/></svg>
+                知识结构画板
+            </h3>
+            <div class="flex items-center gap-1.5">
+                <button id="view-prereq" type="button" class="viewbtn on text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors">前置关系</button>
+                <button id="view-lattice" type="button" class="viewbtn text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors">状态格</button>
+            </div>
+        </div>
+        <div class="relative flex-grow min-h-[380px] lg:min-h-0 bg-slate-900 rounded-xl overflow-hidden shadow-inner">
+            <canvas id="geometry-canvas" class="absolute inset-0 w-full h-full"></canvas>
+            <div id="legend" class="absolute bottom-4 left-4 pointer-events-none bg-slate-900/80 backdrop-blur-md text-[11px] text-slate-300 p-3 rounded-lg border border-slate-700 space-y-1"></div>
+            <div id="fallback" class="hidden absolute inset-0 flex items-center justify-center text-slate-400 text-sm px-8 text-center"></div>
+        </div>
+    </main>
+</div>
+
+<script id="lesson-data" type="application/json">__LESSON_DATA__</script>
+<script>
+"use strict";
+const DATA = JSON.parse(document.getElementById('lesson-data').textContent);
+const BOARD = DATA.board || {};
+
+const canvas = document.getElementById('geometry-canvas');
+const ctx = canvas.getContext('2d');
+let cssW = 0, cssH = 0, mode = 'prereq';
+let curK = (BOARD.param && BOARD.param.value) || 0;
+
+const PREREQ = {};
+(BOARD.edges || []).forEach(e => { (PREREQ[e.to] = PREREQ[e.to] || []).push(e.from); });
+
+const byId = {};
+(BOARD.concepts || []).forEach(c => { byId[c.id] = c; });
+
+// ---------------------------------------------------------------- 工具
+function closureOf(ids) {
+    const out = new Set();
+    const stack = [...ids];
+    while (stack.length) {
+        const c = stack.pop();
+        if (out.has(c)) continue;
+        out.add(c);
+        (PREREQ[c] || []).forEach(p => stack.push(p));
+    }
+    return out;
+}
+function currentState() {
+    const pid = (BOARD.path || [])[Math.min(curK, (BOARD.path || []).length - 1)];
+    const st = (BOARD.states || []).find(s => s.id === pid);
+    if (st) return new Set(st.members);
+    // 状态格没画（规模太大）时，退化成「路径前 k 步的并集」
+    const s = new Set();
+    for (let i = 0; i <= curK && i < (BOARD.path || []).length; i++) {
+        const t = (BOARD.states || []).find(x => x.id === BOARD.path[i]);
+        if (t) t.members.forEach(m => s.add(m));
+    }
+    return s;
+}
+function fringeOf(state) {
+    return (BOARD.concepts || []).map(c => c.id).filter(c =>
+        !state.has(c) && (PREREQ[c] || []).every(p => state.has(p)));
+}
+function labelOf(id) { return (byId[id] && byId[id].label) || id; }
+
+// ---------------------------------------------------------------- 画布
+function resizeCanvas() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+    cssW = rect.width; cssH = rect.height;
+    update();
+}
+
+function arrow(x1, y1, x2, y2, color, width) {
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = width || 1.8;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    const a = Math.atan2(y2 - y1, x2 - x1), h = 8;
+    ctx.beginPath(); ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - h * Math.cos(a - 0.4), y2 - h * Math.sin(a - 0.4));
+    ctx.lineTo(x2 - h * Math.cos(a + 0.4), y2 - h * Math.sin(a + 0.4));
+    ctx.closePath(); ctx.fill();
+}
+
+function drawPrereq(state) {
+    const pad = 54, W = cssW - pad * 2, H = cssH - pad * 2 - 26;
+    const pos = {};
+    (BOARD.concepts || []).forEach(c => {
+        pos[c.id] = [pad + c.x * W, pad + c.y * H];
+    });
+    const fringe = fringeOf(state);
+    const goal = closureOf(BOARD.goal || []);
+    const pathSet = new Set();
+    for (let i = 0; i <= curK && i < (BOARD.path || []).length; i++) {
+        const t = (BOARD.states || []).find(x => x.id === BOARD.path[i]);
+        if (t) t.members.forEach(m => pathSet.add(m));
+    }
+
+    // 边：只给「两端都已掌握」的上色，其余淡色
+    (BOARD.edges || []).forEach(e => {
+        const [x1, y1] = pos[e.from], [x2, y2] = pos[e.to];
+        const on = state.has(e.from) && state.has(e.to);
+        const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy) || 1;
+        const r = 26;
+        arrow(x1 + dx / L * r, y1 + dy / L * r, x2 - dx / L * r, y2 - dy / L * r,
+              on ? '#2dd4bf' : '#334155', on ? 2.4 : 1.4);
+    });
+
+    // 节点
+    (BOARD.concepts || []).forEach(c => {
+        const [x, y] = pos[c.id];
+        const mastered = state.has(c.id);
+        const can = fringe.includes(c.id);
+        const isGoal = (BOARD.goal || []).includes(c.id);
+        const w = 92, h = 30;
+        ctx.beginPath();
+        const rr = 8;
+        ctx.moveTo(x - w / 2 + rr, y - h / 2);
+        ctx.arcTo(x + w / 2, y - h / 2, x + w / 2, y + h / 2, rr);
+        ctx.arcTo(x + w / 2, y + h / 2, x - w / 2, y + h / 2, rr);
+        ctx.arcTo(x - w / 2, y + h / 2, x - w / 2, y - h / 2, rr);
+        ctx.arcTo(x - w / 2, y - h / 2, x + w / 2, y - h / 2, rr);
+        ctx.closePath();
+        ctx.fillStyle = mastered ? 'rgba(45,212,191,0.22)' : (can ? 'rgba(251,191,36,0.16)' : 'rgba(30,41,59,0.9)');
+        ctx.fill();
+        ctx.lineWidth = isGoal ? 2.4 : (can ? 2 : 1.4);
+        ctx.strokeStyle = mastered ? '#2dd4bf' : (can ? '#fbbf24' : (isGoal ? '#a78bfa' : '#475569'));
+        if (can && !mastered) ctx.setLineDash([4, 3]);
+        ctx.stroke(); ctx.setLineDash([]);
+
+        ctx.fillStyle = mastered ? '#5eead4' : (can ? '#fcd34d' : '#cbd5e1');
+        ctx.font = 'bold 11px system-ui,sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(c.label, x, y + 0.5);
+        if (isGoal) {
+            ctx.fillStyle = '#c4b5fd'; ctx.font = '9px system-ui,sans-serif';
+            ctx.fillText('目标', x, y + h / 2 + 11);
+        }
+    });
+}
+
+function drawLattice(state) {
+    const S = BOARD.states || [];
+    if (!S.length) {
+        document.getElementById('fallback').classList.remove('hidden');
+        document.getElementById('fallback').textContent =
+            '这个领域的合法状态太多（' + (BOARD.summary ? BOARD.summary.states : '?') +
+            ' 个），状态格画出来也看不清。请切回「前置关系」视图。';
+        return;
+    }
+    document.getElementById('fallback').classList.add('hidden');
+    const pad = 40, W = cssW - pad * 2, H = cssH - pad * 2;
+    const P = {};
+    S.forEach(s => { P[s.id] = [pad + s.x * W, pad + s.y * H]; });
+
+    const cur = (BOARD.path || [])[Math.min(curK, (BOARD.path || []).length - 1)];
+    const pathSet = new Set((BOARD.path || []).slice(0, curK + 1));
+
+    (BOARD.covers || []).forEach(([a, b]) => {
+        const [x1, y1] = P[a], [x2, y2] = P[b];
+        const onPath = pathSet.has(a) && pathSet.has(b);
+        ctx.strokeStyle = onPath ? '#2dd4bf' : '#334155';
+        ctx.lineWidth = onPath ? 2.2 : 1;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    });
+
+    S.forEach(s => {
+        const [x, y] = P[s.id];
+        const isCur = s.id === cur;
+        const onPath = pathSet.has(s.id);
+        const r = isCur ? 8 : (onPath ? 5.5 : 3.4);
+        ctx.beginPath(); ctx.arc(x, y, r, 0, 7);
+        ctx.fillStyle = isCur ? '#fbbf24' : (onPath ? '#2dd4bf' : '#64748b');
+        ctx.fill();
+        if (isCur) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); }
+    });
+}
+
+function draw() {
+    ctx.clearRect(0, 0, cssW, cssH);
+    const st = currentState();
+    if (mode === 'prereq') drawPrereq(st); else drawLattice(st);
+}
+
+// ---------------------------------------------------------------- 读数
+function computeReadouts() {
+    const st = currentState();
+    const fringe = fringeOf(st);
+    const goal = closureOf(BOARD.goal || []);
+    const gaps = [...goal].filter(c => !st.has(c));
+    const order = (BOARD.concepts || []).map(c => c.id);
+    gaps.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    return {
+        mastered: String(st.size),
+        fringe: fringe.length ? fringe.map(labelOf).join('、') : '（无）',
+        gaps: gaps.length ? gaps.map(labelOf).join('、') : '（已达成）',
+        size: String(st.size),
+    };
+}
+
+function update() {
+    if (BOARD.param) {
+        const s = document.getElementById('param-slider');
+        curK = parseInt(s.value, 10);
+        document.getElementById('param-val').textContent =
+            '第 ' + curK + ' 步 / 共 ' + BOARD.param.max + ' 步';
+    }
+    const vals = computeReadouts();
+    Object.keys(vals).forEach(id => {
+        const el = document.getElementById('ro-' + id);
+        if (el) el.textContent = vals[id];
+    });
+    draw();
+}
+
+// ---------------------------------------------------------------- 控制台
+function buildConsole() {
+    document.getElementById('prob-title').textContent = (DATA.lesson && DATA.lesson.title) || '';
+    document.getElementById('prob-body').innerHTML = (DATA.lesson && DATA.lesson.problem) || '';
+
+    const p = BOARD.param;
+    if (p) {
+        document.getElementById('param-block').classList.remove('hidden');
+        document.getElementById('param-label').innerHTML = p.label || p.name;
+        const s = document.getElementById('param-slider');
+        s.min = p.min; s.max = p.max; s.step = p.step || 1; s.value = p.value !== undefined ? p.value : p.min;
+        document.getElementById('param-ticks').innerHTML =
+            (p.ticks || []).map(t => '<span>' + t + '</span>').join('');
+        s.addEventListener('input', update);
+    }
+
+    const ro = document.getElementById('readouts');
+    ro.innerHTML = (BOARD.readouts || []).map(r =>
+        '<div class="flex justify-between gap-3 border-b border-dashed border-slate-200 pb-2">' +
+        '<span class="shrink-0">' + r.label + '：</span>' +
+        '<span id="ro-' + r.id + '" class="font-bold text-right"></span></div>').join('');
+
+    if (BOARD.constant) {
+        document.getElementById('constant-block').classList.remove('hidden');
+        document.getElementById('constant-val').textContent = BOARD.constant.label || '';
+    }
+
+    document.getElementById('legend').innerHTML =
+        '<div>▢ 实心青 = 已掌握</div>' +
+        '<div>▢ 虚框黄 = 现在可学</div>' +
+        '<div>▢ 紫框 = 目标概念</div>';
+
+    const sb = document.getElementById('solution-body');
+    sb.innerHTML = (DATA.steps || []).map((st, i) => {
+        const no = String(i + 1).padStart(2, '0');
+        return '<div class="' + (i > 0 ? 'border-t border-slate-100 pt-5' : '') + '">' +
+            '<div class="flex items-start gap-4 mb-3">' +
+            '<span class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold font-mono text-sm flex-shrink-0">' + no + '</span>' +
+            '<h3 class="text-lg font-bold text-slate-900 pt-0.5">' + (st.title || '') + '</h3></div>' +
+            '<div class="prose max-w-none text-slate-700 leading-relaxed text-sm md:text-base space-y-3">' + (st.content || '') + '</div></div>';
+    }).join('');
+
+    if (typeof renderMathInElement !== 'undefined') {
+        renderMathInElement(document.body, {
+            delimiters: [{ left: '$$', right: '$$', display: true },
+                         { left: '$', right: '$', display: false }],
+            throwOnError: false
+        });
+    }
+
+    document.getElementById('view-prereq').onclick = () => setMode('prereq');
+    document.getElementById('view-lattice').onclick = () => setMode('lattice');
+}
+
+function setMode(m) {
+    mode = m;
+    document.getElementById('view-prereq').classList.toggle('on', m === 'prereq');
+    document.getElementById('view-lattice').classList.toggle('on', m === 'lattice');
+    if (m === 'prereq') document.getElementById('fallback').classList.add('hidden');
+    draw();
+}
+
+window.addEventListener('resize', resizeCanvas);
+window.onload = () => { buildConsole(); resizeCanvas(); };
+</script>
+</body>
+</html>

@@ -73,16 +73,22 @@ def section_body(text, heading):
     return "\n".join(out)
 
 
-def check_skill_docs(items):
+def check_skill_docs(items=None):
     """每个 SKILL.md 必须有「什么时候不该用本技能」段，且给出可执行的替代路径。
 
     为什么把它做成闸门：SKILL.md 的 description 决定**自动触发**。没有「不该用」
     的边界，路由就会在边界案例上乱选 —— 用户问一道初中杠杆题，结果触发高中物理
     技能，就是这类失败。而只写「本技能不适合」等于没说，必须指向具体去向：
     兄弟技能名，或者「直接回答 / 直接算 / 直接说明」。
+
+    注意扫描范围是 `edulab/skills/*/SKILL.md` **全部**，不是 `skill_dirs()`。
+    后者只收录有 `scripts/generate.py` 的技能，视频技能（走另一套流水线）会被漏掉——
+    而它们恰恰更需要写清「什么时候不该出视频」。
     """
     bad = []
-    for name, sdir in items:
+    targets = sorted(p.parent for p in SKILLS_DIR.glob("*/SKILL.md"))
+    for sdir in targets:
+        name = sdir.name
         p = sdir / "SKILL.md"
         if not p.exists():
             # 根级产品（mental-models）不走技能安装，没有 SKILL.md 是正常的；
@@ -206,7 +212,7 @@ def main(argv):
             print(f"      {ln}")
 
     # 0.6) 文档边界：每个技能都要说清「什么时候不该用」，并指向替代去向。
-    doc_bad = check_skill_docs(items)
+    doc_bad = check_skill_docs()
     print(f"  {'✓' if not doc_bad else '✗'} 文档边界（每个技能都有「什么时候不该用本技能」且指向替代）")
     for name, why in doc_bad:
         print(f"      {name}: {why}")

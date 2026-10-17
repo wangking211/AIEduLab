@@ -132,11 +132,20 @@ def check_file(path, declared_heights, verbose):
         if tag.group(1).lower() != "canvas":
             continue
         a = attrs_of(tag.group(0))
-        fid = a.get("data-fig")
+        fid = a.get("data-fig") or a.get("id")
+        cls = a.get("class", "")
+        # 两种合法写法：
+        #   1) 书稿：canvas 写死 style="height:Npx"，高度必须等于章节声明；
+        #   2) 技能画板：class 里 inset-0 / w-full h-full，由父容器撑满，
+        #      尺寸在运行时由 JS 从 getBoundingClientRect 取 —— 没有写死高度是对的。
+        fills_parent = "inset-0" in cls or ("w-full" in cls and "h-full" in cls)
         m = CANVAS_H_RE.search(tag.group(0))
+        if fills_parent and not m:
+            infos.append(("O4", rel, f"canvas {fid!r} 由父容器撑满（尺寸运行时取）", ""))
+            continue
         if not m:
-            warns.append(("O4", rel, f"canvas {fid!r} 没有 style 高度",
-                          "page.html 应给每个 canvas 写 style=\"height:Npx\""))
+            warns.append(("O4", rel, f"canvas {fid!r} 既没写 style 高度、也没撑满父容器",
+                          "两种写法选一种：写死高度，或 class 加 inset-0 / w-full h-full"))
             continue
         got = float(m.group(1))
         want = declared_heights.get(fid)

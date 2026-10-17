@@ -78,6 +78,12 @@
   "tangent_line.html": "90870c4b54dacb7eb6e9763c4a1d3410256f24bb0b552fd746815e77854e6e7b",
   "zero_crossing.html": "73cec7135d25443ffc455b886fbb71bea73c5e864aa367ca96984b15d257b8c4"
  },
+ "edu-knowledge-map": {
+  "derivative.html": "9a08c7ba5f8a3f481f924c23d2e75f21341f135c934eb413681075adbec533f7",
+  "fraction.html": "4cc276707c5e75d9b9f123d2d957c395f2d09bcafdb96d131f2e5b94e56796df",
+  "index.html": "5ee2fd360aeb952fdcca7a3217947f63ed77cb20dcfb802d533e8fc5501dbf1d",
+  "probability.html": "9abc2f09099a16a39f59828e5d27811fd40ca2b007175c6d70ae4cf1f2b7481d"
+ },
  "edu-math-sequences": {
   "arithmetic.html": "5fe0481c7b367f23407222465cfe3879b4d1305681406e9029c83c31057eeb58",
   "geometric.html": "cf27d6c3900125ba560f153ec0fe07d2606b7774f3966e0fa524e40f2287fe9d",
