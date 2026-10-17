@@ -44,6 +44,7 @@ import vizkit as vk                                     # noqa: E402
 CDN_ALLOW = {
     "cdn.tailwindcss.com": "Tailwind 运行时（书页排版）",
     "cdn.jsdelivr.net": "KaTeX（数学排版）",
+    "cdnjs.cloudflare.com": "Three.js r128（生物细胞 / 化学分子 3D）",
 }
 
 TAG_RE = re.compile(r"<(script|link|img|meta|canvas)\b([^>]*)/?>", re.I)
@@ -94,9 +95,9 @@ def check_file(path, declared_heights, verbose):
     if "__VIZ_JS__" in raw or "__BOOK_DATA__" in raw:
         errs.append(("O1", rel, "模板占位符没被替换（__VIZ_JS__ / __BOOK_DATA__）",
                      "build.py 没跑完；重跑并检查它是否提前退出"))
-    for m in re.finditer(r"\{\{[^{}]{1,40}\}\}", raw):
-        errs.append(("O1", rel, f"疑似未替换的模板 {m.group(0)!r}",
-                     "确认是不是别的模板系统留下的"))
+    # 刻意**不**检查 `{{ ... }}`：LaTeX 到处是双花括号（`{{U}}`、`\\frac{{a}}{{b}}`），
+    # 拿它当模板标记只会每页报一堆假阳性。本项目也根本不用 `{{ }}` 模板——
+    # 书稿用 __VIZ_JS__ / __BOOK_DATA__，技能用 __LESSON_DATA__，正文用 @@name@@。
 
     # ---- O2 外链白名单 ----
     for tag in TAG_RE.finditer(raw):

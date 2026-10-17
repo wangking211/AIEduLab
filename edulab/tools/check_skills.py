@@ -23,6 +23,9 @@ check_skills.py —— 技能与根级产品的一致性 / 可复现性闸门。
 6. **出处分级**：`mental-models/data/PROVENANCE.md` 必须与代码一致。每个数值归入
    现算 / 实测 / 假设三类，假设逐条列出。加一个滑块参数就是加一个假设，必须重新
    生成报告 —— 假设可以被加，但不能被默默加。
+7. **产物自检**：每个技能生成的 `.html` 都要过一遍 `check_output.py` 的检查项
+   （残留模板记号、外链白名单、本地引用断链、渲染残留的 undefined/NaN）。
+   哈希只回答「产物变没变」，不回答「产物对不对」。
 
 用法：
     python edulab/tools/check_skills.py            # 闸门（差异即失败）
@@ -175,6 +178,24 @@ def scene_guard_selftest():
     return (not bad), cases
 
 
+def artifact_problems(out_dir):
+    """对某个技能的产物目录跑一遍 check_output 的检查项（读产物，不读源）。
+
+    技能闸门原本只比对哈希：能发现「产物变了」，但发现不了「产物本来就是坏的」——
+    残留记号、白名单外的外链、本地引用断链、渲染残留的 undefined/NaN。
+    这些恰恰是源检查看不见的。产物目录是临时目录，所以每次现跑。
+    """
+    sys.path.insert(0, str(HERE))
+    import check_output as CO
+
+    bad = []
+    for f in sorted(Path(out_dir).glob("*.html")):
+        errs, _warns, _infos = CO.check_file(f, {}, False)
+        for code, _where, msg, _fix in errs:
+            bad.append(f"{f.name}: {code} {msg}")
+    return bad
+
+
 def run_all(sdir, out_dir, hash_seed=None):
     """跑 `<产品>/scripts/generate.py all <out_dir>`，返回 (exit_code, {相对路径: sha256})。"""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -263,6 +284,7 @@ def main(argv):
             continue
 
         nondet = [k for k in set(h1) | set(h2) if h1.get(k) != h2.get(k)]
+        art = artifact_problems(base / "a")
         # 新增项**没有基线记录时不能默认通过**：否则加一个新技能闸门就自动对它
         # 变绿，等于形同虚设。缺少记录视为未通过，提示用 --update 建立。
         nobase = s not in baseline
@@ -272,6 +294,8 @@ def main(argv):
         flags = []
         if nondet:
             flags.append(f"不可复现 {nondet}")
+        if art:
+            flags.append(f"产物有问题 {art}")
         if nobase:
             flags.append(f"无基线记录（{len(h1)} 个产物，需 --update 建立）")
         elif drift:
@@ -307,7 +331,7 @@ def main(argv):
         print("\n  若确认新产物正确，用 `--update` 刷新基线；"
               "模板用 compose_templates.py、素材用 sync_video_assets.py 重新组装。")
         return 1
-    print(f"✓ 全部 {len(items)} 项：可运行、可复现、与基线一致；"
+    print(f"✓ 全部 {len(items)} 项：可运行、可复现、与基线一致、产物自检通过；"
           f"模板与素材均与真源一致；文档边界齐全；出处分级一致")
     return 0
 
