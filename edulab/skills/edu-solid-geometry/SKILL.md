@@ -106,6 +106,16 @@ python3 <技能目录>/scripts/generate.py random 7 ./random.html   # 不给路�
 - **加题型**：在 `geometry_kernel.py` 加求解函数（见 conventions 配方表），在 `generate.py` 加一个 `build_*`。
 - **加几何体**：在 `geometry_kernel.py` 加坐标构建函数，在 `bodies.py` 加棱拓扑。
 
+## 什么时候不该用本技能
+
+先用**最低够用的表达级**：一句话能说清就别做图，一张静态图能说清就别做交互页，交互页能说清就别做视频。本技能产出的是**自包含的交互教学网页**，构建与校验都有成本，不适合「随口问一句」的场景。
+
+- 题目是**平面**几何——用 `edu-plane-geometry`。
+- 题目是圆锥曲线——用 `edu-analytic-geometry`。
+- 题目是函数与导数——用 `edu-function-derivative`。
+- 只要求一个角度或距离、不需要看空间关系——直接算并作答。
+- 需要**视频**讲解——本仓库目前**没有**立体几何视频技能，请直接说明。
+
 ## 目录
 - `template/lesson.html` — 数据驱动模板（通用 3D 渲染器 + 数据岛 `__LESSON_DATA__`）
 - `lib/geometry_kernel.py` — sympy 精确计算核心

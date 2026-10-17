@@ -137,6 +137,16 @@ cd PROJ && node render.mjs video 6      # 6 = 并行浏览器页数（不是帧�
 | `--check` 还有 ⚠ 就调 TTS | 修到 0 |
 | 渲染完不看画面就交付 | 每次都看 `build/sheet*.png` |
 
+## 什么时候不该用本技能
+
+先用**最低够用的表达级**：一句话能说清就别做图，一张静态图能说清就别做交互页，交互页能说清就别做视频。本技能产出的是**自包含的交互教学网页**，构建与校验都有成本，不适合「随口问一句」的场景。
+
+
+- 只需要**可交互页面**——用 `edu-physics-junior` / `edu-physics-senior`，视频不能交互。
+- 用户没有明确说「视频 / 讲解视频 / 微课 / 动画演示」——**先问**，不要默认出视频。
+- 环境里没有 ffmpeg，或没有可用的 TTS 凭据——直接说明无法产出。
+- 题目一句话能答完——直接回答。
+
 ## 参考文件
 - [reference/physics-solving.md](reference/physics-solving.md)：**物理解题方法**：六步流程、分段判据、sympy 验算、把解变成动画的要求、常见题型的幕结构。第 1 步必读。
 - [reference/visual-design.md](reference/visual-design.md)：讲解动画设计：指→动→留→连、物理配色、物理→动画动作表、真实运动写法。写分镜前必读。

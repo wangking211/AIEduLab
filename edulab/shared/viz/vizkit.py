@@ -126,6 +126,25 @@ KNOWN_FIELDS = {  # 每个图元的「已知字段」，未知字段会告警（
                "hlFill", "fill", "showIndex", "when"},
 }
 
+# `data` 数组里**每个元素**允许的字段。来源是 viz.js 里各 GEOMS 函数实际读的
+# `d.xxx` —— 不是猜的。拼错一个字段名（`x` 写成 `xcoord`）的后果很隐蔽：渲染器
+# 读到 undefined，那个点直接不画（或画到 NaN），图还在、只是少了个东西，看图发现
+# 不了。图层级的 KNOWN_FIELDS 抓不到这种情况，因为它只看顶层键。
+DATA_FIELDS = {
+    "point":    {"x", "y", "r", "fill", "label", "labelColor"},
+    "node":     {"x", "y", "r", "fill", "edge", "on", "shape", "text", "textColor",
+                 "label", "labelColor"},
+    "edge":     {"u", "v", "on", "color", "width", "dash", "directed", "w", "wcolor",
+                 "label", "labelColor"},
+    "arrow":    {"from", "to", "dir", "on", "color", "width"},
+    "card":     {"id", "x", "y", "w", "h", "label", "sub", "edge", "fill", "on"},
+    "glyph":    {"x", "y", "shape", "on", "fill", "label"},
+    "bar":      {"x", "y", "w", "base", "y0", "fill", "label"},
+    "timeline": {"t", "label", "fill", "side"},
+    "array":    {"v"},
+    "linear":   {"id", "val", "next"},
+}
+
 REQUIRED = {
     "axis": [], "grid": [],
     "bar": ["data"], "line": ["fn|data"], "point": ["data"],
@@ -288,6 +307,12 @@ class Report:
     def __init__(self):
         self.errors = []
         self.warnings = []
+        # 本校验器**没能读懂**的输入。与 errors 的区别：
+        # errors = 读懂了，而且它是错的；
+        # unread = 根本没读懂，于是「没有报错」不代表「它是对的」。
+        # 不把这两件事分开，读者会把「0 错误」当成「全对」——而残缺模型上的
+        # 几何检查恰恰最容易给出这种假的安全感。
+        self.unread = []
 
     def err(self, code, where, msg, fix=""):
         self.errors.append({"code": code, "where": where, "msg": msg, "fix": fix})
@@ -295,12 +320,16 @@ class Report:
     def warn(self, code, where, msg, fix=""):
         self.warnings.append({"code": code, "where": where, "msg": msg, "fix": fix})
 
+    def blind(self, where, why):
+        """记一处「读不懂」。不参与 ok 判定，但必须出现在报告里。"""
+        self.unread.append({"where": where, "why": why})
+
     @property
     def ok(self):
         return not self.errors
 
     def format(self):
-        if self.ok and not self.warnings:
+        if self.ok and not self.warnings and not self.unread:
             return "✓ 校验通过（无错误、无警告）"
         lines = []
         for e in self.errors:
@@ -311,10 +340,16 @@ class Report:
             lines.append(f"[WARN  {w['code']}] {w['where']}: {w['msg']}")
             if w["fix"]:
                 lines.append(f"        ↳ 修法：{w['fix']}")
+        if self.unread:
+            lines.append(f"[BLIND     ] {len(self.unread)} 处未能解析 —— "
+                         f"下面的检查结论**不覆盖**这些地方：")
+            for u in self.unread:
+                lines.append(f"        · {u['where']}: {u['why']}")
         return "\n".join(lines)
 
     def to_dict(self):
-        return {"ok": self.ok, "errors": self.errors, "warnings": self.warnings}
+        return {"ok": self.ok, "errors": self.errors,
+                "warnings": self.warnings, "unread": self.unread}
 
 
 def _ident_ctx(spec_):
@@ -405,10 +440,12 @@ def validate(spec_, W=PAGE_CANVAS_W, H=350):
         where = f"layers[{i}]"
         if not isinstance(g, dict) or "geom" not in g:
             r.err("E2", where, "图层缺少 geom 字段", "每层都要有 geom")
+            r.blind(where, "整层无法识别（缺 geom），本层完全不参与几何检查")
             continue
         geom = g["geom"]
         if geom not in GEOM_NAMES:
             r.err("E2", where, f"未知图元 {geom!r}", f"可用：{sorted(GEOM_NAMES)}")
+            r.blind(where, f"图元 {geom!r} 不认识，本层完全不参与几何检查")
             continue
         where = f"layers[{i}]({geom})"
         # 未知字段（拼错兜底）
@@ -416,6 +453,29 @@ def validate(spec_, W=PAGE_CANVAS_W, H=350):
         if unknown:
             r.warn("E3", where, f"未知字段：{', '.join(sorted(unknown))}",
                    "检查是否把字段名拼错（未知字段会被 viz.js 忽略）")
+            # 拼错的字段往往正是坐标/标签所在的那个字段：viz.js 会忽略它，
+            # 于是图照画，但画出来的不是作者以为的样子。这种地方必须记进
+            # 「未解析」，否则下面的越界/重叠检查是在缺了一块的模型上做结论。
+            r.blind(where, f"字段 {', '.join(sorted(unknown))} 不在白名单内，"
+                           f"本图元的几何检查不覆盖这些值")
+        # data 元素里的未知字段（同上的元素级版本）
+        known_item = DATA_FIELDS.get(geom)
+        items = g.get("data")
+        if known_item is not None and isinstance(items, list):
+            for j, d in enumerate(items):
+                if not isinstance(d, dict):
+                    continue
+                extra = set(d) - known_item
+                # glyph 支持 fillBy 动态取键（d[g.fillBy]），那个键是合法的
+                if geom == "glyph" and isinstance(g.get("fillBy"), str):
+                    extra.discard(g["fillBy"])
+                if extra:
+                    r.warn("E3", f"{where}.data[{j}]",
+                           f"元素含未知字段：{', '.join(sorted(extra))}",
+                           "检查拼写（渲染器会把未知字段读成 undefined，元素直接不画）")
+                    r.blind(f"{where}.data[{j}]",
+                            f"字段 {', '.join(sorted(extra))} 渲染器不会读取，"
+                            f"该元素参与几何检查时结论不完整")
         # 必填
         for fld in REQUIRED.get(geom, []):
             if "|" in fld:
@@ -445,6 +505,9 @@ def validate(spec_, W=PAGE_CANVAS_W, H=350):
             try:
                 px, py = X(float(x)), Y(float(y))
             except Exception:
+                # 坐标不是数（字符串、None、NaN 字符串…）就换算不出来。
+                # 以前这里静默 return，等于「算不出来的点默认合法」。
+                r.blind(where + tag, f"坐标 ({x!r}, {y!r}) 无法换算成像素，未做越界检查")
                 return
             if px < -2 or px > W + 2 or py < -2 or py > H + 2:
                 r.err("E5", where + tag,
@@ -758,6 +821,19 @@ def selftest():
                          "layers": [{"geom": "text", "x": 1, "y": 1, "text": "x"}],
                          "steps": [{"k": 1}]}, "W3")
 
+    # B1/B2 「读不懂」必须留痕。以前两类都静默通过：元素字段拼错没人管，
+    # 坐标不是数就 except 掉 —— 于是「0 错误」被当成「全对」。
+    rep_typo = validate({"theme": "paper", "view": {"xRange": [0, 10], "yRange": [0, 10]},
+                         "layers": [{"geom": "point", "data": [{"xcoord": 5, "y": 5}]}]},
+                        W=800, H=350)
+    cases.append((len(rep_typo.unread) >= 1, "元素字段拼错应记入 unread",
+                  "unread≥1", f"unread={len(rep_typo.unread)}"))
+    rep_badpt = validate({"theme": "paper", "view": {"xRange": [0, 10], "yRange": [0, 10]},
+                          "layers": [{"geom": "point", "data": [{"x": "oops", "y": 5}]}]},
+                         W=800, H=350)
+    cases.append((len(rep_badpt.unread) >= 1, "非数值坐标应记入 unread",
+                  "unread≥1", f"unread={len(rep_badpt.unread)}"))
+
     # 反向用例：一份完全合法的 spec 必须 ok
     good = spec(
         view=[0, 10, 0, 6],
@@ -768,8 +844,8 @@ def selftest():
         steps_=[step("起点"), step("上升")],
     )
     rep_good = validate(good, W=800, H=350)
-    cases.append((rep_good.ok and not rep_good.warnings, "合法 spec 应通过（含0警告）",
-                  "ok", rep_good.format()[:60]))
+    cases.append((rep_good.ok and not rep_good.warnings and not rep_good.unread,
+                  "合法 spec 应通过（含0警告）", "ok", rep_good.format()[:60]))
 
     bad = [c for c in cases if not c[0]]
     for ok, name, want, got in cases:

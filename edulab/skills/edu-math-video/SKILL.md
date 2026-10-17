@@ -155,6 +155,15 @@ cd PROJ && node render.mjs video 6      # 6 = 并行浏览器页数（不是帧�
 | 需要俯视图时在旁边另画一张图 | 同一个 3D 模型 `camTween` 转到 pitch = π/2 |
 | 一句旁白塞三四个知识点 | 一句一个点，画面同步出现一个元素 |
 
+## 什么时候不该用本技能
+
+先用**最低够用的表达级**：一句话能说清就别做图，一张静态图能说清就别做交互页，交互页能说清就别做视频。本技能产出的是**自包含的交互教学网页**，构建与校验都有成本，不适合「随口问一句」的场景。
+
+- 只需要**可交互页面**——用对应学科技能（`edu-analytic-geometry` / `edu-function-derivative` / `edu-math-sequences` / `edu-plane-geometry` / `edu-solid-geometry`），视频不能交互。
+- 用户没有明确说「视频 / 讲解视频 / 微课 / 动画演示」——**先问**，不要默认出视频。
+- 环境里没有 ffmpeg，或没有可用的 TTS 凭据——直接说明无法产出。
+- 题目一句话能答完——直接回答。
+
 ## 参考文件
 - [reference/glm-tts-setup.md](reference/glm-tts-setup.md)：智谱 GLM-TTS 注册、API Key、`.env`、音色、语速、报错处理。**引导用户配置时读这个。**
 - [reference/script-writing.md](reference/script-writing.md)：`script.json` 格式、幕的设计、数学式子的口语写法对照表。

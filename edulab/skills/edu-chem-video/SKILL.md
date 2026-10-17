@@ -1,6 +1,7 @@
 ﻿---
 name: edu-chem-video
-description: "Use when asked to make an explainer / walkthrough video (讲解视频、解题视频、例题精讲、微课) for a chemistry problem (化学题: 氧化还原配平 双线桥 电子守恒, 物质的量计算, 化学平衡 三段式 平衡常数 转化率 反应速率, 离子反应, 电化学, 溶液 滴定, 工业流程), from a problem screenshot or text, with Chinese voice-over (GLM-TTS / 智谱 TTS), bilingual zh+en subtitles and chalkboard-style canvas animation built around the chemical equation, rendered to MP4."
+description: "Use when asked to make an explainer / walkthrough video (讲解视频、解题视频、例题精讲、微课) for a chemistry problem (化学题: 氧化还原配平 双线桥 电子守恒, 物质的量计算, 化学平衡 三段式 平衡常数 转化率 反应速率, 离子反应, 电化学, 溶液 滴定, 工业流程), from a problem screenshot or text, with Chinese voice-over (GLM-TTS / 智谱 TTS), bilingual zh+en subtitles and chalkboard-style canvas animation built around the chemical equation, rendered to MP4.
+"
 ---
 
 # 化学题讲解视频 (edu-chem-video)
@@ -131,6 +132,15 @@ cd PROJ && node render.mjs video 6      # 6 = 并行浏览器页数（不是帧�
 | 编造 `GLM_MODEL`、接口地址 | 只需用户提供 `GLM_API_KEY` |
 | `--check` 还有 ⚠ 就调 TTS | 修到 0 |
 | 渲染完不看画面就交付 | 每次都看 `build/sheet*.png` |
+
+## 什么时候不该用本技能
+
+先用**最低够用的表达级**：一句话能说清就别做图，一张静态图能说清就别做交互页，交互页能说清就别做视频。本技能产出的是**自包含的交互教学网页**，构建与校验都有成本，不适合「随口问一句」的场景。
+
+- 只需要一个**可交互页面**（拖滑块、实时重算）——用 `edu-chem-reaction`，视频不能交互。
+- 用户没有明确说「视频 / 讲解视频 / 微课 / 动画演示」——**先问**，不要默认出视频。
+- 环境里没有 ffmpeg，或没有可用的 TTS 凭据——直接说明无法产出，不要交付一个没有声音的空壳。
+- 题目本身一句话能答完——直接回答。
 
 ## 参考文件
 - [reference/chemistry-solving.md](reference/chemistry-solving.md)：**化学解题方法**：五步流程、守恒法 / 三段式 / 关系式 / 差量法、`chem_check.py`、把解变成画面的要求、常见题型的幕结构。第 1 步必读。

@@ -15,6 +15,9 @@ check_skills.py —— 技能与根级产品的一致性 / 可复现性闸门。
    单进程自测完全看不出来，只有换哈希种子才会暴露。
 3. **无漂移**：与 `skills-baseline.json` 里的内容哈希逐字节比对。改了 kernel 或模板
    导致产物变化时会失败；确认新产物正确后用 `--update` 刷新基线。
+4. **文档边界**：每个 SKILL.md 必须有「什么时候不该用本技能」段，且至少两条、必须
+   指向替代去向（兄弟技能名，或「直接回答」）。description 决定自动触发，没有边界
+   就会在边界案例上乱选；只写「本技能不适合」等于没说。
 
 用法：
     python edulab/tools/check_skills.py            # 闸门（差异即失败）
@@ -50,6 +53,115 @@ def skill_dirs():
     out += [(d.name, d) for d in ROOT_PRODUCTS
             if (d / "scripts" / "generate.py").exists()]
     return sorted(out)
+
+
+DOC_HEADING = "## 什么时候不该用本技能"
+
+
+def section_body(text, heading):
+    """取出 heading 到下一个 `## ` 标题之间的正文。"""
+    i = text.find(heading)
+    if i < 0:
+        return None
+    rest = text[i + len(heading):]
+    lines = rest.split("\n")
+    out = []
+    for line in lines[1:]:
+        if line.startswith("## "):
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
+def check_skill_docs(items):
+    """每个 SKILL.md 必须有「什么时候不该用本技能」段，且给出可执行的替代路径。
+
+    为什么把它做成闸门：SKILL.md 的 description 决定**自动触发**。没有「不该用」
+    的边界，路由就会在边界案例上乱选 —— 用户问一道初中杠杆题，结果触发高中物理
+    技能，就是这类失败。而只写「本技能不适合」等于没说，必须指向具体去向：
+    兄弟技能名，或者「直接回答 / 直接算 / 直接说明」。
+    """
+    bad = []
+    for name, sdir in items:
+        p = sdir / "SKILL.md"
+        if not p.exists():
+            # 根级产品（mental-models）不走技能安装，没有 SKILL.md 是正常的；
+            # 只对它做可运行 / 可复现 / 基线三项检查。
+            if sdir.parent != SKILLS_DIR:
+                continue
+            bad.append((name, "缺 SKILL.md"))
+            continue
+        body = section_body(p.read_text(encoding="utf-8"), DOC_HEADING)
+        if body is None:
+            bad.append((name, "缺「什么时候不该用本技能」段"))
+            continue
+        bullets = [ln for ln in body.split("\n") if ln.startswith("- ")]
+        if len(bullets) < 2:
+            bad.append((name, f"「不该用」段只有 {len(bullets)} 条，至少 2 条"))
+            continue
+        joined = "\n".join(bullets)
+        has_sibling = "edu-" in joined or "mental-models" in joined
+        has_fallback = any(k in joined for k in ("直接回答", "直接算", "直接说明"))
+        if not (has_sibling or has_fallback):
+            bad.append((name, "「不该用」段没给替代去向（兄弟技能名，或「直接回答」）"))
+    return bad
+
+
+def scene_guard_selftest():
+    """`verify_scene` 必须真的会拒绝「记号撒谎」的图，否则它只是个摆设。
+
+    这条自检本身也是必需的：守卫挂在 `render_html` 里，一旦有人把它删掉或
+    改成 try/except 吞掉，跑一遍全部技能也**不会有任何提示**（图照画）。
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(ROOT / "edulab" / "shared"))
+    import skillkit as sk
+
+    cases = []
+
+    # 角 ABC = 135°，却画了直角符号 → 必须拒绝
+    bad_right = {"board": {
+        "points": {"A": {"xy": [0, 0]}, "B": {"xy": [1, 0]}, "C": {"xy": [2, 1]}},
+        "derived": [{"type": "right_angle_mark", "a": "A", "vertex": "B", "b": "C"}],
+    }}
+    try:
+        sk.verify_scene(bad_right)
+        cases.append((False, "直角符号画在 135° 上：应拒绝，实际放行"))
+    except sk.SceneMarkError:
+        cases.append((True, "直角符号画在 135° 上：拒绝"))
+
+    # 两条不等长线段都带 1 道等长记号 → 必须拒绝
+    bad_ticks = {"board": {
+        "points": {"A": {"xy": [0, 0]}, "B": {"xy": [1, 0]}, "C": {"xy": [0, 2]}},
+        "derived": [
+            {"type": "segment", "name": "s1", "a": "A", "b": "B", "ticks": 1},
+            {"type": "segment", "name": "s2", "a": "A", "b": "C", "ticks": 1},
+        ],
+    }}
+    try:
+        sk.verify_scene(bad_ticks)
+        cases.append((False, "等长记号画在 1 与 2 上：应拒绝，实际放行"))
+    except sk.SceneMarkError:
+        cases.append((True, "等长记号画在 1 与 2 上：拒绝"))
+
+    # 记号与坐标一致 → 必须放行（否则守卫会把好图也拦掉）
+    good = {"board": {
+        "points": {"A": {"xy": [0, 0]}, "B": {"xy": [1, 0]}, "C": {"xy": [1, 1]},
+                   "D": {"xy": [0, 1]}},
+        "derived": [
+            {"type": "right_angle_mark", "a": "A", "vertex": "B", "b": "C"},
+            {"type": "segment", "name": "s1", "a": "A", "b": "B", "ticks": 1},
+            {"type": "segment", "name": "s2", "a": "C", "b": "D", "ticks": 1},
+        ],
+    }}
+    try:
+        sk.verify_scene(good)
+        cases.append((True, "记号与坐标一致的图：放行"))
+    except sk.SceneMarkError as e:
+        cases.append((False, f"记号与坐标一致的图被误拦：{e}"))
+
+    bad = [c for c in cases if not c[0]]
+    return (not bad), cases
 
 
 def run_all(sdir, out_dir, hash_seed=None):
@@ -92,6 +204,19 @@ def main(argv):
     if not assets_ok:
         for ln in (r.stdout or "").splitlines()[-4:]:
             print(f"      {ln}")
+
+    # 0.6) 文档边界：每个技能都要说清「什么时候不该用」，并指向替代去向。
+    doc_bad = check_skill_docs(items)
+    print(f"  {'✓' if not doc_bad else '✗'} 文档边界（每个技能都有「什么时候不该用本技能」且指向替代）")
+    for name, why in doc_bad:
+        print(f"      {name}: {why}")
+
+    # 0.7) 记号守卫自检：verify_scene 必须真的会拒绝「记号撒谎」的图。
+    guard_ok, guard_cases = scene_guard_selftest()
+    print(f"  {'✓' if guard_ok else '✗'} 记号守卫（直角 / 等长记号必须与坐标一致）")
+    for ok, desc in guard_cases:
+        if not ok:
+            print(f"      {desc}")
     print()
 
     baseline = {}
@@ -141,7 +266,7 @@ def main(argv):
                             encoding="utf-8")
         print(f"✓ 基线已刷新：{BASELINE.relative_to(ROOT).as_posix()}（{len(fresh)} 个技能）")
         return 0
-    if failures or not tpl_ok or not assets_ok:
+    if failures or not tpl_ok or not assets_ok or doc_bad or not guard_ok:
         if failures:
             print(f"✗ {len(failures)} 项未通过")
             for s, why, tail in failures:
@@ -152,10 +277,15 @@ def main(argv):
             print("✗ 模板与共享骨架不一致")
         if not assets_ok:
             print("✗ 视频技能的共享素材与真源不一致")
+        if doc_bad:
+            print(f"✗ {len(doc_bad)} 个技能的文档边界不完整")
+        if not guard_ok:
+            print("✗ 记号守卫自检未通过（verify_scene 没在拦截撒谎的记号）")
         print("\n  若确认新产物正确，用 `--update` 刷新基线；"
               "模板用 compose_templates.py、素材用 sync_video_assets.py 重新组装。")
         return 1
-    print(f"✓ 全部 {len(items)} 项：可运行、可复现、与基线一致；模板与素材均与真源一致")
+    print(f"✓ 全部 {len(items)} 项：可运行、可复现、与基线一致；"
+          f"模板与素材均与真源一致；文档边界齐全")
     return 0
 
 

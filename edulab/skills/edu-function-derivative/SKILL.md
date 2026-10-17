@@ -88,6 +88,16 @@ python lib/fn_kernel.py                                # kernel 内置自检
   `buildScene` 加 `derived` 分支、`computeReadouts` 加读数类型
   （参考 `function` 曲线与 `fn_value`/`fn_slope`/`fn_status` 的实现）。
 
+## 什么时候不该用本技能
+
+先用**最低够用的表达级**：一句话能说清就别做图，一张静态图能说清就别做交互页，交互页能说清就别做视频。本技能产出的是**自包含的交互教学网页**，构建与校验都有成本，不适合「随口问一句」的场景。
+
+- 题目是圆锥曲线（椭圆 / 双曲线 / 抛物线）——用 `edu-analytic-geometry`。
+- 题目是数列或三角函数——用 `edu-math-sequences`。
+- 题目是纯平面几何（全等、相似、圆）——用 `edu-plane-geometry`。
+- 只要求一个导数值或一条切线方程、不需要看图——直接算并作答。
+- 用户明确要**视频**——用 `edu-math-video`。
+
 ## 目录结构
 
 ```

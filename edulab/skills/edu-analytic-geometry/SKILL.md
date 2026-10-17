@@ -144,6 +144,16 @@ python3 -B scripts/generate.py all ./out_dir             # 全部题型
   `intersect_line_conic`、`point_on_conic`、`point_reflect`、`tangent_at`、`foot_perp`…），
   按需扩充并在 schema 文档登记。
 
+## 什么时候不该用本技能
+
+先用**最低够用的表达级**：一句话能说清就别做图，一张静态图能说清就别做交互页，交互页能说清就别做视频。本技能产出的是**自包含的交互教学网页**，构建与校验都有成本，不适合「随口问一句」的场景。
+
+- 题目里没有圆锥曲线（圆 / 椭圆 / 双曲线 / 抛物线）——纯平面几何用 `edu-plane-geometry`，一般函数图像与切线用 `edu-function-derivative`。
+- 需要空间中的线面角、二面角、异面直线——用 `edu-solid-geometry`。
+- 只要求一个数值答案、不需要看图理解——直接算并作答，不必生成网页。
+- 用户明确要**视频**讲解——用 `edu-math-video`。
+- 本技能不覆盖：圆锥曲线的光学性质证明、参数方程与极坐标的互换推导（可讲，但没有对应的专用画板场景）。
+
 ## 目录
 - `template/board.html` — 数据驱动模板（通用 2D 渲染器 + 参数引擎 + 数据岛 `__LESSON_DATA__`）
 - `lib/conics.py` — 圆锥曲线 sympy 定义库（特殊点 / LaTeX / board dict）

@@ -34,13 +34,15 @@ skillkit —— 全家族 edu-* 技能共用的最小运行时。
 """
 
 import json
+import math
 import random as _random
 import re
 import sys
 from pathlib import Path
 
 __all__ = ["SKILL_DIR", "shared_dir", "load_template", "render_html",
-           "write_index", "default_validate", "required_sections", "cli"]
+           "write_index", "default_validate", "required_sections", "cli",
+           "verify_scene", "SceneMarkError"]
 
 # 本文件所在目录即共享根（edulab/shared 或 .agents/shared）
 SHARED_DIR = Path(__file__).resolve().parent
@@ -68,6 +70,105 @@ def load_template(name="board.html", skill_dir=None):
 
 
 # ==================== 渲染 ====================
+class SceneMarkError(ValueError):
+    """几何记号与真实坐标不符 —— 记号会说谎，拒绝绘制。"""
+
+
+def _xy(points, name):
+    p = points.get(name)
+    if not isinstance(p, dict):
+        return None
+    if isinstance(p.get("x"), (int, float)) and isinstance(p.get("y"), (int, float)):
+        return (float(p["x"]), float(p["y"]))
+    xy = p.get("xy")
+    if isinstance(xy, (list, tuple)) and len(xy) == 2:
+        return (float(xy[0]), float(xy[1]))
+    return None
+
+
+def _angle_at(pa, pv, pb):
+    ux, uy = pa[0] - pv[0], pa[1] - pv[1]
+    wx, wy = pb[0] - pv[0], pb[1] - pv[1]
+    nu, nw = math.hypot(ux, uy), math.hypot(wx, wy)
+    if nu == 0 or nw == 0:
+        return None
+    c = max(-1.0, min(1.0, (ux * wx + uy * wy) / (nu * nw)))
+    return math.degrees(math.acos(c))
+
+
+def verify_scene(data, *, angle_tol=1e-4, len_tol=1e-6):
+    """画记号之前，先验证记号所断言的事实。
+
+    记号不是装饰，是**断言**：
+      · `right_angle_mark` 断言「角 a-vertex-b 是直角」；
+      · `segment.ticks = N` 断言「所有同 N 道杠的线段等长」。
+
+    作者写错一个点名字，图仍然画得漂漂亮亮，但它在撒谎 —— 读者会把直角符号
+    当成已知条件、把同杠数当成等长去用。所以这里先算，不成立就抛错，绝不让它
+    安静地画出去。原话借自 geometry-dsl：*a wrong figure fails loudly instead
+    of lying quietly*。
+
+    只处理 `board` 里带 `points` + `derived` 的结构；其它形态（如物理的
+    `board.scene`）直接跳过，不做猜测。
+    """
+    board = data.get("board") if isinstance(data, dict) else None
+    if not isinstance(board, dict):
+        return
+    points = board.get("points")
+    derived = board.get("derived")
+    if not isinstance(points, dict) or not isinstance(derived, list):
+        return
+
+    problems = []
+    tick_groups = {}
+
+    for i, d in enumerate(derived):
+        if not isinstance(d, dict):
+            continue
+        kind = d.get("type")
+
+        if kind == "right_angle_mark":
+            a, v, b = d.get("a"), d.get("vertex"), d.get("b")
+            pa, pv, pb = _xy(points, a), _xy(points, v), _xy(points, b)
+            if pa is None or pv is None or pb is None:
+                problems.append(
+                    f"derived[{i}] 直角记号引用了缺坐标的点 "
+                    f"{a}/{v}/{b}（图上会出现一个没有依据的直角符号）")
+                continue
+            ang = _angle_at(pa, pv, pb)
+            if ang is None:
+                problems.append(f"derived[{i}] 直角记号 ∠{a}{v}{b} 退化（有重合点）")
+            elif abs(ang - 90.0) > angle_tol:
+                problems.append(
+                    f"derived[{i}] 直角记号 ∠{a}{v}{b} 实际 {ang:.4f}°，不是 90°")
+
+        elif kind == "segment":
+            n = d.get("ticks") or 0
+            if not isinstance(n, int) or n <= 0:
+                continue
+            name = d.get("name") or f"{d.get('a')}{d.get('b')}"
+            pa, pb = _xy(points, d.get("a")), _xy(points, d.get("b"))
+            if pa is None or pb is None:
+                continue
+            tick_groups.setdefault(n, []).append((name, math.dist(pa, pb)))
+
+    for n, items in tick_groups.items():
+        if len(items) < 2:
+            continue
+        base = items[0][1]
+        off = [f"{nm}={L:g}" for nm, L in items if abs(L - base) > len_tol]
+        if off:
+            desc = "，".join(f"{nm}={L:g}" for nm, L in items)
+            problems.append(
+                f"{n} 道等长记号被画在并不等长的线段上（{desc}）"
+                f" —— 同杠数按约定表示等长")
+
+    if problems:
+        raise SceneMarkError(
+            "几何记号与真实坐标不符，拒绝绘制（记号必须是真的）：\n  · "
+            + "\n  · ".join(problems))
+
+
 def render_html(data, out_path, *, template=None, token="__LESSON_DATA__",
                 compact=False, escape_close=False, json_default=None,
                 ensure_parent=True, skill_dir=None):
@@ -83,6 +184,8 @@ def render_html(data, out_path, *, template=None, token="__LESSON_DATA__",
         template = load_template(skill_dir=skill_dir)
     if token not in template:
         raise RuntimeError(f"模板中未找到占位符 {token}")
+    # 记号先验证再画：直角符号 / 等长刻度必须与真实坐标一致。
+    verify_scene(data)
     kw = {"ensure_ascii": False}
     if compact:
         kw["separators"] = (",", ":")

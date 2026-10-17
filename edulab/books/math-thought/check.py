@@ -37,21 +37,28 @@ def main(argv):
     verbose = "-v" in argv or "--verbose" in argv
     sizes = figure_sizes()
     figs = FIGS.build()
-    total_err = total_warn = 0
+    total_err = total_warn = total_blind = 0
     for fid, spec in figs.items():
         h = sizes.get(fid, 300)
         rep = vk.validate(spec, W=PAGE_CANVAS_W, H=h)
         total_err += len(rep.errors)
         total_warn += len(rep.warnings)
+        total_blind += len(rep.unread)
         tag = "OK  " if rep.ok else "FAIL"
-        print(f"[{tag}] {fid:16s} ({PAGE_CANVAS_W}×{h})  错误 {len(rep.errors)}  警告 {len(rep.warnings)}")
-        if rep.errors or (verbose and rep.warnings):
+        blind = f"  未解析 {len(rep.unread)}" if rep.unread else ""
+        print(f"[{tag}] {fid:16s} ({PAGE_CANVAS_W}×{h})  "
+              f"错误 {len(rep.errors)}  警告 {len(rep.warnings)}{blind}")
+        if rep.errors or rep.unread or (verbose and rep.warnings):
             for line in rep.format().splitlines():
                 print("       " + line)
     missing = set(figs) - set(sizes)
     if missing:
         print(f"\n⚠ 这些图没有被任何章节引用：{sorted(missing)}")
-    print(f"\n合计：{len(figs)} 张图，{total_err} 个错误，{total_warn} 个警告")
+    extra = ""
+    if total_blind:
+        extra = (f"；{total_blind} 处未能解析 —— 这些地方的几何结论不成立，"
+                 f"不等于没有问题")
+    print(f"\n合计：{len(figs)} 张图，{total_err} 个错误，{total_warn} 个警告{extra}")
     return 1 if total_err else 0
 
 

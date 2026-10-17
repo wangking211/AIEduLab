@@ -62,9 +62,11 @@ def build_pythagoras(a=3, b=4) -> dict:
             {"type": "polygon", "pts": sq_defs["sq_a"], "color": "rgba(56,189,248,0.18)", "stroke": "line2"},
             {"type": "polygon", "pts": sq_defs["sq_b"], "color": "rgba(167,139,250,0.18)", "stroke": "given"},
             {"type": "polygon", "pts": sq_defs["sq_c"], "color": "rgba(250,204,21,0.18)", "stroke": "curve"},
-            {"type": "segment", "name": "CA", "a": "C", "b": "A", "color": "line2", "ticks": 1},
-            {"type": "segment", "name": "CB", "a": "C", "b": "B", "color": "given", "ticks": 1},
-            {"type": "segment", "name": "AB", "a": "A", "b": "B", "color": "curve", "ticks": 1},
+            # 三边 3/4/5 互不相等，不能带等长记号（同杠数 = 等长）。三边关系由
+            # 三个正方形面积表达，不需要刻度符号。
+            {"type": "segment", "name": "CA", "a": "C", "b": "A", "color": "line2"},
+            {"type": "segment", "name": "CB", "a": "C", "b": "B", "color": "given"},
+            {"type": "segment", "name": "AB", "a": "A", "b": "B", "color": "curve"},
             {"type": "right_angle_mark", "a": "A", "vertex": "C", "b": "B", "color": "aux"},
         ],
         "readouts": [
@@ -308,8 +310,10 @@ def build_similar_A(k=sp.Rational(1, 2)) -> dict:
             # D、E 随 k 实时移动：D = A + k(B−A) → 用 homothety（以 A 为中心，比 k）
             {"type": "homothety", "name": "D", "of": "B", "center": "A", "k": "@param", "color": "fixed", "emphasis": True},
             {"type": "homothety", "name": "E", "of": "C", "center": "A", "k": "@param", "color": "fixed", "emphasis": True},
-            {"type": "segment", "name": "DE_", "a": "D", "b": "E", "color": "fixed", "ticks": 1, "arrow": ">"},
-            {"type": "segment", "name": "BC_", "a": "B", "b": "C", "color": "line", "ticks": 1, "arrow": ">"},
+            # DE 与 BC 只标平行（单箭头）。原先还各带 1 道等长记号，等于断言
+            # DE = BC —— 而本图讲的是 DE/BC = k，两者按定义就不相等。
+            {"type": "segment", "name": "DE_", "a": "D", "b": "E", "color": "fixed", "arrow": ">"},
+            {"type": "segment", "name": "BC_", "a": "B", "b": "C", "color": "line", "arrow": ">"},
             {"type": "segment", "name": "AB_", "a": "A", "b": "B", "color": "aux"},
             {"type": "segment", "name": "AC_", "a": "A", "b": "C", "color": "aux"},
         ],
@@ -356,10 +360,16 @@ def build_midsegment() -> dict:
         "points": {n: pt(p, "given" if n in "ABC" else "fixed", n, emphasis=n in "DE") for n, p in P4.items()},
         "derived": [
             {"type": "polygon", "pts": ["A", "B", "C"], "color": "rgba(148,163,184,0.12)"},
-            {"type": "segment", "name": "AB_", "a": "A", "b": "B", "color": "aux", "ticks": 2},
-            {"type": "segment", "name": "AC_", "a": "A", "b": "C", "color": "aux", "ticks": 2},
-            {"type": "segment", "name": "BC_", "a": "B", "b": "C", "color": "line", "ticks": 1, "arrow": ">"},
-            {"type": "segment", "name": "DE_", "a": "D", "b": "E", "color": "fixed", "ticks": 1, "arrow": ">"},
+            # 等长记号必须画在**真正相等的那两条**上。原先画在整条 AB / AC 上并都标
+            # 双刻度，按「同杠数 = 等长」的约定等于断言 AB = AC —— 而这里是 6 与 5。
+            # 中点该标的是 AD=DB（单刻度）与 AE=EC（双刻度）。
+            {"type": "segment", "name": "AD_", "a": "A", "b": "D", "color": "aux", "ticks": 1},
+            {"type": "segment", "name": "DB_", "a": "D", "b": "B", "color": "aux", "ticks": 1},
+            {"type": "segment", "name": "AE_", "a": "A", "b": "E", "color": "aux", "ticks": 2},
+            {"type": "segment", "name": "EC_", "a": "E", "b": "C", "color": "aux", "ticks": 2},
+            # BC 与 DE 只标平行（单箭头），不标等长：DE = BC/2，标等长会与定理矛盾。
+            {"type": "segment", "name": "BC_", "a": "B", "b": "C", "color": "line", "arrow": ">"},
+            {"type": "segment", "name": "DE_", "a": "D", "b": "E", "color": "fixed", "arrow": ">"},
         ],
         "readouts": [
             {"id": "de", "label": "中位线 DE", "type": "length", "a": "D", "b": "E", "highlight": True},
@@ -367,12 +377,14 @@ def build_midsegment() -> dict:
             {"id": "ratio", "label": "DE / BC", "type": "ratio", "a": ["D", "E"], "b": ["B", "C"]},
         ],
         "constant": {"of": "de", "label": f"$DE = \\tfrac12 BC = {tex(sol['DE'])}$"},
-        "legend": [{"color": "aux", "text": "双刻度 = AD=DB，AE=EC（中点）"}, {"color": "fixed", "text": "中位线 DE"}],
+        "legend": [{"color": "aux", "text": "单刻度 AD=DB，双刻度 AE=EC（中点）"},
+                   {"color": "fixed", "text": "中位线 DE（单箭头 ∥ BC）"}],
     }
     lesson = {
         "language": "zh-CN", "title": "三角形中位线定理",
         "problem": ("<p class='font-medium text-slate-800'>【题目】</p>"
-                    f"<p>在 △ABC 中，D、E 分别是 AB、AC 的中点（图中双刻度标记相等线段）。"
+                    f"<p>在 △ABC 中，D、E 分别是 AB、AC 的中点"
+                    f"（图中单刻度标 AD=DB，双刻度标 AE=EC）。"
                     f"已知 $BC = {tex(sol['BC'])}$。</p>"
                     "<ol class='list-decimal pl-5 space-y-1'><li>求中位线 DE 的长；</li>"
                     "<li>说明 DE 与 BC 的位置关系。</li></ol>"),
