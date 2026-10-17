@@ -56,7 +56,8 @@ BOARD = ROOT / "edulab" / "shared" / "board"
 FAMILIES = {
     "geom-fn": {
         "desc": "解析几何 / 平面几何 / 函数与导数",
-        "users": ["edu-analytic-geometry", "edu-plane-geometry", "edu-function-derivative"],
+        "users": ["edu-analytic-geometry", "edu-plane-geometry", "edu-function-derivative",
+                  "edu-math-junior"],
     },
     "seq-phys": {
         "desc": "数列与三角 / 初中物理 / 高中物理",

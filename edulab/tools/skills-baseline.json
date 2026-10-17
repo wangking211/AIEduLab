@@ -85,6 +85,18 @@
   "index.html": "638dcb68ad40914474397f47b2dbd8fa750375f286fe3b60a7c6d8cd91acc670",
   "probability.html": "9abc2f09099a16a39f59828e5d27811fd40ca2b007175c6d70ae4cf1f2b7481d"
  },
+ "edu-math-junior": {
+  "discriminant.html": "160da16a977acc8179119b6c7ccd61561a80f7bc4e1a1b2e4ee7030f0d5d6db7",
+  "factor.html": "0ca556bd3f2a7a15d319d9ba831bda5e3f010a2d357a63240250a6e850c45521",
+  "index.html": "476fcfaf915356d33b23271bf9c06f1d231b7d21b6880720b4e158a73361bd87",
+  "inequality.html": "4874d3f3c2de707ce623d8f7628ed6c10493321df07e4b8211cac5e4a0ad9910",
+  "linear.html": "22fe1f59f9cbf02dbae87e9a046a8771feb2d7179ba89d7f47e7cc1c17cef2f6",
+  "linear_intersect.html": "160e4a25f2ec469ab31a189175ae46fc1c94440c0b16d61e9aae0c1573952ecd",
+  "quad_extremum.html": "417794e880ae9cda86ac39d3f6374611ee924e4a94b8ad6626c24310221f07d4",
+  "quadratic.html": "2209551f29229aaeaaa0d239d00c7bece84b0ab8e1f0bcb7ae37130f6f19997f",
+  "trig.html": "07f0967b0dee8f4807beadc534891d6a4563b51c83f43d244309fe718c869b98",
+  "vieta.html": "c59b53b0d7b72093d7b5cec3e8a2b66235113d51d8fcfe3780d7a3a94bb0bfea"
+ },
  "edu-math-sequences": {
   "arithmetic.html": "5fe0481c7b367f23407222465cfe3879b4d1305681406e9029c83c31057eeb58",
   "geometric.html": "cf27d6c3900125ba560f153ec0fe07d2606b7774f3966e0fa524e40f2287fe9d",

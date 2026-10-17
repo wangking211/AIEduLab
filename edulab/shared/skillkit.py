@@ -74,7 +74,31 @@ class SceneMarkError(ValueError):
     """几何记号与真实坐标不符 —— 记号会说谎，拒绝绘制。"""
 
 
-def _xy(points, name):
+_SAFE_FUNCS = {
+    "sin": math.sin, "cos": math.cos, "tan": math.tan, "asin": math.asin,
+    "acos": math.acos, "atan": math.atan, "sqrt": math.sqrt, "abs": abs,
+    "min": min, "max": max, "pow": pow, "PI": math.pi, "pi": math.pi,
+}
+
+
+def _resolve(v, env):
+    """把坐标解析成浮点：数字直接转；字符串（参数表达式）按 env 求值。
+
+    解析不了返回 None —— 调用方必须把「算不出来」与「算出来是错的」分开。
+    """
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        try:
+            return float(eval(v, {"__builtins__": {}}, {**_SAFE_FUNCS, **env}))
+        except Exception:
+            return None
+    return None
+
+
+def _xy(points, name, env):
     p = points.get(name)
     if not isinstance(p, dict):
         return None
@@ -82,7 +106,10 @@ def _xy(points, name):
         return (float(p["x"]), float(p["y"]))
     xy = p.get("xy")
     if isinstance(xy, (list, tuple)) and len(xy) == 2:
-        return (float(xy[0]), float(xy[1]))
+        ax, ay = _resolve(xy[0], env), _resolve(xy[1], env)
+        if ax is None or ay is None:
+            return None
+        return (ax, ay)
     return None
 
 
@@ -122,6 +149,23 @@ def verify_scene(data, *, angle_tol=1e-4, len_tol=1e-6):
     problems = []
     tick_groups = {}
 
+    # 参数默认值：坐标可以写成表达式（如 "2*cos(ang*PI/180)"），按默认值验证。
+    param = board.get("param") or {}
+    env = {param.get("name"): param.get("value")} if param.get("name") else {}
+
+    def xy(name):
+        """(坐标, 是否可判定)。坐标解析不出来时第二项为 False —— 不能据此下结论。"""
+        p = points.get(name)
+        if not isinstance(p, dict):
+            return None, True
+        got = _xy(points, name, env)
+        if got is not None:
+            return got, True
+        # 有 xy 但解析失败：可能是依赖未登记的变量，当作「不可判定」
+        if isinstance(p.get("xy"), (list, tuple)):
+            return None, False
+        return None, True
+
     for i, d in enumerate(derived):
         if not isinstance(d, dict):
             continue
@@ -129,11 +173,15 @@ def verify_scene(data, *, angle_tol=1e-4, len_tol=1e-6):
 
         if kind == "right_angle_mark":
             a, v, b = d.get("a"), d.get("vertex"), d.get("b")
-            pa, pv, pb = _xy(points, a), _xy(points, v), _xy(points, b)
+            pa, oka = xy(a)
+            pv, okv = xy(v)
+            pb, okb = xy(b)
             if pa is None or pv is None or pb is None:
-                problems.append(
-                    f"derived[{i}] 直角记号引用了缺坐标的点 "
-                    f"{a}/{v}/{b}（图上会出现一个没有依据的直角符号）")
+                if oka and okv and okb:
+                    problems.append(
+                        f"derived[{i}] 直角记号引用了缺坐标的点 "
+                        f"{a}/{v}/{b}（图上会出现一个没有依据的直角符号）")
+                # 否则：坐标是表达式但按默认参数解析不出来 —— 无法判定，跳过
                 continue
             ang = _angle_at(pa, pv, pb)
             if ang is None:
@@ -147,7 +195,8 @@ def verify_scene(data, *, angle_tol=1e-4, len_tol=1e-6):
             if not isinstance(n, int) or n <= 0:
                 continue
             name = d.get("name") or f"{d.get('a')}{d.get('b')}"
-            pa, pb = _xy(points, d.get("a")), _xy(points, d.get("b"))
+            pa, _ = xy(d.get("a"))
+            pb, _ = xy(d.get("b"))
             if pa is None or pb is None:
                 continue
             tick_groups.setdefault(n, []).append((name, math.dist(pa, pb)))

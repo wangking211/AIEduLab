@@ -1,0 +1,14 @@
+                    case 'fn_value':{ // 曲线在 x 处的函数值 f(x)
+                        const cn=scene.conics[r.conic], xv=(r.x==='@param')? scene.env.p : (typeof r.x==='string'? evalExpr(r.x,scene.env) : r.x);
+                        scalar=(cn&&cn.f)? cn.f(xv):NaN; text=fmt(scalar, r.digits!=null?r.digits:3); break; }
+                    case 'fn_slope':{ // 曲线在 x 处的导数 f'(x)
+                        const cn=scene.conics[r.conic], xv=(r.x==='@param')? scene.env.p : (typeof r.x==='string'? evalExpr(r.x,scene.env) : r.x);
+                        scalar=(cn&&cn.df)? cn.df(xv):NaN; text=fmt(scalar, r.digits!=null?r.digits:3); break; }
+                    case 'fn_status':{ // f'(x) 的符号 → 增/减/极值判别
+                        const cn=scene.conics[r.conic], xv=(r.x==='@param')? scene.env.p : (typeof r.x==='string'? evalExpr(r.x,scene.env) : r.x);
+                        const k=(cn&&cn.df)? cn.df(xv):NaN;
+                        if(!isFinite(k)){ text='—'; }
+                        else if(Math.abs(k)<1e-9){ text=r.zeroText||'驻点 k=0'; dyncolor='#f59e0b'; }
+                        else if(k>0){ text=(r.posText||'k>0 递增'); dyncolor='#059669'; }
+                        else { text=(r.negText||'k<0 递减'); dyncolor='#dc2626'; }
+                        scalar=k; break; }

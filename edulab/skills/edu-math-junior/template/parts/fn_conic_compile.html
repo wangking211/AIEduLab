@@ -1,0 +1,5 @@
+        if(r.kind==='function'){               // y=f(x)：编译表达式为逐点求值函数（含参数环境）
+            const env0=env;
+            r.f = xv => evalExpr(r.expr, Object.assign({}, env0, {x:xv}));
+            r.df = r.dexpr? (xv => evalExpr(r.dexpr, Object.assign({}, env0, {x:xv}))) : null;
+        }

@@ -1,0 +1,50 @@
+    }
+
+    // 直线 ∩ 函数曲线 y=f(x)：沿直线参数 t 在视窗范围内数值求根（细分+二分），返回交点
+    function intersectLineFunction(L, cn){
+        if(!cn.f) return [];
+        const {p0,dir}=L;
+        const tSpan = Math.max(Math.abs(view.xRange[1]-p0[0]), Math.abs(view.xRange[0]-p0[0]))/Math.max(Math.abs(dir[0]),1e-6) + 10;
+        const g = tv => { const X=p0[0]+tv*dir[0], Y=p0[1]+tv*dir[1]; const fv=cn.f(X); return fv-Y; };
+        const roots=[]; const M=600; let prevT=null, prevG=null;
+        for(let i=0;i<=M;i++){
+            const tv=-tSpan+2*tSpan*i/M, gv=g(tv);
+            if(!isFinite(gv)){ prevT=null; prevG=null; continue; }
+            if(prevG!==null && prevG*gv<0){       // 变号 → 二分细化
+                let lo=prevT, hi=tv;
+                for(let k=0;k<60;k++){ const mid=(lo+hi)/2, gm=g(mid); if(!isFinite(gm)) break; if(g(prevT)*gm<=0) hi=mid; else lo=mid; }
+                const tRoot=(lo+hi)/2;
+                roots.push([p0[0]+tRoot*dir[0], p0[1]+tRoot*dir[1]]);
+            }
+            prevT=tv; prevG=gv;
+        }
+        return roots;
+    }
+
+    // 函数在 [a,b] 上的零点（二分法，端点须异号）
+    function rootOnFunction(cn, a, b){
+        if(!cn.f) return null;
+        let lo=a, hi=b, flo=cn.f(lo);
+        if(!isFinite(flo)) return null;
+        for(let k=0;k<80;k++){
+            const mid=(lo+hi)/2, fm=cn.f(mid);
+            if(!isFinite(fm)) return null;
+            if(fm===0) return mid;
+            if(flo*fm<0) hi=mid; else { lo=mid; flo=fm; }
+        }
+        return (lo+hi)/2;
+    }
+
+    // 函数曲线上一点：x 给定（可为表达式），y=f(x)
+    function pointOnFunction(cn, xv){
+        if(!cn.f) return null;
+        const yv=cn.f(xv);
+        return isFinite(yv)? [xv, yv] : null;
+    }
+
+    // 函数曲线在 x0 处的切线：需要 dexpr（导函数）
+    function tangentOnFunction(cn, x0){
+        if(!cn.f || !cn.df) return null;
+        const y0=cn.f(x0), k=cn.df(x0);
+        if(!isFinite(y0) || !isFinite(k)) return null;
+        return {p0:[x0,y0], dir:[1,k]};

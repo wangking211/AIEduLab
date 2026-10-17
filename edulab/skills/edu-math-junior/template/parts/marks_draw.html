@@ -1,0 +1,30 @@
+
+        // 角弧标注 / 直角符号
+        (scene.marks||[]).forEach(mk=>{
+            if(!mk.vertex||!mk.a||!mk.b||!isFinite(mk.vertex[0])) return;
+            const vx=SX(mk.vertex[0]), vy=SY(mk.vertex[1]);
+            const a1=Math.atan2(SY(mk.a[1])-vy, SX(mk.a[0])-vx);
+            const a2=Math.atan2(SY(mk.b[1])-vy, SX(mk.b[0])-vx);
+            // 取劣弧方向（从 a 射线扫到 b 射线，|Δ|≤π）
+            let da=a2-a1; while(da<=-Math.PI) da+=2*Math.PI; while(da>Math.PI) da-=2*Math.PI;
+            ctx.strokeStyle=mk.color; ctx.fillStyle=mk.color; ctx.lineWidth=1.5;
+            if(mk.type==='right'){
+                // 直角小方框：沿两射线各取 s，连成方形缺口
+                const r=mk.s*scale;
+                const ux=Math.cos(a1), uy=Math.sin(a1), wx=Math.cos(a2), wy=Math.sin(a2);
+                const p1=[vx+ux*r, vy+uy*r], p2=[vx+wx*r, vy+wy*r];
+                const p3=[p1[0]+wx*r, p1[1]+wy*r];
+                ctx.beginPath(); ctx.moveTo(p1[0],p1[1]); ctx.lineTo(p3[0],p3[1]); ctx.lineTo(p2[0],p2[1]); ctx.stroke();
+            } else {
+                const rr=mk.r*scale, arcs=mk.arcs||1;
+                for(let i=0;i<arcs;i++){
+                    const rad=rr - i*5;
+                    if(rad<=2) break;
+                    ctx.beginPath(); ctx.arc(vx, vy, rad, a1, a1+da, da<0); ctx.stroke();
+                }
+                if(mk.label && mk.labelR){ // 角名标签（如 ∠1）
+                    const mid=a1+da/2, lr=mk.labelR*scale;
+                    ctx.font='bold 12px sans-serif'; ctx.fillText(mk.label, vx+Math.cos(mid)*lr, vy+Math.sin(mid)*lr+4);
+                }
+            }
+        });

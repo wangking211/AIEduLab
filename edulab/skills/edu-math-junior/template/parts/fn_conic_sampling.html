@@ -1,0 +1,12 @@
+        if (cn.kind==='function'){
+            // y=f(x)：在视窗 xRange 上采样，遇 NaN/±Infinity（间断、定义域外）断开成多段
+            const x0=view.xRange[0], x1=view.xRange[1], M=480;
+            const segs=[]; let cur=[];
+            for(let i=0;i<=M;i++){
+                const xv=x0+(x1-x0)*i/M, yv=cn.f? cn.f(xv) : NaN;
+                if(!isFinite(yv) || Math.abs(yv)>1e6){ if(cur.length>1) segs.push(cur); cur=[]; continue; }
+                cur.push([xv,yv]);
+            }
+            if(cur.length>1) segs.push(cur);
+            return segs;
+        }

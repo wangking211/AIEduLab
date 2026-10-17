@@ -1,0 +1,13 @@
+                    case 'angle_deg':{ // 三点角 ∠AVB（a-vertex-b），显示度数
+                        const va=P(r.a), vv=P(r.vertex), vb=P(r.b);
+                        const u1=[va[0]-vv[0],va[1]-vv[1]], u2=[vb[0]-vv[0],vb[1]-vv[1]];
+                        const cr=Math.abs(u1[0]*u2[1]-u1[1]*u2[0]), dt=u1[0]*u2[0]+u1[1]*u2[1];
+                        scalar=Math.atan2(cr,dt)*180/Math.PI; text=fmt(scalar,1)+'°'; break; }
+                    case 'ratio':{ // |PQ| / |RS|
+                        const a1=P(r.a[0]),b1=P(r.a[1]),c1=P(r.b[0]),d1=P(r.b[1]);
+                        const L1=Math.hypot(a1[0]-b1[0],a1[1]-b1[1]), L2=Math.hypot(c1[0]-d1[0],c1[1]-d1[1]);
+                        scalar=L2>EPS? L1/L2 : null; text=(scalar===null)?'—':fmt(scalar,3); break; }
+                    case 'product':{ // |PQ| · |RS|
+                        const a1=P(r.a[0]),b1=P(r.a[1]),c1=P(r.b[0]),d1=P(r.b[1]);
+                        scalar=Math.hypot(a1[0]-b1[0],a1[1]-b1[1])*Math.hypot(c1[0]-d1[0],c1[1]-d1[1]);
+                        text=fmt(scalar, r.digits!=null?r.digits:3); break; }
