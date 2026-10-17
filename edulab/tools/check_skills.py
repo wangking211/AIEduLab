@@ -18,6 +18,11 @@ check_skills.py —— 技能与根级产品的一致性 / 可复现性闸门。
 4. **文档边界**：每个 SKILL.md 必须有「什么时候不该用本技能」段，且至少两条、必须
    指向替代去向（兄弟技能名，或「直接回答」）。description 决定自动触发，没有边界
    就会在边界案例上乱选；只写「本技能不适合」等于没说。
+5. **记号守卫**：`verify_scene` 必须真的会拒绝「直角符号画在 135° 上」「等长记号画在
+   不等长线段上」——守卫若被删掉或 try/except 吞掉，跑一遍全部技能不会有任何提示。
+6. **出处分级**：`mental-models/data/PROVENANCE.md` 必须与代码一致。每个数值归入
+   现算 / 实测 / 假设三类，假设逐条列出。加一个滑块参数就是加一个假设，必须重新
+   生成报告 —— 假设可以被加，但不能被默默加。
 
 用法：
     python edulab/tools/check_skills.py            # 闸门（差异即失败）
@@ -223,6 +228,16 @@ def main(argv):
     for ok, desc in guard_cases:
         if not ok:
             print(f"      {desc}")
+
+    # 0.8) 出处审计：数值分「现算 / 实测 / 假设」，报告必须与代码一致。
+    r = _sp.run([sys.executable,
+                 str(ROOT / "mental-models" / "lib" / "provenance.py"), "--check"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+    prov_ok = r.returncode == 0
+    print(f"  {'✓' if prov_ok else '✗'} 出处分级（现算 / 实测 / 假设；假设逐条列出）")
+    if not prov_ok:
+        for ln in (r.stdout or "").splitlines()[-4:]:
+            print(f"      {ln}")
     print()
 
     baseline = {}
@@ -272,7 +287,7 @@ def main(argv):
                             encoding="utf-8")
         print(f"✓ 基线已刷新：{BASELINE.relative_to(ROOT).as_posix()}（{len(fresh)} 个技能）")
         return 0
-    if failures or not tpl_ok or not assets_ok or doc_bad or not guard_ok:
+    if failures or not tpl_ok or not assets_ok or doc_bad or not guard_ok or not prov_ok:
         if failures:
             print(f"✗ {len(failures)} 项未通过")
             for s, why, tail in failures:
@@ -287,11 +302,13 @@ def main(argv):
             print(f"✗ {len(doc_bad)} 个技能的文档边界不完整")
         if not guard_ok:
             print("✗ 记号守卫自检未通过（verify_scene 没在拦截撒谎的记号）")
+        if not prov_ok:
+            print("✗ 出处分级与代码不一致（有模型的假设/读数变了但报告没重新生成）")
         print("\n  若确认新产物正确，用 `--update` 刷新基线；"
               "模板用 compose_templates.py、素材用 sync_video_assets.py 重新组装。")
         return 1
     print(f"✓ 全部 {len(items)} 项：可运行、可复现、与基线一致；"
-          f"模板与素材均与真源一致；文档边界齐全")
+          f"模板与素材均与真源一致；文档边界齐全；出处分级一致")
     return 0
 
 

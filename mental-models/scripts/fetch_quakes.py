@@ -94,6 +94,10 @@ def main(argv):
             f.write(f"{y},{m:g}\n")
     print(f"写出 {OUT_CSV.relative_to(SKILL_DIR)}")
 
+    # 本地蒸馏文件的指纹：与 contentSha256（上游原始 CSV 解析后的规范化指纹）
+    # 盖的不是同一个东西。审计核的是这一条。
+    local_digest = hashlib.sha256(OUT_CSV.read_bytes()).hexdigest()
+
     meta = {
         "title": "Earthquake catalog (ANSS Comprehensive Catalog, ComCat)",
         "source": "U.S. Geological Survey (USGS) Earthquake Hazards Program",
@@ -106,6 +110,8 @@ def main(argv):
                            "让服务端回传它所拥有的全部数据，脚本如实记录实际起点。",
         "eventCount": len(rows),
         "contentSha256": fp,
+        "localFile": OUT_CSV.name,
+        "localSha256": local_digest,
         "dateDownloaded": "2026-10-16",
         "license": "U.S. public domain（USGS 官方说明：USGS-authored or produced data and "
                    "information are considered to be in the U.S. public domain）",

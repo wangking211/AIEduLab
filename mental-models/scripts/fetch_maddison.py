@@ -101,6 +101,10 @@ def main(argv):
         ys = [y for y, _ in series[ent]]
         print(f"  {zh:4s} {ent:16s} {ys[0]:>5}–{ys[-1]:<5} {len(ys):>4} 点")
 
+    # 本地蒸馏文件的指纹。它与 csvSha256 盖的是**两个不同的文件**：
+    # csvSha256 是上游原始下载（字节多得多），这里是入库的子集。审计核的是后者。
+    local_digest = hashlib.sha256(OUT_CSV.read_bytes()).hexdigest()
+
     meta = json.loads(fetch(META_URL).decode("utf-8"))
     col = meta["columns"]["GDP per capita"]
     slim = {
@@ -116,6 +120,8 @@ def main(argv):
         "dateDownloaded": meta["dateDownloaded"],
         "csvUrl": CSV_URL,
         "csvSha256": digest,
+        "localFile": OUT_CSV.name,
+        "localSha256": local_digest,
         "note": meta["chart"]["note"],
     }
     OUT_META.write_text(json.dumps(slim, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")

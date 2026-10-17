@@ -16,5 +16,11 @@
  "contentSha256": "f581277f54b0ace100332a822f46699f165b4aa24756a6a01e2f37e22e7de262",
  "dateDownloaded": "2026-10-16",
  "license": "U.S. public domain（USGS 官方说明：USGS-authored or produced data and information are considered to be in the U.S. public domain）",
- "creditsUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+ "creditsUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
+ "localFile": "usgs-quakes.csv",
+ "localSha256": "b196bd14675f553d208c0e3a4c49932a88fce3efadf917edc60ad38c6cc81e23",
+ "hashScope": {
+  "contentSha256": "上游 USGS 原始 CSV 解析出的 (年, 震级) 规范化的 sha256，只在 fetch_quakes.py 抓取时校验",
+  "localSha256": "本地蒸馏文件 usgs-quakes.csv 的 sha256，审计每次核对"
+ }
 }

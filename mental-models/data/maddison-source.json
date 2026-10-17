@@ -11,5 +11,11 @@
  "dateDownloaded": "2026-10-16",
  "csvUrl": "https://ourworldindata.org/grapher/gdp-per-capita-maddison-project-database.csv",
  "csvSha256": "0545ad6ca37529206af49f9f964f17af927e8c154c1fe8d3813c523e0d2f43f8",
- "note": "This data is expressed in international-$ at 2011 prices."
+ "note": "This data is expressed in international-$ at 2011 prices.",
+ "localFile": "maddison-gdp-per-capita.csv",
+ "localSha256": "69e2b7295a39789f6b8a6014dff79d11f70913977aec76b7cc5e9fe9bd7dd783",
+ "hashScope": {
+  "csvSha256": "上游 OWID 原始 CSV 的 sha256，只在 fetch_maddison.py 下载时校验；本地文件是蒸馏后的子集",
+  "localSha256": "本地蒸馏文件 maddison-gdp-per-capita.csv 的 sha256，审计每次核对"
+ }
 }
