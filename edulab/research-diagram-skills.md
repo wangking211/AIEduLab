@@ -209,6 +209,35 @@
 
 ---
 
+## 七、anatomy：3D 人体解剖的可行性
+
+生物技能目前只能画 2D 示意图（细胞、反射弧、能量金字塔）。器官形态要 3D 才讲得清，
+但这条路被**许可**卡住了，三个候选只有一个能用。
+
+| 项目 | ★ | license | 结论 |
+|---|---|---|---|
+| `thebuggeddev/anatomy`（Three.js 交互式人体解剖，GPT 5.6 Sol 生成） | 3,684 | **无**（`license: null`） | **不可复用**。无 license = 默认保留权利，连模型带代码都不能抄 |
+| `jixiangying/anatomy`（基于 BodyParts3D，11 大系统、双语标注、全局搜索） | 57 | **无**（`license: null`） | **不可复用**；但它的**产品结构**（按系统分组 + 双语标注 + 搜索）值得学 |
+| BodyParts3D（DBCLS，日本，FMA 本体驱动的 3D 网格库） | — | **CC BY-SA 2.1 JP** | **唯一可用**，但要接受 share-alike |
+
+### BodyParts3D 的三个约束
+
+1. **署名必须带原文**：
+   > "BodyParts3D, (c) The Database Center for Life Science licensed under
+   > CC Attribution-Share Alike 2.1 Japan"
+2. **SA 传染**：改了网格 / 基于它做衍生图，衍生作品也得按 CC BY-SA 2.1 JP 发布。
+   这和我们「自包含 HTML」不冲突，但和「闭源分发」冲突。
+3. **体积**：全库网格是几百 MB 量级，塞不进单文件网页。要用就得**按系统裁剪**
+   （比如只取心脏 + 主要血管）并做网格简化。
+
+### 结论
+
+解剖 3D **可以做，但不是「借一个技能」的事**：只能自己从 BodyParts3D 取数据、
+裁剪、简化、署名，并且接受 SA。相比之下，`edu-biology` 现在的 2D 示意图
+（细胞器、反射弧）性价比高得多；3D 解剖应当单独立项，而不是塞进现有技能。
+
+---
+
 ## 附：搜索方法与命中概况
 
 - 查询组：`topic:agent-skills diagram`（291 仓库）、`agent skill diagram SKILL.md`、`SKILL.md mermaid drawio excalidraw skill`、`topic:claude-skills diagram`、`skill knowledge-graph concept-map`、`skill data-visualization svg chart`、`cjk chinese diagram skill`、`figure matplotlib publication skill`、`hand-drawn diagram skill`、`architecture diagram skill`、`ascii diagram skill`、`topic:agent-skills visualization`、`SKILL.md whiteboard sketch note` 等

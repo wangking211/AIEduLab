@@ -206,10 +206,15 @@ def build_probability():
     return build("probability", ["bayes"])
 
 
+def build_book():
+    return build("book", ["ch8"])
+
+
 REGISTRY = {
     "fraction": build_fraction,
     "derivative": build_derivative,
     "probability": build_probability,
+    "book": build_book,
 }
 
 

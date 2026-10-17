@@ -37,6 +37,7 @@ python scripts/generate.py list                      # 列出内置领域
 python scripts/generate.py fraction ./out.html       # 分数四则运算
 python scripts/generate.py derivative ./out.html     # 导数
 python scripts/generate.py probability ./out.html    # 概率
+python scripts/generate.py book ./out.html           # 本书 8 章的阅读顺序
 python scripts/generate.py all ./output              # 全部 + index.html
 python scripts/generate.py random 7 ./random.html    # 随机一个领域（seed=7）
 python lib/ks_kernel.py                              # kernel 内置自检
