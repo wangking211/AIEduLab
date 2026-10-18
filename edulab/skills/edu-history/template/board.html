@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>可算的历史 · 交互学习</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+<style>
+    body { font-family: "PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
+    .katex { font-size: 1.02em; }
+    canvas { display:block; }
+    input[type=range] { -webkit-appearance:none; appearance:none; height:6px; border-radius:3px; background:#cbd5e1; outline:none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#4f46e5; cursor:pointer; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.3); }
+    .scroll-thin::-webkit-scrollbar { width:6px; }
+    .scroll-thin::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+<div class="flex h-screen overflow-hidden">
+    <!-- 左：题面 + 动态控制台 -->
+    <aside class="w-[30%] min-w-[300px] max-w-[420px] bg-white border-r border-slate-200 flex flex-col">
+        <div class="px-5 py-4 border-b border-slate-200">
+            <div class="text-[11px] uppercase tracking-wider text-indigo-500 font-bold mb-1">互动教学 · 题面</div>
+            <h1 id="prob-title" class="text-lg font-bold text-slate-900"></h1>
+        </div>
+        <div class="flex-1 overflow-y-auto scroll-thin px-5 py-4 text-sm leading-relaxed" id="prob-body"></div>
+        <div class="border-t border-slate-200 px-5 py-4 bg-slate-50">
+            <div class="text-[11px] uppercase tracking-wider text-teal-600 font-bold mb-3" id="console-title">动态控制台</div>
+            <!-- 参数滑块 -->
+            <div id="param-block" class="hidden">
+                <div class="flex justify-between text-xs text-slate-600 mb-1"><span id="param-label"></span><span id="param-val" class="font-mono font-bold text-teal-700"></span></div>
+                <input id="param-slider" type="range" class="w-full">
+                <div id="param-ticks" class="flex justify-between text-[10px] text-slate-400 mt-1"></div>
+            </div>
+            <!-- 读数 -->
+            <div id="readouts" class="mt-3 space-y-2 text-sm"></div>
+            <!-- 能量/功率条 -->
+            <div id="bar-block" class="hidden mt-4">
+                <div class="text-xs text-slate-600 mb-1" id="bar-label"></div>
+                <div class="h-5 w-full bg-slate-200 rounded-full overflow-hidden flex text-[10px] text-white font-bold">
+                    <div id="bar-seg1" class="h-full flex items-center justify-center" style="width:0%;background:#4f46e5"></div>
+                    <div id="bar-seg2" class="h-full flex items-center justify-center" style="width:0%;background:#0ea5e9"></div>
+                </div>
+                <div class="flex gap-4 text-[10px] text-slate-500 mt-1" id="bar-legend"></div>
+            </div>
+            <!-- 定值指示器 -->
+            <div id="constant-block" class="hidden mt-4 border-t border-slate-200 pt-3">
+                <span class="text-[11px] text-slate-500">定值指示</span>
+                <span id="constant-val" class="ml-auto font-bold text-emerald-700"></span>
+            </div>
+        </div>
+    </aside>
+    <!-- 中：分步解析 -->
+    <main class="flex-1 bg-white overflow-y-auto scroll-thin px-6 py-5">
+        <div class="text-[11px] uppercase tracking-wider text-indigo-500 font-bold mb-2">分步解析</div>
+        <div id="solution-body" class="space-y-5"></div>
+    </main>
+    <!-- 右：数学画板 -->
+    <section class="w-[36%] min-w-[340px] bg-slate-900 flex flex-col">
+        <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+            <div class="text-[11px] uppercase tracking-wider text-teal-400 font-bold">可算的历史</div>
+            <div id="scene-caption" class="text-xs text-slate-400"></div>
+        </div>
+        <div class="flex-1 relative"><canvas id="math-canvas" class="absolute inset-0"></canvas></div>
+        <div id="legend" class="px-4 py-3 border-t border-slate-700 text-[11px] text-slate-300 space-y-1"></div>
+    </section>
+</div>
+
+<script type="application/json" id="lesson-data">__LESSON_DATA__</script>
+<script>
+"use strict";
+// ===================== 数据装载 =====================
+const DATA = JSON.parse(document.getElementById('lesson-data').textContent);
+const BOARD = DATA.board || {};
+const UI = Object.assign({
+    consoleTitle: "动态控制台", solutionTitle: "详细解析", current: "当前:"
+}, (DATA.lesson && DATA.lesson.ui) || {});
+
+const COLORS = {
+    force:'#f87171', effort:'#38bdf8', aux:'#94a3b8', label:'#e2e8f0',
+    obj:'#a78bfa', load:'#fbbf24', rope:'#e2e8f0', water:'#38bdf8',
+    water2:'#0ea5e9', sponge:'#34d399', ground:'#64748b', metal:'#cbd5e1',
+    wire:'#94a3b8', current:'#22d3ee', battery:'#facc15', bulb:'#fde047',
+    meter:'#f472b6', arrow:'#f87171', good:'#34d399', bad:'#f87171'
+};
+const col = c => (c && COLORS[c]) ? COLORS[c] : (c || '#e2e8f0');
+
+// ===================== 安全表达式求值 =====================
+// 表达式由 generate.py 生成（可信本地内容）：可用 @param 名(或别名 p)、+ - * / ^、
+// 及 sqrt/abs/min/max/pow/sign/PI 等白名单函数。
+const MATHENV = {sqrt:Math.sqrt, abs:Math.abs, min:Math.min, max:Math.max,
+    pow:Math.pow, sign:Math.sign, floor:Math.floor, ceil:Math.ceil, PI:Math.PI, E:Math.E,
+    sin:Math.sin, cos:Math.cos, tan:Math.tan, asin:Math.asin, acos:Math.acos, atan:Math.atan, exp:Math.exp, log:Math.log};
+const _exprCache = {};
+function evalExpr(expr, env){
+    if (typeof expr !== 'string') return expr;
+    const scope = Object.assign({}, MATHENV, env);
+    const names = Object.keys(scope);
+    const key = expr + '|' + names.join(',');
+    let fn = _exprCache[key];
+    if (!fn){ try { fn = Function(...names, '"use strict";return ('+expr.replace(/\^/g,'**')+');'); }
+              catch(e){ fn = () => NaN; } _exprCache[key] = fn; }
+    try { const v = fn(...names.map(n=>scope[n])); return (typeof v==='number') ? v : NaN; }
+    catch(e){ return NaN; }
+}
+const resolveVal = (v, env) => (typeof v === 'string') ? evalExpr(v, env) : v;
+function fmt(x, d=2){
+    if (x === null || x === undefined || !isFinite(x)) return '—';
+    let s = x.toFixed(d);
+    if (s === '-' + (0).toFixed(d)) s = (0).toFixed(d);
+    return s;
+}
+
+// ===================== 画布与世界坐标 =====================
+const canvas = document.getElementById('math-canvas');
+const ctx = canvas.getContext('2d');
+let cssW = 0, cssH = 0, sc = 1, offX = 0, offY = 0;
+const view = BOARD.view || {xRange:[0,10], yRange:[0,6]};
+const SX = x => offX + x*sc;
+const SY = y => offY - y*sc;
+
+function resizeCanvas(){
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+    canvas.style.width = rect.width+'px'; canvas.style.height = rect.height+'px';
+    ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr,dpr);
+    cssW = rect.width; cssH = rect.height;
+    const spanX = view.xRange[1]-view.xRange[0], spanY = view.yRange[1]-view.yRange[0];
+    sc = Math.min((rect.width-30)/spanX, (rect.height-30)/spanY);
+    offX = rect.width/2 - ((view.xRange[0]+view.xRange[1])/2)*sc;
+    offY = rect.height/2 + ((view.yRange[0]+view.yRange[1])/2)*sc;
+    render();
+}
+
+// ===================== 绘制基元 =====================
+function arrow(x1,y1,x2,y2,color,lw=2.5,label=null){
+    const px1=SX(x1), py1=SY(y1), px2=SX(x2), py2=SY(y2);
+    const dx=px2-px1, dy=py2-py1, L=Math.hypot(dx,dy);
+    if (L < 4) return;
+    const ang=Math.atan2(dy,dx), hl=Math.min(10, L*0.45);
+    ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=lw;
+    ctx.beginPath(); ctx.moveTo(px1,py1); ctx.lineTo(px2-hl*Math.cos(ang), py2-hl*Math.sin(ang)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px2,py2);
+    ctx.lineTo(px2-hl*Math.cos(ang-0.42), py2-hl*Math.sin(ang-0.42));
+    ctx.lineTo(px2-hl*Math.cos(ang+0.42), py2-hl*Math.sin(ang+0.42));
+    ctx.closePath(); ctx.fill();
+    if (label){
+        ctx.font='bold 12px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        const mx=(px1+px2)/2, my=(py1+py2)/2;
+        const ox=Math.cos(ang+Math.PI/2)*13, oy=Math.sin(ang+Math.PI/2)*13;
+        ctx.fillText(label, mx+ox, my+oy);
+    }
+}
+function label(x,y,text,color='#e2e8f0',align='center',size=12){
+    ctx.font='bold '+size+'px system-ui'; ctx.textAlign=align; ctx.textBaseline='middle';
+    ctx.fillStyle=color; ctx.fillText(text, SX(x), SY(y));
+}
+function dashLine(x1,y1,x2,y2,color='#94a3b8',lw=1.2){
+    ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(SX(x1),SY(y1)); ctx.lineTo(SX(x2),SY(y2)); ctx.stroke();
+    ctx.setLineDash([]);
+}
+function rectBox(x,y,w,h,fill,stroke=null,lw=1.5){
+    ctx.fillStyle=fill;
+    ctx.fillRect(SX(x), SY(y+h), w*sc, h*sc);
+    if (stroke){ ctx.strokeStyle=stroke; ctx.lineWidth=lw; ctx.strokeRect(SX(x), SY(y+h), w*sc, h*sc); }
+}
+function groundLine(y, x0, x1, color='#64748b'){
+    ctx.strokeStyle=color; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.moveTo(SX(x0),SY(y)); ctx.lineTo(SX(x1),SY(y)); ctx.stroke();
+    ctx.lineWidth=1.2;
+    for (let x=x0; x<x1; x+=0.28){
+        ctx.beginPath(); ctx.moveTo(SX(x),SY(y)); ctx.lineTo(SX(x)-6,SY(y)+8); ctx.stroke();
+    }
+}
+// 标尺线（标注长度 L 的辅助线：两端短横 + 虚线 + 中点标签）
+function dimLine(x1,y1,x2,y2,text,color='#94a3b8'){
+    dashLine(x1,y1,x2,y2,color);
+    ctx.strokeStyle=color; ctx.lineWidth=1.5;
+    const nx=(y2===y1)?0:0, ny=(x2===x1)?0:0;
+    ctx.beginPath(); ctx.moveTo(SX(x1),SY(y1)-5+ny); ctx.lineTo(SX(x1),SY(y1)+5+ny); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(SX(x2),SY(y2)-5); ctx.lineTo(SX(x2),SY(y2)+5); ctx.stroke();
+    label((x1+x2)/2, (y1+y2)/2 + 0.22, text, color);
+}
+
+// ===================== 场景状态 =====================
+let PARAM_NAME = null;
+function buildScene(pval){
+    const env = {p: pval};
+    if (PARAM_NAME) env[PARAM_NAME] = pval;
+    (BOARD.scalars||[]).forEach(s=>{ env[s.name] = evalExpr(s.expr, env); });
+    const sc2 = BOARD.scene || {};
+    const out = {kind: sc2.kind, env, raw:{}};
+    // 把场景各数值字段（可为表达式）按 env 解析
+    for (const k in sc2){
+        if (k === 'kind') continue;
+        const v = sc2[k];
+        out.raw[k] = v;
+        if (typeof v === 'number') out[k] = v;
+        else if (typeof v === 'string'){ const v2 = evalExpr(v, env); out[k] = isFinite(v2) ? v2 : v; }
+        else if (Array.isArray(v)) out[k] = v.map(z => (typeof z==='string')? evalExpr(z,env) : z);
+        else out[k] = v;
+    }
+    return out;
+}
+// ===================== 可算历史场景 =====================
+// 外壳 loop() 会给 animT 赋值；"use strict" 下未声明就赋值会 ReferenceError。
+let animT = 0;
+
+// ---- 通用防御：自动把文字锚点收进画布内 ----
+// 「长注释顶出画布」在本项目已复发多次（概率/化学/地理各一次），所以做成通用助手：
+// 先按当前 sc 量出文字宽度，再按对齐方式算出左右边界，越界就把锚点平移回来。
+function labelIn(x, y, text, color, align, size){
+    size = size || 12;
+    ctx.font = 'bold ' + size + 'px system-ui';
+    const w = ctx.measureText(String(text)).width / (sc || 1);
+    const x0 = view.xRange[0], x1 = view.xRange[1];
+    const pad = 0.06;
+    let a = x;
+    if (align === 'end')        a = Math.max(x, x0 + w + pad);
+    else if (align === 'center') a = Math.max(x0 + w/2 + pad, Math.min(x, x1 - w/2 - pad));
+    else                         a = Math.min(x, x1 - w - pad);
+    label(a, y, text, color, align, size);
+}
+
+// ---- 证据力徽章：每一页都必须显式声明「这张图能证明到什么程度」 ----
+// A 纯数学/恒等式（图上的数错不了） / B 模型（参数靠估） / C 形态①证据力③（可被拟合）
+const EVID_STYLE = {
+    A: {tag: '①A 纯数学 / 恒等式', col: '#34d399', note: '图上的数错不了'},
+    B: {tag: '①B 模型：参数靠估', col: '#fbbf24', note: '曲线光滑，但峰值取决于你怎么估参数'},
+    C: {tag: '①C 形态①·证据力③', col: '#f87171', note: '能算能画 —— 但结论可以被拟合出来'}
+};
+function evidBadge(level){
+    const e = EVID_STYLE[level] || EVID_STYLE.A;
+    const y = 0.30;
+    rectBox(0.20, y-0.24, 3.55, 0.48, '#0f172a', e.col, 1.6);
+    label(0.32, y, e.tag, e.col, 'start', 10);
+    labelIn(4.00, y, e.note, '#64748b', 'start', 10);
+}
+
+// ---- 与内核同式的 RK4 与模型 ----
+function rk4(y, h, deriv){
+    const k1 = deriv(y);
+    const k2 = deriv(y.map((v,i)=> v + h/2*k1[i]));
+    const k3 = deriv(y.map((v,i)=> v + h/2*k2[i]));
+    const k4 = deriv(y.map((v,i)=> v + h*k3[i]));
+    return y.map((v,i)=> v + h/6*(k1[i] + 2*k2[i] + 2*k3[i] + k4[i]));
+}
+function histLogistic(t, K, r, t0){
+    const z = -r*(t-t0);
+    if (z > 700) return 0;
+    if (z < -700) return K;
+    return K/(1+Math.exp(z));
+}
+function histLogisticTime(p, t0, r, K){
+    return t0 + Math.log((p/K)/(1-p/K))/r;
+}
+// Lotka-Volterra 数值周期：与内核同一套 RK4 与寻峰规则
+function histLvPeriod(r, a, c, m, amp, years, steps){
+    const h = years/steps, nStar = m/c, eStar = r/a;
+    let N = nStar*(1+amp), E = eStar;
+    const d = (N_, E_) => [r*N_ - a*N_*E_, c*N_*E_ - m*E_];
+    const series = [[0, E]];
+    for (let i=0;i<steps;i++){
+        const y = rk4([N, E], h, (v)=>{
+            const [n_, e_] = v; return [r*n_ - a*n_*e_, c*n_*e_ - m*e_];
+        });
+        N = Math.max(1e-12, y[0]); E = Math.max(1e-12, y[1]);
+        series.push([(i+1)*h, E]);
+    }
+    const peaks = [];
+    for (let i=1;i<series.length-1;i++)
+        if (series[i][1] > series[i-1][1] && series[i][1] >= series[i+1][1] && series[i][1] > eStar)
+            peaks.push(series[i][0]);
+    if (peaks.length < 2) return null;
+    let s = 0; for (let i=0;i<peaks.length-1;i++) s += peaks[i+1]-peaks[i];
+    return s/(peaks.length-1);
+}
+function histSIR(beta, gamma, s0, i0, days, steps){
+    const h = days/steps;
+    let y = [s0, i0, 1-s0-i0];
+    const ts=[0], S=[y[0]], I=[y[1]], R=[y[2]];
+    const deriv = (v)=>{ const [s,i] = v; const nw = beta*s*i; return [-nw, nw - gamma*i, gamma*i]; };
+    for (let k=0;k<steps;k++){
+        y = rk4(y, h, deriv).map(v=>Math.max(0, v));
+        ts.push((k+1)*h); S.push(y[0]); I.push(y[1]); R.push(y[2]);
+    }
+    return {ts, S, I, R};
+}
+function histSizes(n, alpha){
+    const out = [];
+    for (let r=1;r<=n;r++) out.push(Math.pow(n/r, 1/alpha));
+    return out;
+}
+
+// ===================== 1) 指数增长与翻倍时间 =====================
+function drawExpCurve(S){
+    const r = S.r, tmax = S.tmax, y0 = 1;
+    const px0 = 0.95, px1 = 8.90, py0 = 1.00, py1 = 4.85;
+    const ymax = y0*Math.exp(r*tmax);
+    const X = t => px0 + t/tmax*(px1-px0);
+    const Y = y => py0 + y/ymax*(py1-py0);
+    ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(SX(px0), SY(py0)); ctx.lineTo(SX(px1), SY(py0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(SX(px0), SY(py0)); ctx.lineTo(SX(px0), SY(py1)); ctx.stroke();
+    const td = Math.log(2)/r;
+    // 每到一个翻倍时间就画一条辅助线与「翻倍」标记
+    for (let k=1; k*td <= tmax; k++){
+        const t = k*td, yv = y0*Math.pow(2,k);
+        dashLine(X(t), py0, X(t), Y(yv), '#f472b6', 1.2);
+        dashLine(px0, Y(yv), X(t), Y(yv), '#334155', 1);
+        label(X(t)+0.08, Y(yv)+0.22, '×' + Math.pow(2,k), '#f472b6', 'start', 10);
+    }
+    ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2.8; ctx.beginPath();
+    for (let i=0;i<=200;i++){
+        const t = tmax*i/200, yv = y0*Math.exp(r*t);
+        i===0 ? ctx.moveTo(SX(X(t)), SY(Y(yv))) : ctx.lineTo(SX(X(t)), SY(Y(yv)));
+    }
+    ctx.stroke();
+    label(px0-0.18, py1+0.12, '倍数', '#64748b', 'start', 10);
+    label(px1, py0-0.30, '年', '#64748b', 'end', 10);
+    label(9.90, 5.66, '翻倍时间 = ln2/r = ' + td.toFixed(2) + ' 年', '#f472b6', 'end', 12);
+    label(9.90, 5.26, '10 年后 = ×' + Math.exp(r*10).toFixed(2), '#34d399', 'end', 11);
+    label(9.90, 4.86, '30 年后 = ×' + Math.exp(r*30).toFixed(1), '#34d399', 'end', 11);
+    evidBadge('A');
+}
+
+// ===================== 2) 人口转变 =====================
+function drawDemography(S){
+    const b0=S.b0, b1=S.b1, d0=S.d0, d1=S.d1, midD=S.mid_d, midB=S.mid_b, steep=S.steep;
+    const y0=1700, y1=2100;
+    const px0 = 0.95, px1 = 8.20, py0 = 0.95, py1 = 4.60;
+    const g = (hi,lo,mid,t)=> lo + (hi-lo)/(1+Math.exp((t-mid)/steep));
+    const X = t => px0 + (t-y0)/(y1-y0)*(px1-px0);
+    const Y = v => py0 + v/50*(py1-py0);
+    for (let v=0; v<=50; v+=10){
+        dashLine(px0, Y(v), px1, Y(v), '#1e293b', 1);
+        label(px0-0.14, Y(v), String(v), '#64748b', 'end', 9);
+    }
+    label(px0-0.14, py1+0.34, '‰', '#64748b', 'center', 10);
+    // 出生率 / 死亡率
+    const draw = (fn, col)=>{
+        ctx.strokeStyle = col; ctx.lineWidth = 2.4; ctx.beginPath();
+        for (let i=0;i<=400;i++){
+            const t = y0 + (y1-y0)*i/400;
+            i===0 ? ctx.moveTo(SX(X(t)), SY(Y(fn(t)))) : ctx.lineTo(SX(X(t)), SY(Y(fn(t))));
+        }
+        ctx.stroke();
+    };
+    draw(t=>g(b0,b1,midB,t), '#f472b6');
+    draw(t=>g(d0,d1,midD,t), '#38bdf8');
+    // 增长率
+    let best = [-1e9, y0];
+    for (let t=y0;t<=y1;t++){ const gv = g(b0,b1,midB,t)-g(d0,d1,midD,t); if (gv>best[0]) best=[gv,t]; }
+    draw(t=>g(b0,b1,midB,t)-g(d0,d1,midD,t), '#facc15');
+    dashLine(X(best[1]), py0, X(best[1]), Y(best[0]), '#f87171', 1.4);
+    ctx.fillStyle = '#f87171';
+    ctx.beginPath(); ctx.arc(SX(X(best[1])), SY(Y(best[0])), 5.5, 0, 7); ctx.fill();
+    labelIn(X(best[1]), Y(best[0])+0.32, '峰值 ' + best[0].toFixed(2) + '‰ @' + best[1],
+            '#f87171', 'center', 11);
+    labelIn(px0+0.10, py1+0.70, '黄 = 增长率   粉 = 出生率   蓝 = 死亡率', '#64748b', 'start', 10);
+    label(9.90, 5.66, '峰值增长率 ' + best[0].toFixed(2) + '‰', '#facc15', 'end', 12);
+    label(9.90, 5.26, '峰值年 ' + best[1], '#f87171', 'end', 11);
+    evidBadge('B');
+}
+
+// ===================== 3) 技术扩散 S 曲线 =====================
+function drawLogistic(S){
+    const r = S.r, t0 = 1900, yearA = 1850, yearB = 1950;
+    const px0 = 0.95, px1 = 8.30, py0 = 1.00, py1 = 4.70;
+    const X = t => px0 + (t-yearA)/(yearB-yearA)*(px1-px0);
+    const Y = p => py0 + p*(py1-py0);
+    for (let p=0; p<=1.0001; p+=0.25){
+        dashLine(px0, Y(p), px1, Y(p), '#1e293b', 1);
+        label(px0-0.14, Y(p), (p*100).toFixed(0)+'%', '#64748b', 'end', 9);
+    }
+    const t10 = histLogisticTime(0.10, t0, r, 1), t90 = histLogisticTime(0.90, t0, r, 1);
+    // 10% / 90% 之间的时长区间
+    ctx.fillStyle = 'rgba(250,204,21,0.14)';
+    ctx.fillRect(SX(X(t10)), SY(py1), (X(t90)-X(t10))*sc, (py1-py0)*sc);
+    // 曲线
+    ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2.8; ctx.beginPath();
+    for (let i=0;i<=400;i++){
+        const t = yearA + (yearB-yearA)*i/400;
+        i===0 ? ctx.moveTo(SX(X(t)), SY(Y(histLogistic(t,1,r,t0)))) : ctx.lineTo(SX(X(t)), SY(Y(histLogistic(t,1,r,t0))));
+    }
+    ctx.stroke();
+    // 三个标记
+    [[0.10,t10,'10%'],[0.50,t0,'50%'],[0.90,t90,'90%']].forEach(([p,tt,txt])=>{
+        dashLine(X(tt), py0, X(tt), Y(p), '#f472b6', 1.3);
+        ctx.fillStyle = '#f472b6';
+        ctx.beginPath(); ctx.arc(SX(X(tt)), SY(Y(p)), 5.5, 0, 7); ctx.fill();
+        label(X(tt), py0-0.30, txt, '#f472b6', 'center', 10);
+    });
+    label(X(t0), Y(0.98), 't₀', '#64748b', 'center', 10);
+    label(9.90, 5.72, '10→90 时长 = ' + (t90-t10).toFixed(2) + ' 年', '#facc15', 'end', 12);
+    label(9.90, 5.32, '= 2·ln9/r，与 t₀ 无关', '#38bdf8', 'end', 11);
+    label(9.90, 4.92, '10% @' + t10.toFixed(0) + '   90% @' + t90.toFixed(0), '#f472b6', 'end', 11);
+    evidBadge('A');
+}
+
+// ===================== 4) 传染病阈值 =====================
+function drawEpidemic(S){
+    const r0 = S.r0, gamma = 0.2, beta = r0*gamma;
+    const days = 200;
+    const {ts, S:SS, I, R} = histSIR(beta, gamma, 0.99, 0.01, days, 2000);
+    const px0 = 0.95, px1 = 8.30, py0 = 1.00, py1 = 4.70;
+    const X = t => px0 + t/days*(px1-px0);
+    const Y = v => py0 + Math.max(0,Math.min(1,v))*(py1-py0);
+    for (let v=0; v<=1.0001; v+=0.25){
+        dashLine(px0, Y(v), px1, Y(v), '#1e293b', 1);
+        label(px0-0.14, Y(v), (v*100).toFixed(0)+'%', '#64748b', 'end', 9);
+    }
+    const curve = (arr, col)=>{
+        ctx.strokeStyle = col; ctx.lineWidth = 2.4; ctx.beginPath();
+        for (let i=0;i<arr.length;i+=4){
+            i===0 ? ctx.moveTo(SX(X(ts[i])), SY(Y(arr[i]))) : ctx.lineTo(SX(X(ts[i])), SY(Y(arr[i])));
+        }
+        ctx.stroke();
+    };
+    curve(SS, '#38bdf8'); curve(I, '#f87171'); curve(R, '#34d399');
+    // 峰值与群体免疫阈值
+    let imax = 0, itop = 0;
+    for (let i=0;i<I.length;i++) if (I[i] > imax){ imax = I[i]; itop = ts[i]; }
+    dashLine(X(itop), py0, X(itop), Y(imax), '#facc15', 1.4);
+    label(X(itop), Y(imax)+0.30, '峰值 ' + (imax*100).toFixed(1) + '%', '#facc15', 'center', 11);
+    const herd = r0 > 1 ? 1-1/r0 : 0;
+    if (herd > 0){
+        dashLine(px0, Y(herd), px1, Y(herd), '#a78bfa', 1.3);
+        labelIn(px1, Y(herd)+0.24, '群体免疫 ' + (herd*100).toFixed(1) + '%', '#a78bfa', 'end', 10);
+    }
+    label(px0+0.10, py1+0.70, '蓝 = 未感染 S   红 = 感染中 I   绿 = 已恢复 R', '#64748b', 'start', 10);
+    label(9.90, 5.72, 'R₀ = β/γ = ' + r0.toFixed(2), '#f87171', 'end', 12);
+    label(9.90, 5.32, '感染峰值 ' + (imax*100).toFixed(2) + '%', '#facc15', 'end', 11);
+    label(9.90, 4.92, r0>1 ? '群体免疫阈值 ' + (herd*100).toFixed(2) + '%' : 'R₀ ≤ 1 → 疫情自行消退',
+          '#a78bfa', 'end', 11);
+    evidBadge('A');
+}
+
+// ===================== 5) Kaya 恒等式分解 =====================
+function drawKaya(S){
+    const P = S.P, g = S.g, e = S.e, c = S.c;
+    const co2 = P*g*e*c;
+    const factors = [
+        {nm:'P 人口', v:P, col:'#38bdf8'},
+        {nm:'GDP/P 人均', v:g, col:'#34d399'},
+        {nm:'E/GDP 能耗强度', v:e, col:'#a78bfa'},
+        {nm:'CO₂/E 排放强度', v:c, col:'#f87171'}
+    ];
+    const py0 = 1.15, py1 = 4.35, cx = 5.0, half = 4.10;
+    // 四个因子按「乘法链」并排，高度 ∝ 该因子
+    const vmax = Math.max.apply(null, factors.map(x=>x.v));
+    const bw = 1.25, gap = 0.72;
+    const x0 = cx - (4*bw + 3*gap)/2 + bw/2;
+    groundLine(py0, cx-half, cx+half, '#334155');
+    factors.forEach((fc, i)=>{
+        const x = x0 + i*(bw+gap);
+        const h = fc.v/vmax*(py1-py0);
+        rectBox(x-bw/2, py0, bw, Math.max(h,0.03), fc.col);
+        label(x, py0+h+0.30, fc.v.toFixed(2), '#e2e8f0', 'center', 12);
+        label(x, py0-0.32, fc.nm, '#94a3b8', 'center', 10);
+        if (i < 3) label((x + x + bw + gap)/2, py0+0.25, '×', '#64748b', 'center', 16);
+    });
+    label(0.20, 5.72, 'Kaya 恒等式：CO₂ = P × (GDP/P) × (E/GDP) × (CO₂/E)', '#94a3b8', 'start', 11);
+    label(9.90, 5.24, '乘积 = CO₂ = ' + co2.toFixed(4), '#facc15', 'end', 12);
+    label(9.90, 4.84, '这是一个恒等式 —— 由构造必真', '#34d399', 'end', 11);
+    evidBadge('A');
+}
+
+// ===================== 6) 王朝周期模型（最危险的一类） =====================
+function drawCycle(S){
+    const r = S.r, a = S.a, c = S.c, m = S.m, amp = S.amp;
+    const years = 1500, steps = 15000;
+    const nStar = m/c, eStar = r/a;
+    let N = nStar*(1+amp), E = eStar;
+    const pts = [[N, E]];
+    const d = (v)=>{ const [n_, e_] = v; return [r*n_ - a*n_*e_, c*n_*e_ - m*e_]; };
+    const h = years/steps;
+    for (let i=0;i<steps;i++){
+        const y = rk4([N,E], h, d);
+        N = Math.max(1e-12, y[0]); E = Math.max(1e-12, y[1]);
+        if (i % 3 === 0) pts.push([N, E]);
+    }
+    let nmax = 0, emax = 0;
+    pts.forEach(p=>{ nmax = Math.max(nmax, p[0]); emax = Math.max(emax, p[1]); });
+    const xr = Math.max(nmax, nStar*2), yr = Math.max(emax, eStar*2);
+    const px0 = 1.05, px1 = 8.20, py0 = 1.00, py1 = 4.55;
+    const X = v => px0 + v/xr*(px1-px0);
+    const Y = v => py0 + v/yr*(py1-py0);
+    ctx.strokeStyle = '#334155'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(SX(px0), SY(py0)); ctx.lineTo(SX(px1), SY(py0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(SX(px0), SY(py0)); ctx.lineTo(SX(px0), SY(py1)); ctx.stroke();
+    label(px0-0.18, py1+0.12, '精英 E', '#64748b', 'start', 10);
+    label(px1, py0-0.30, '人口 N', '#64748b', 'end', 10);
+    // 相轨迹（闭合轨道）
+    ctx.strokeStyle = '#a78bfa'; ctx.lineWidth = 2.0; ctx.beginPath();
+    pts.forEach((p, i)=>{ i===0 ? ctx.moveTo(SX(X(p[0])), SY(Y(p[1]))) : ctx.lineTo(SX(X(p[0])), SY(Y(p[1]))); });
+    ctx.stroke();
+    // 平衡点
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath(); ctx.arc(SX(X(nStar)), SY(Y(eStar)), 5, 0, 7); ctx.fill();
+    label(X(nStar), Y(eStar)-0.28, '平衡点', '#facc15', 'center', 10);
+    // 当前周期（与内核同一套 RK4 寻峰）
+    const tn = histLvPeriod(r, a, c, m, amp, 600, 12000);
+    const ta = 2*Math.PI/Math.sqrt(r*m);
+    label(9.90, 5.72, '解析周期 2π/√(rm) = ' + ta.toFixed(1) + ' 年', '#facc15', 'end', 12);
+    label(9.90, 5.32, '当前振幅 ' + (amp*100).toFixed(0) + '% 的数值周期'
+          + (tn ? ' = ' + tn.toFixed(1) + ' 年' : ' — 无法判定'), '#a78bfa', 'end', 11);
+    label(9.90, 4.92, tn ? '比值 = ' + (tn/ta).toFixed(2) + '（越小越接近解析式）' : '',
+          '#f87171', 'end', 11);
+    evidBadge('C');
+}
+
+// ===================== 7) rank-size 幂律 =====================
+function drawLoglog(S){
+    const alpha = S.alpha, n = 200;
+    const sizes = histSizes(n, alpha);
+    const slope = -1/alpha;
+    const lx = i => Math.log(i+1), ly = s => Math.log(s);
+    const xmax = lx(n-1), ymin = Math.min.apply(null, sizes.map(ly)), ymax = Math.max.apply(null, sizes.map(ly));
+    const px0 = 1.10, px1 = 8.30, py0 = 1.00, py1 = 4.70;
+    const X = v => px0 + v/Math.max(xmax,1e-9)*(px1-px0);
+    const Y = v => py0 + (v-ymin)/Math.max(ymax-ymin,1e-9)*(py1-py0);
+    for (let k=0;k<=4;k++){
+        const xv = xmax*k/4;
+        dashLine(X(xv), py0, X(xv), py1, '#1e293b', 1);
+        label(X(xv), py0-0.28, xv.toFixed(1), '#64748b', 'center', 9);
+    }
+    label((px0+px1)/2, py0-0.60, 'log(排名)', '#64748b', 'center', 10);
+    label(px0-0.18, py1+0.14, 'log(规模)', '#64748b', 'start', 10);
+    // 数据点
+    ctx.fillStyle = '#38bdf8';
+    for (let r=1; r<=n; r+=2){
+        const xv = lx(r-1), yv = ly(sizes[r-1]);
+        const px = SX(X(xv)), py = SY(Y(yv));
+        ctx.beginPath(); ctx.arc(px, py, 2.4, 0, 7); ctx.fill();
+    }
+    // 拟合直线（用最小二乘，与内核同一算法）
+    const mxx = Array.from({length:n}, (_,i)=>lx(i)).reduce((s,v)=>s+v,0)/n;
+    const myy = sizes.map(ly).reduce((s,v)=>s+v,0)/n;
+    let num=0, den=0;
+    for (let i=0;i<n;i++){ const xv=lx(i), yv=ly(sizes[i]); num += (xv-mxx)*(yv-myy); den += (xv-mxx)**2; }
+    const fit = num/den;
+    ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2.2; ctx.beginPath();
+    for (const xv of [0, xmax]){
+        const yv = myy + fit*(xv-mxx);
+        if (xv === 0) ctx.moveTo(SX(X(xv)), SY(Y(yv))); else ctx.lineTo(SX(X(xv)), SY(Y(yv)));
+    }
+    ctx.stroke();
+    label(0.20, 5.72, 'rank-size 幂律：规模 ∝ 排名的 −1/α 次幂', '#94a3b8', 'start', 11);
+    label(9.90, 5.24, '拟合斜率 = ' + fit.toFixed(4), '#facc15', 'end', 12);
+    label(9.90, 4.84, '理论斜率 = −1/α = ' + slope.toFixed(4), '#38bdf8', 'end', 11);
+    label(9.90, 4.44, '反推的 α = ' + (-1/fit).toFixed(4), '#34d399', 'end', 11);
+    evidBadge('A');
+}
+function render(){
+    ctx.clearRect(0,0,cssW,cssH);
+    const S = buildScene(curParam);
+    switch(S.kind){
+        case 'expcurve':   drawExpCurve(S);   break;
+        case 'demography': drawDemography(S); break;
+        case 'logistic':   drawLogistic(S);   break;
+        case 'epidemic':   drawEpidemic(S);   break;
+        case 'kaya':       drawKaya(S);       break;
+        case 'cycle':      drawCycle(S);      break;
+        case 'loglog':     drawLoglog(S);     break;
+    }
+    updateReadouts(S);
+}
+
+// ===================== 读数 =====================
+function updateReadouts(S){
+    (BOARD.readouts||[]).forEach(r=>{
+        const el=document.getElementById('ro-'+r.id);
+        if (!el) return;
+        try{
+            if (r.type==='expr'){
+                const v=evalExpr(r.expr, S.env);
+                el.textContent=fmt(v, r.digits!=null?r.digits:2)+(r.unit?' '+r.unit:'');
+            } else if (r.type==='status'){
+                const v=evalExpr(r.expr, S.env), rhs=(r.rhs!=null?r.rhs:0), op=r.op||'>';
+                const ok = op==='<'? v<rhs-1e-9 : op==='>'? v>rhs+1e-9 : op==='=='? Math.abs(v-rhs)<1e-6 : v>rhs-1e-9;
+                el.textContent = ok?(r.okText||'满足'):(r.badText||'不满足');
+                el.style.color = ok?'#059669':'#dc2626';
+            }
+        }catch(e){ el.textContent='—'; }
+    });
+    // 能量/功率条
+    if (BOARD.bars){
+        const a=evalExpr(BOARD.bars.a.expr, S.env), b=evalExpr(BOARD.bars.b.expr, S.env);
+        const A=isFinite(a)&&a>0?a:0, B=isFinite(b)&&b>0?b:0, T=A+B||1;
+        document.getElementById('bar-seg1').style.width=(A/T*100)+'%';
+        document.getElementById('bar-seg2').style.width=(B/T*100)+'%';
+        document.getElementById('bar-seg1').textContent=fmt(A,1);
+        document.getElementById('bar-seg2').textContent=fmt(B,1);
+    }
+}
+
+// ===================== 控制台构建 =====================
+function renderKatex(el){ if (typeof renderMathInElement!=='undefined') renderMathInElement(el,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],throwOnError:false}); }
+let curParam = BOARD.param ? (BOARD.param.value!==undefined?BOARD.param.value:BOARD.param.min) : 0;
+function buildConsole(){
+    document.getElementById('prob-title').textContent=(DATA.lesson&&DATA.lesson.title)||'';
+    document.getElementById('prob-body').innerHTML=(DATA.lesson&&DATA.lesson.problem)||'';
+    document.getElementById('scene-caption').textContent=(BOARD.scene&&BOARD.scene.caption)||'';
+    const p=BOARD.param;
+    if (p){
+        document.getElementById('param-block').classList.remove('hidden');
+        document.getElementById('param-label').innerHTML=(p.label||p.name)+' :';
+        const s=document.getElementById('param-slider');
+        s.min=p.min; s.max=p.max; s.step=p.step||0.5; s.value=curParam;
+        document.getElementById('param-ticks').innerHTML=(p.ticks||[`${p.min}${p.unit||''}`,`${p.max}${p.unit||''}`]).map(t=>`<span>${t}</span>`).join('');
+        s.addEventListener('input', ()=>{ curParam=parseFloat(s.value); syncParamVal(); render(); });
+        syncParamVal();
+    }
+    document.getElementById('readouts').innerHTML=(BOARD.readouts||[]).map(r=>{
+        if (r.highlight) return `<div class="flex justify-between items-center pt-1"><span class="text-slate-800 font-semibold">${r.label}:</span><span id="ro-${r.id}" class="text-base font-bold bg-teal-50 text-teal-700 px-3 py-1 rounded-lg border border-teal-200">—</span></div>`;
+        return `<div class="flex justify-between border-b border-dashed border-slate-200 pb-1"><span>${r.label}:</span><span id="ro-${r.id}" class="font-bold" style="color:${r.color?col(r.color):'#0f172a'}">—</span></div>`;
+    }).join('');
+    if (BOARD.bars){
+        document.getElementById('bar-block').classList.remove('hidden');
+        document.getElementById('bar-label').textContent=BOARD.bars.label||'';
+        document.getElementById('bar-legend').innerHTML=
+            `<span><span class="inline-block w-2 h-2 rounded-sm" style="background:#4f46e5"></span> ${BOARD.bars.a.label}</span>`+
+            `<span><span class="inline-block w-2 h-2 rounded-sm" style="background:#0ea5e9"></span> ${BOARD.bars.b.label}</span>`;
+    }
+    if (BOARD.constant){ document.getElementById('constant-block').classList.remove('hidden');
+        document.getElementById('constant-val').innerHTML='≡ '+(BOARD.constant.label||''); }
+    const legend=document.getElementById('legend'); const items=[];
+    (BOARD.legend||[]).forEach(it=> items.push(`<div class="flex items-center gap-2"><span class="w-3 h-3 inline-block rounded" style="background:${col(it.color)}"></span> ${it.text}</div>`));
+    legend.innerHTML=items.join('');
+    document.getElementById('solution-body').innerHTML=(DATA.steps||[]).map((st,i)=>{
+        const no=String(i+1).padStart(2,'0');
+        return `<div class="${i>0?'border-t border-slate-100 pt-5':''}">
+            <div class="flex items-start gap-4 mb-3">
+                <span class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold font-mono text-sm flex-shrink-0">${no}</span>
+                <h3 class="text-base font-bold text-slate-900 pt-0.5">${st.title||''}</h3>
+            </div>
+            <div class="prose max-w-none text-slate-700 leading-relaxed text-sm space-y-2">${st.content||''}</div>
+        </div>`;
+    }).join('');
+    renderKatex(document.body);
+}
+function syncParamVal(){ document.getElementById('param-val').textContent = fmt(curParam,2)+((BOARD.param&&BOARD.param.unit)||''); }
+
+// ===================== 主循环 =====================
+function loop(now){ animT = now/1000; render(); requestAnimationFrame(loop); }
+window.addEventListener('resize', resizeCanvas);
+PARAM_NAME = (BOARD.param && /^[A-Za-z_$][\w$]*$/.test(BOARD.param.name||'')) ? BOARD.param.name : null;
+buildConsole();
+resizeCanvas();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

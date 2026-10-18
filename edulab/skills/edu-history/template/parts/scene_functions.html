@@ -1,0 +1,350 @@
+// ===================== 可算历史场景 =====================
+// 外壳 loop() 会给 animT 赋值；"use strict" 下未声明就赋值会 ReferenceError。
+let animT = 0;
+
+// ---- 通用防御：自动把文字锚点收进画布内 ----
+// 「长注释顶出画布」在本项目已复发多次（概率/化学/地理各一次），所以做成通用助手：
+// 先按当前 sc 量出文字宽度，再按对齐方式算出左右边界，越界就把锚点平移回来。
+function labelIn(x, y, text, color, align, size){
+    size = size || 12;
+    ctx.font = 'bold ' + size + 'px system-ui';
+    const w = ctx.measureText(String(text)).width / (sc || 1);
+    const x0 = view.xRange[0], x1 = view.xRange[1];
+    const pad = 0.06;
+    let a = x;
+    if (align === 'end')        a = Math.max(x, x0 + w + pad);
+    else if (align === 'center') a = Math.max(x0 + w/2 + pad, Math.min(x, x1 - w/2 - pad));
+    else                         a = Math.min(x, x1 - w - pad);
+    label(a, y, text, color, align, size);
+}
+
+// ---- 证据力徽章：每一页都必须显式声明「这张图能证明到什么程度」 ----
+// A 纯数学/恒等式（图上的数错不了） / B 模型（参数靠估） / C 形态①证据力③（可被拟合）
+const EVID_STYLE = {
+    A: {tag: '①A 纯数学 / 恒等式', col: '#34d399', note: '图上的数错不了'},
+    B: {tag: '①B 模型：参数靠估', col: '#fbbf24', note: '曲线光滑，但峰值取决于你怎么估参数'},
+    C: {tag: '①C 形态①·证据力③', col: '#f87171', note: '能算能画 —— 但结论可以被拟合出来'}
+};
+function evidBadge(level){
+    const e = EVID_STYLE[level] || EVID_STYLE.A;
+    const y = 0.30;
+    rectBox(0.20, y-0.24, 3.55, 0.48, '#0f172a', e.col, 1.6);
+    label(0.32, y, e.tag, e.col, 'start', 10);
+    labelIn(4.00, y, e.note, '#64748b', 'start', 10);
+}
+
+// ---- 与内核同式的 RK4 与模型 ----
+function rk4(y, h, deriv){
+    const k1 = deriv(y);
+    const k2 = deriv(y.map((v,i)=> v + h/2*k1[i]));
+    const k3 = deriv(y.map((v,i)=> v + h/2*k2[i]));
+    const k4 = deriv(y.map((v,i)=> v + h*k3[i]));
+    return y.map((v,i)=> v + h/6*(k1[i] + 2*k2[i] + 2*k3[i] + k4[i]));
+}
+function histLogistic(t, K, r, t0){
+    const z = -r*(t-t0);
+    if (z > 700) return 0;
+    if (z < -700) return K;
+    return K/(1+Math.exp(z));
+}
+function histLogisticTime(p, t0, r, K){
+    return t0 + Math.log((p/K)/(1-p/K))/r;
+}
+// Lotka-Volterra 数值周期：与内核同一套 RK4 与寻峰规则
+function histLvPeriod(r, a, c, m, amp, years, steps){
+    const h = years/steps, nStar = m/c, eStar = r/a;
+    let N = nStar*(1+amp), E = eStar;
+    const d = (N_, E_) => [r*N_ - a*N_*E_, c*N_*E_ - m*E_];
+    const series = [[0, E]];
+    for (let i=0;i<steps;i++){
+        const y = rk4([N, E], h, (v)=>{
+            const [n_, e_] = v; return [r*n_ - a*n_*e_, c*n_*e_ - m*e_];
+        });
+        N = Math.max(1e-12, y[0]); E = Math.max(1e-12, y[1]);
+        series.push([(i+1)*h, E]);
+    }
+    const peaks = [];
+    for (let i=1;i<series.length-1;i++)
+        if (series[i][1] > series[i-1][1] && series[i][1] >= series[i+1][1] && series[i][1] > eStar)
+            peaks.push(series[i][0]);
+    if (peaks.length < 2) return null;
+    let s = 0; for (let i=0;i<peaks.length-1;i++) s += peaks[i+1]-peaks[i];
+    return s/(peaks.length-1);
+}
+function histSIR(beta, gamma, s0, i0, days, steps){
+    const h = days/steps;
+    let y = [s0, i0, 1-s0-i0];
+    const ts=[0], S=[y[0]], I=[y[1]], R=[y[2]];
+    const deriv = (v)=>{ const [s,i] = v; const nw = beta*s*i; return [-nw, nw - gamma*i, gamma*i]; };
+    for (let k=0;k<steps;k++){
+        y = rk4(y, h, deriv).map(v=>Math.max(0, v));
+        ts.push((k+1)*h); S.push(y[0]); I.push(y[1]); R.push(y[2]);
+    }
+    return {ts, S, I, R};
+}
+function histSizes(n, alpha){
+    const out = [];
+    for (let r=1;r<=n;r++) out.push(Math.pow(n/r, 1/alpha));
+    return out;
+}
+
+// ===================== 1) 指数增长与翻倍时间 =====================
+function drawExpCurve(S){
+    const r = S.r, tmax = S.tmax, y0 = 1;
+    const px0 = 0.95, px1 = 8.90, py0 = 1.00, py1 = 4.85;
+    const ymax = y0*Math.exp(r*tmax);
+    const X = t => px0 + t/tmax*(px1-px0);
+    const Y = y => py0 + y/ymax*(py1-py0);
+    ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(SX(px0), SY(py0)); ctx.lineTo(SX(px1), SY(py0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(SX(px0), SY(py0)); ctx.lineTo(SX(px0), SY(py1)); ctx.stroke();
+    const td = Math.log(2)/r;
+    // 每到一个翻倍时间就画一条辅助线与「翻倍」标记
+    for (let k=1; k*td <= tmax; k++){
+        const t = k*td, yv = y0*Math.pow(2,k);
+        dashLine(X(t), py0, X(t), Y(yv), '#f472b6', 1.2);
+        dashLine(px0, Y(yv), X(t), Y(yv), '#334155', 1);
+        label(X(t)+0.08, Y(yv)+0.22, '×' + Math.pow(2,k), '#f472b6', 'start', 10);
+    }
+    ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2.8; ctx.beginPath();
+    for (let i=0;i<=200;i++){
+        const t = tmax*i/200, yv = y0*Math.exp(r*t);
+        i===0 ? ctx.moveTo(SX(X(t)), SY(Y(yv))) : ctx.lineTo(SX(X(t)), SY(Y(yv)));
+    }
+    ctx.stroke();
+    label(px0-0.18, py1+0.12, '倍数', '#64748b', 'start', 10);
+    label(px1, py0-0.30, '年', '#64748b', 'end', 10);
+    label(9.90, 5.66, '翻倍时间 = ln2/r = ' + td.toFixed(2) + ' 年', '#f472b6', 'end', 12);
+    label(9.90, 5.26, '10 年后 = ×' + Math.exp(r*10).toFixed(2), '#34d399', 'end', 11);
+    label(9.90, 4.86, '30 年后 = ×' + Math.exp(r*30).toFixed(1), '#34d399', 'end', 11);
+    evidBadge('A');
+}
+
+// ===================== 2) 人口转变 =====================
+function drawDemography(S){
+    const b0=S.b0, b1=S.b1, d0=S.d0, d1=S.d1, midD=S.mid_d, midB=S.mid_b, steep=S.steep;
+    const y0=1700, y1=2100;
+    const px0 = 0.95, px1 = 8.20, py0 = 0.95, py1 = 4.60;
+    const g = (hi,lo,mid,t)=> lo + (hi-lo)/(1+Math.exp((t-mid)/steep));
+    const X = t => px0 + (t-y0)/(y1-y0)*(px1-px0);
+    const Y = v => py0 + v/50*(py1-py0);
+    for (let v=0; v<=50; v+=10){
+        dashLine(px0, Y(v), px1, Y(v), '#1e293b', 1);
+        label(px0-0.14, Y(v), String(v), '#64748b', 'end', 9);
+    }
+    label(px0-0.14, py1+0.34, '‰', '#64748b', 'center', 10);
+    // 出生率 / 死亡率
+    const draw = (fn, col)=>{
+        ctx.strokeStyle = col; ctx.lineWidth = 2.4; ctx.beginPath();
+        for (let i=0;i<=400;i++){
+            const t = y0 + (y1-y0)*i/400;
+            i===0 ? ctx.moveTo(SX(X(t)), SY(Y(fn(t)))) : ctx.lineTo(SX(X(t)), SY(Y(fn(t))));
+        }
+        ctx.stroke();
+    };
+    draw(t=>g(b0,b1,midB,t), '#f472b6');
+    draw(t=>g(d0,d1,midD,t), '#38bdf8');
+    // 增长率
+    let best = [-1e9, y0];
+    for (let t=y0;t<=y1;t++){ const gv = g(b0,b1,midB,t)-g(d0,d1,midD,t); if (gv>best[0]) best=[gv,t]; }
+    draw(t=>g(b0,b1,midB,t)-g(d0,d1,midD,t), '#facc15');
+    dashLine(X(best[1]), py0, X(best[1]), Y(best[0]), '#f87171', 1.4);
+    ctx.fillStyle = '#f87171';
+    ctx.beginPath(); ctx.arc(SX(X(best[1])), SY(Y(best[0])), 5.5, 0, 7); ctx.fill();
+    labelIn(X(best[1]), Y(best[0])+0.32, '峰值 ' + best[0].toFixed(2) + '‰ @' + best[1],
+            '#f87171', 'center', 11);
+    labelIn(px0+0.10, py1+0.70, '黄 = 增长率   粉 = 出生率   蓝 = 死亡率', '#64748b', 'start', 10);
+    label(9.90, 5.66, '峰值增长率 ' + best[0].toFixed(2) + '‰', '#facc15', 'end', 12);
+    label(9.90, 5.26, '峰值年 ' + best[1], '#f87171', 'end', 11);
+    evidBadge('B');
+}
+
+// ===================== 3) 技术扩散 S 曲线 =====================
+function drawLogistic(S){
+    const r = S.r, t0 = 1900, yearA = 1850, yearB = 1950;
+    const px0 = 0.95, px1 = 8.30, py0 = 1.00, py1 = 4.70;
+    const X = t => px0 + (t-yearA)/(yearB-yearA)*(px1-px0);
+    const Y = p => py0 + p*(py1-py0);
+    for (let p=0; p<=1.0001; p+=0.25){
+        dashLine(px0, Y(p), px1, Y(p), '#1e293b', 1);
+        label(px0-0.14, Y(p), (p*100).toFixed(0)+'%', '#64748b', 'end', 9);
+    }
+    const t10 = histLogisticTime(0.10, t0, r, 1), t90 = histLogisticTime(0.90, t0, r, 1);
+    // 10% / 90% 之间的时长区间
+    ctx.fillStyle = 'rgba(250,204,21,0.14)';
+    ctx.fillRect(SX(X(t10)), SY(py1), (X(t90)-X(t10))*sc, (py1-py0)*sc);
+    // 曲线
+    ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2.8; ctx.beginPath();
+    for (let i=0;i<=400;i++){
+        const t = yearA + (yearB-yearA)*i/400;
+        i===0 ? ctx.moveTo(SX(X(t)), SY(Y(histLogistic(t,1,r,t0)))) : ctx.lineTo(SX(X(t)), SY(Y(histLogistic(t,1,r,t0))));
+    }
+    ctx.stroke();
+    // 三个标记
+    [[0.10,t10,'10%'],[0.50,t0,'50%'],[0.90,t90,'90%']].forEach(([p,tt,txt])=>{
+        dashLine(X(tt), py0, X(tt), Y(p), '#f472b6', 1.3);
+        ctx.fillStyle = '#f472b6';
+        ctx.beginPath(); ctx.arc(SX(X(tt)), SY(Y(p)), 5.5, 0, 7); ctx.fill();
+        label(X(tt), py0-0.30, txt, '#f472b6', 'center', 10);
+    });
+    label(X(t0), Y(0.98), 't₀', '#64748b', 'center', 10);
+    label(9.90, 5.72, '10→90 时长 = ' + (t90-t10).toFixed(2) + ' 年', '#facc15', 'end', 12);
+    label(9.90, 5.32, '= 2·ln9/r，与 t₀ 无关', '#38bdf8', 'end', 11);
+    label(9.90, 4.92, '10% @' + t10.toFixed(0) + '   90% @' + t90.toFixed(0), '#f472b6', 'end', 11);
+    evidBadge('A');
+}
+
+// ===================== 4) 传染病阈值 =====================
+function drawEpidemic(S){
+    const r0 = S.r0, gamma = 0.2, beta = r0*gamma;
+    const days = 200;
+    const {ts, S:SS, I, R} = histSIR(beta, gamma, 0.99, 0.01, days, 2000);
+    const px0 = 0.95, px1 = 8.30, py0 = 1.00, py1 = 4.70;
+    const X = t => px0 + t/days*(px1-px0);
+    const Y = v => py0 + Math.max(0,Math.min(1,v))*(py1-py0);
+    for (let v=0; v<=1.0001; v+=0.25){
+        dashLine(px0, Y(v), px1, Y(v), '#1e293b', 1);
+        label(px0-0.14, Y(v), (v*100).toFixed(0)+'%', '#64748b', 'end', 9);
+    }
+    const curve = (arr, col)=>{
+        ctx.strokeStyle = col; ctx.lineWidth = 2.4; ctx.beginPath();
+        for (let i=0;i<arr.length;i+=4){
+            i===0 ? ctx.moveTo(SX(X(ts[i])), SY(Y(arr[i]))) : ctx.lineTo(SX(X(ts[i])), SY(Y(arr[i])));
+        }
+        ctx.stroke();
+    };
+    curve(SS, '#38bdf8'); curve(I, '#f87171'); curve(R, '#34d399');
+    // 峰值与群体免疫阈值
+    let imax = 0, itop = 0;
+    for (let i=0;i<I.length;i++) if (I[i] > imax){ imax = I[i]; itop = ts[i]; }
+    dashLine(X(itop), py0, X(itop), Y(imax), '#facc15', 1.4);
+    label(X(itop), Y(imax)+0.30, '峰值 ' + (imax*100).toFixed(1) + '%', '#facc15', 'center', 11);
+    const herd = r0 > 1 ? 1-1/r0 : 0;
+    if (herd > 0){
+        dashLine(px0, Y(herd), px1, Y(herd), '#a78bfa', 1.3);
+        labelIn(px1, Y(herd)+0.24, '群体免疫 ' + (herd*100).toFixed(1) + '%', '#a78bfa', 'end', 10);
+    }
+    label(px0+0.10, py1+0.70, '蓝 = 未感染 S   红 = 感染中 I   绿 = 已恢复 R', '#64748b', 'start', 10);
+    label(9.90, 5.72, 'R₀ = β/γ = ' + r0.toFixed(2), '#f87171', 'end', 12);
+    label(9.90, 5.32, '感染峰值 ' + (imax*100).toFixed(2) + '%', '#facc15', 'end', 11);
+    label(9.90, 4.92, r0>1 ? '群体免疫阈值 ' + (herd*100).toFixed(2) + '%' : 'R₀ ≤ 1 → 疫情自行消退',
+          '#a78bfa', 'end', 11);
+    evidBadge('A');
+}
+
+// ===================== 5) Kaya 恒等式分解 =====================
+function drawKaya(S){
+    const P = S.P, g = S.g, e = S.e, c = S.c;
+    const co2 = P*g*e*c;
+    const factors = [
+        {nm:'P 人口', v:P, col:'#38bdf8'},
+        {nm:'GDP/P 人均', v:g, col:'#34d399'},
+        {nm:'E/GDP 能耗强度', v:e, col:'#a78bfa'},
+        {nm:'CO₂/E 排放强度', v:c, col:'#f87171'}
+    ];
+    const py0 = 1.15, py1 = 4.35, cx = 5.0, half = 4.10;
+    // 四个因子按「乘法链」并排，高度 ∝ 该因子
+    const vmax = Math.max.apply(null, factors.map(x=>x.v));
+    const bw = 1.25, gap = 0.72;
+    const x0 = cx - (4*bw + 3*gap)/2 + bw/2;
+    groundLine(py0, cx-half, cx+half, '#334155');
+    factors.forEach((fc, i)=>{
+        const x = x0 + i*(bw+gap);
+        const h = fc.v/vmax*(py1-py0);
+        rectBox(x-bw/2, py0, bw, Math.max(h,0.03), fc.col);
+        label(x, py0+h+0.30, fc.v.toFixed(2), '#e2e8f0', 'center', 12);
+        label(x, py0-0.32, fc.nm, '#94a3b8', 'center', 10);
+        if (i < 3) label((x + x + bw + gap)/2, py0+0.25, '×', '#64748b', 'center', 16);
+    });
+    label(0.20, 5.72, 'Kaya 恒等式：CO₂ = P × (GDP/P) × (E/GDP) × (CO₂/E)', '#94a3b8', 'start', 11);
+    label(9.90, 5.24, '乘积 = CO₂ = ' + co2.toFixed(4), '#facc15', 'end', 12);
+    label(9.90, 4.84, '这是一个恒等式 —— 由构造必真', '#34d399', 'end', 11);
+    evidBadge('A');
+}
+
+// ===================== 6) 王朝周期模型（最危险的一类） =====================
+function drawCycle(S){
+    const r = S.r, a = S.a, c = S.c, m = S.m, amp = S.amp;
+    const years = 1500, steps = 15000;
+    const nStar = m/c, eStar = r/a;
+    let N = nStar*(1+amp), E = eStar;
+    const pts = [[N, E]];
+    const d = (v)=>{ const [n_, e_] = v; return [r*n_ - a*n_*e_, c*n_*e_ - m*e_]; };
+    const h = years/steps;
+    for (let i=0;i<steps;i++){
+        const y = rk4([N,E], h, d);
+        N = Math.max(1e-12, y[0]); E = Math.max(1e-12, y[1]);
+        if (i % 3 === 0) pts.push([N, E]);
+    }
+    let nmax = 0, emax = 0;
+    pts.forEach(p=>{ nmax = Math.max(nmax, p[0]); emax = Math.max(emax, p[1]); });
+    const xr = Math.max(nmax, nStar*2), yr = Math.max(emax, eStar*2);
+    const px0 = 1.05, px1 = 8.20, py0 = 1.00, py1 = 4.55;
+    const X = v => px0 + v/xr*(px1-px0);
+    const Y = v => py0 + v/yr*(py1-py0);
+    ctx.strokeStyle = '#334155'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(SX(px0), SY(py0)); ctx.lineTo(SX(px1), SY(py0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(SX(px0), SY(py0)); ctx.lineTo(SX(px0), SY(py1)); ctx.stroke();
+    label(px0-0.18, py1+0.12, '精英 E', '#64748b', 'start', 10);
+    label(px1, py0-0.30, '人口 N', '#64748b', 'end', 10);
+    // 相轨迹（闭合轨道）
+    ctx.strokeStyle = '#a78bfa'; ctx.lineWidth = 2.0; ctx.beginPath();
+    pts.forEach((p, i)=>{ i===0 ? ctx.moveTo(SX(X(p[0])), SY(Y(p[1]))) : ctx.lineTo(SX(X(p[0])), SY(Y(p[1]))); });
+    ctx.stroke();
+    // 平衡点
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath(); ctx.arc(SX(X(nStar)), SY(Y(eStar)), 5, 0, 7); ctx.fill();
+    label(X(nStar), Y(eStar)-0.28, '平衡点', '#facc15', 'center', 10);
+    // 当前周期（与内核同一套 RK4 寻峰）
+    const tn = histLvPeriod(r, a, c, m, amp, 600, 12000);
+    const ta = 2*Math.PI/Math.sqrt(r*m);
+    label(9.90, 5.72, '解析周期 2π/√(rm) = ' + ta.toFixed(1) + ' 年', '#facc15', 'end', 12);
+    label(9.90, 5.32, '当前振幅 ' + (amp*100).toFixed(0) + '% 的数值周期'
+          + (tn ? ' = ' + tn.toFixed(1) + ' 年' : ' — 无法判定'), '#a78bfa', 'end', 11);
+    label(9.90, 4.92, tn ? '比值 = ' + (tn/ta).toFixed(2) + '（越小越接近解析式）' : '',
+          '#f87171', 'end', 11);
+    evidBadge('C');
+}
+
+// ===================== 7) rank-size 幂律 =====================
+function drawLoglog(S){
+    const alpha = S.alpha, n = 200;
+    const sizes = histSizes(n, alpha);
+    const slope = -1/alpha;
+    const lx = i => Math.log(i+1), ly = s => Math.log(s);
+    const xmax = lx(n-1), ymin = Math.min.apply(null, sizes.map(ly)), ymax = Math.max.apply(null, sizes.map(ly));
+    const px0 = 1.10, px1 = 8.30, py0 = 1.00, py1 = 4.70;
+    const X = v => px0 + v/Math.max(xmax,1e-9)*(px1-px0);
+    const Y = v => py0 + (v-ymin)/Math.max(ymax-ymin,1e-9)*(py1-py0);
+    for (let k=0;k<=4;k++){
+        const xv = xmax*k/4;
+        dashLine(X(xv), py0, X(xv), py1, '#1e293b', 1);
+        label(X(xv), py0-0.28, xv.toFixed(1), '#64748b', 'center', 9);
+    }
+    label((px0+px1)/2, py0-0.60, 'log(排名)', '#64748b', 'center', 10);
+    label(px0-0.18, py1+0.14, 'log(规模)', '#64748b', 'start', 10);
+    // 数据点
+    ctx.fillStyle = '#38bdf8';
+    for (let r=1; r<=n; r+=2){
+        const xv = lx(r-1), yv = ly(sizes[r-1]);
+        const px = SX(X(xv)), py = SY(Y(yv));
+        ctx.beginPath(); ctx.arc(px, py, 2.4, 0, 7); ctx.fill();
+    }
+    // 拟合直线（用最小二乘，与内核同一算法）
+    const mxx = Array.from({length:n}, (_,i)=>lx(i)).reduce((s,v)=>s+v,0)/n;
+    const myy = sizes.map(ly).reduce((s,v)=>s+v,0)/n;
+    let num=0, den=0;
+    for (let i=0;i<n;i++){ const xv=lx(i), yv=ly(sizes[i]); num += (xv-mxx)*(yv-myy); den += (xv-mxx)**2; }
+    const fit = num/den;
+    ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2.2; ctx.beginPath();
+    for (const xv of [0, xmax]){
+        const yv = myy + fit*(xv-mxx);
+        if (xv === 0) ctx.moveTo(SX(X(xv)), SY(Y(yv))); else ctx.lineTo(SX(X(xv)), SY(Y(yv)));
+    }
+    ctx.stroke();
+    label(0.20, 5.72, 'rank-size 幂律：规模 ∝ 排名的 −1/α 次幂', '#94a3b8', 'start', 11);
+    label(9.90, 5.24, '拟合斜率 = ' + fit.toFixed(4), '#facc15', 'end', 12);
+    label(9.90, 4.84, '理论斜率 = −1/α = ' + slope.toFixed(4), '#38bdf8', 'end', 11);
+    label(9.90, 4.44, '反推的 α = ' + (-1/fit).toFixed(4), '#34d399', 'end', 11);
+    evidBadge('A');
+}

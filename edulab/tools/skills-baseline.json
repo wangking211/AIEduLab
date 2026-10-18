@@ -99,6 +99,16 @@
   "timezone.html": "7ab2644890946ab8da1d9aa67cb2090b177115c571af5f5b863a8986504cacc9",
   "water.html": "f7404a662b5a07a04d515892569d2f7bec63cf4fbc4952cb8910b06e34c15473"
  },
+ "edu-history": {
+  "cycle.html": "7a5a35684c62aed0d3ef08f51ea9fc94f19c01b8812fdebc3f2195535e44bbe6",
+  "diffusion.html": "123af9f48b8a861d089d1edb2ca4b5bf480628c155731a604965bab6c942273a",
+  "epidemic.html": "50dcf5dcd9bfdf76dde21d99e5b9a6ceddfb26ba7312960bc3c83387566d01f4",
+  "growth.html": "1f8b1acc837b406a17152af58679d81b9004ef5bb4e6b383c19f689ca0f226a7",
+  "index.html": "b16586d0ebdf5b3ae4f9304986ed3e12277289f0d48f7735fb7d4bec70e24bfd",
+  "kaya.html": "6f71b5f03d86c58447e680c846e3f4cb7c04b2280307f8ad7a26b91ea4a76d74",
+  "transition.html": "f2d6bbb535665e81556862d86bb33859f3f3db97c8aef7c2243ccc22f8c2d536",
+  "zipf.html": "bc857227e907458a3c4d1e29f18e77cc61e2bdc7bc5d7d0a5760b7e67c8b75b3"
+ },
  "edu-knowledge-map": {
   "book.html": "737d6b7905df546eff4c9e62960d7e4f75e487acd0178002aa9bb76326e09ad6",
   "derivative.html": "9a08c7ba5f8a3f481f924c23d2e75f21341f135c934eb413681075adbec533f7",
