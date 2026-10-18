@@ -169,6 +169,16 @@
   "phase.html": "7d06391c3475870583d2e3fb840fa9c3724944b726887cfaae8e7524bd92d2fa",
   "predator.html": "08cd03d6756100f55c324dd6e92098129c6faa54e606efa7aeb6f97dcf97a01f"
  },
+ "edu-organic-chem": {
+  "combustion.html": "94a7a75439ac4e76d839cb71e5b24940afdae97a37eebfc4ee76de4d1cb5d438",
+  "equiv_h.html": "2cd5a3f8baff5c8b2df7d6b05b60912f09894677788680e886add337d1fd32cb",
+  "formula.html": "3979d8935d12dbc1d02b8c7a14892eefe180aba9433b8539181bc47400fa6e28",
+  "functional.html": "717038d6898695d6cf00b82fab7bfc8531091d73dccfdcd453f11fb53fd6dade",
+  "index.html": "34a1eeea5386833e4554c2cde00bf5e1d0e896d050ace4d2a91b1a84317b6d84",
+  "mainchain.html": "7780110e239f1df08327a732215bd3345a7b723610f1e0adf6a9fb9759dd1bee",
+  "polymer.html": "784387f9a7eac785792056aaa7996a1f3670ff767eb64edbc44c996e7800bf98",
+  "unsaturation.html": "ab689b0b772200b2ba2a28f77c1097882656f5691696aaf84dbd079d8aedb316"
+ },
  "edu-physics-em": {
   "ampere.html": "6aad82590f72792b61647fa6485c2126a359f0cd46234daaa15b8ee3d1abbfc8",
   "capacitor.html": "04c1b7b6b9ada4241b067a1c0f826ff3907019d54983bb1bff6813abe3e78ed5",

@@ -64,7 +64,7 @@ FAMILIES = {
                  "自然地理 / 可算的历史 / 经济学 / 平面向量 / 线性代数 / 微分方程 / 信号与系统"),
         "users": ["edu-math-sequences", "edu-physics-junior", "edu-physics-senior",
                   "edu-physics-em", "edu-physics-thermal", "edu-physics-wave-optics",
-                  "edu-physics-momentum", "edu-probability", "edu-chem-calc",
+                  "edu-physics-momentum", "edu-organic-chem", "edu-probability", "edu-chem-calc",
                   "edu-geography", "edu-history", "edu-economics", "edu-vector",
                   "edu-linear-algebra", "edu-ode-dynamics", "edu-signals"],
     },
