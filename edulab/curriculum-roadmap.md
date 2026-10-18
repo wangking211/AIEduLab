@@ -81,7 +81,9 @@
 | `edu-chem-calc` | ✅ 已完成（8 题型 / 8 场景；47 条内核自检） |
 | `edu-geography` | ✅ 已完成（7 题型 / 7 场景；48 条内核自检） |
 | `edu-history` | ✅ 已完成（7 题型 / 7 场景；48 条内核自检） |
-| `edu-linear-algebra` | 待做（大学线首选） |
+| `edu-linear-algebra` | ✅ 已完成（7 题型 / 7 场景；53 条内核自检）—— 大学线第一项 |
+| `edu-ode-dynamics` | 待做（大学线第 2 项） |
+| `edu-signals` | 待做（大学线第 3 项） |
 
 > **初高中收尾已全部完成。** 下一步进大学线。
 
@@ -125,6 +127,20 @@
    把 `mid_b` 下限从 1900 收到 1930 —— 低于 1920（死亡率中点）时模型前提被破坏，
    增长率从窗口起点就单调下降，「峰值年」退化成窗口边界（那是产物，不是结论）。
    **看下限的一条通用判据**：参数取到端点时，读数是否仍然是模型想说的那个量。
+8. **LaTeX 花括号在「普通字符串」里不能写双份**：只有 f-string 里 `{{ }}` 才表示
+   `{ }`；隐式拼接里没有 `f` 前缀的那些片段，`{{ }}` 会**原样**进入 LaTeX，
+   变成「组里套组」——`\begin{{pmatrix}}` 会让 KaTeX 抛
+   `Expected node of type textord, but got node of type ordgroup`，
+   而整页 `throwOnError:false` 又不把它当错误。
+   **通用自检**：对生成页逐个 `$…$` 片段做 `renderToString(frag,{throwOnError:true})`
+   —— 只有这条能抓到。`edu-linear-algebra` 抓到 2 处（61 个字符串字面量需修正）。
+9. **画几何图形必须裁剪**：线性变换会把点推到极远（剪切 k=2 时能到 ±21），
+   网格直接顶出画布。`edu-linear-algebra` 给出了通用工具：`laSegClip`（线段，
+   Liang–Barsky）与 `laClipPoly`（凸多边形，Sutherland–Hodgman），
+   外加按可见范围自适应的 `laAxes`。后续画几何的场景请直接用这三个。
+10. **三目翻译器要能处理括号内嵌套**：`edu-chem-calc` 的 `_js_to_py` 只扫顶层，
+    遇到 `2-(cond?1:2)` 会失败。`edu-linear-algebra` 的版本会定位三目所在的
+    括号组边界，支持任意深度。新增分段读数时请用后者。
 
 ## 四、每项的硬门槛（与本项目既有纪律一致）
 
