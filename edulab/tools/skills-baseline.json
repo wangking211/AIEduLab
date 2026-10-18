@@ -202,6 +202,16 @@
   "projectile.html": "11756a9d7db7a77b74129ef3cf4989e3a46b7d3fe031f760ece704f7ceabc26d",
   "work_energy.html": "67b981b36c50729e259e0a6198a5da3fbd717a2d7daa65d8b906d22d479ab8e1"
  },
+ "edu-physics-thermal": {
+  "cycle.html": "79556ff89bbc939a364dc0d99771639a28e7f57a130134885d1242f79e684035",
+  "decay.html": "3937358eb80f5c954319de3e02d2872a446dec3308de74567465a51ee9ffe8fa",
+  "first_law.html": "8429fe4608957f576c04824ff524500e70021ec8fcc11dfa11b17f4e489664e7",
+  "gas_law.html": "1b625d65d8a99d51a4911fd082bc12096d3d3b5599cfa821a0059e2a5f9ab45f",
+  "index.html": "2b3b2a8bcc07950230c2a2dfba4bf4821007d4c683864a062e01b2ef93650948",
+  "kinetic.html": "7b175ab99c8f7d6d0bd1c1ed3f2d781c55f1598bb10eb02dc5067df80760d911",
+  "levels.html": "bbd3bc3b5bb0f39d1e66cc7443dfb298a345da4e5879a5130f6a22a25c8ac298",
+  "photoelectric.html": "cd6b06aaf409f2cdab14b72e0fd45b36354fa98d89f0ca8343f2f4013377ed30"
+ },
  "edu-plane-geometry": {
   "circumcircle.html": "a3ac9fbc403296bf483433921f855ba779496b248938ee6179bfc6b40e56c702",
   "incircle.html": "9f90931a7dc0d436dc4ce4fba52ee826b6d4c53585c998ef4d3d6b5b7a2a9d8d",

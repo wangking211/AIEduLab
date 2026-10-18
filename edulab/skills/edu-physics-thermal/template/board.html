@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>热学与近代物理 · 交互学习</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+<style>
+    body { font-family: "PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
+    .katex { font-size: 1.02em; }
+    canvas { display:block; }
+    input[type=range] { -webkit-appearance:none; appearance:none; height:6px; border-radius:3px; background:#cbd5e1; outline:none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#4f46e5; cursor:pointer; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.3); }
+    .scroll-thin::-webkit-scrollbar { width:6px; }
+    .scroll-thin::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+<div class="flex h-screen overflow-hidden">
+    <!-- 左：题面 + 动态控制台 -->
+    <aside class="w-[30%] min-w-[300px] max-w-[420px] bg-white border-r border-slate-200 flex flex-col">
+        <div class="px-5 py-4 border-b border-slate-200">
+            <div class="text-[11px] uppercase tracking-wider text-indigo-500 font-bold mb-1">互动教学 · 题面</div>
+            <h1 id="prob-title" class="text-lg font-bold text-slate-900"></h1>
+        </div>
+        <div class="flex-1 overflow-y-auto scroll-thin px-5 py-4 text-sm leading-relaxed" id="prob-body"></div>
+        <div class="border-t border-slate-200 px-5 py-4 bg-slate-50">
+            <div class="text-[11px] uppercase tracking-wider text-teal-600 font-bold mb-3" id="console-title">动态控制台</div>
+            <!-- 参数滑块 -->
+            <div id="param-block" class="hidden">
+                <div class="flex justify-between text-xs text-slate-600 mb-1"><span id="param-label"></span><span id="param-val" class="font-mono font-bold text-teal-700"></span></div>
+                <input id="param-slider" type="range" class="w-full">
+                <div id="param-ticks" class="flex justify-between text-[10px] text-slate-400 mt-1"></div>
+            </div>
+            <!-- 读数 -->
+            <div id="readouts" class="mt-3 space-y-2 text-sm"></div>
+            <!-- 能量/功率条 -->
+            <div id="bar-block" class="hidden mt-4">
+                <div class="text-xs text-slate-600 mb-1" id="bar-label"></div>
+                <div class="h-5 w-full bg-slate-200 rounded-full overflow-hidden flex text-[10px] text-white font-bold">
+                    <div id="bar-seg1" class="h-full flex items-center justify-center" style="width:0%;background:#4f46e5"></div>
+                    <div id="bar-seg2" class="h-full flex items-center justify-center" style="width:0%;background:#0ea5e9"></div>
+                </div>
+                <div class="flex gap-4 text-[10px] text-slate-500 mt-1" id="bar-legend"></div>
+            </div>
+            <!-- 定值指示器 -->
+            <div id="constant-block" class="hidden mt-4 border-t border-slate-200 pt-3">
+                <span class="text-[11px] text-slate-500">定值指示</span>
+                <span id="constant-val" class="ml-auto font-bold text-emerald-700"></span>
+            </div>
+        </div>
+    </aside>
+    <!-- 中：分步解析 -->
+    <main class="flex-1 bg-white overflow-y-auto scroll-thin px-6 py-5">
+        <div class="text-[11px] uppercase tracking-wider text-indigo-500 font-bold mb-2">分步解析</div>
+        <div id="solution-body" class="space-y-5"></div>
+    </main>
+    <!-- 右：数学画板 -->
+    <section class="w-[36%] min-w-[340px] bg-slate-900 flex flex-col">
+        <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+            <div class="text-[11px] uppercase tracking-wider text-rose-400 font-bold">热学 · 近代物理</div>
+            <div id="scene-caption" class="text-xs text-slate-400"></div>
+        </div>
+        <div class="flex-1 relative"><canvas id="math-canvas" class="absolute inset-0"></canvas></div>
+        <div id="legend" class="px-4 py-3 border-t border-slate-700 text-[11px] text-slate-300 space-y-1"></div>
+    </section>
+</div>
+
+<script type="application/json" id="lesson-data">__LESSON_DATA__</script>
+<script>
+"use strict";
+// ===================== 数据装载 =====================
+const DATA = JSON.parse(document.getElementById('lesson-data').textContent);
+const BOARD = DATA.board || {};
+const UI = Object.assign({
+    consoleTitle: "动态控制台", solutionTitle: "详细解析", current: "当前:"
+}, (DATA.lesson && DATA.lesson.ui) || {});
+
+const COLORS = {
+    force:'#f87171', effort:'#38bdf8', aux:'#94a3b8', label:'#e2e8f0',
+    obj:'#a78bfa', load:'#fbbf24', rope:'#e2e8f0', water:'#38bdf8',
+    water2:'#0ea5e9', sponge:'#34d399', ground:'#64748b', metal:'#cbd5e1',
+    wire:'#94a3b8', current:'#22d3ee', battery:'#facc15', bulb:'#fde047',
+    meter:'#f472b6', arrow:'#f87171', good:'#34d399', bad:'#f87171'
+};
+const col = c => (c && COLORS[c]) ? COLORS[c] : (c || '#e2e8f0');
+
+// ===================== 安全表达式求值 =====================
+// 表达式由 generate.py 生成（可信本地内容）：可用 @param 名(或别名 p)、+ - * / ^、
+// 及 sqrt/abs/min/max/pow/sign/PI 等白名单函数。
+const MATHENV = {sqrt:Math.sqrt, abs:Math.abs, min:Math.min, max:Math.max,
+    pow:Math.pow, sign:Math.sign, floor:Math.floor, ceil:Math.ceil, PI:Math.PI, E:Math.E,
+    sin:Math.sin, cos:Math.cos, tan:Math.tan, asin:Math.asin, acos:Math.acos, atan:Math.atan, exp:Math.exp, log:Math.log};
+const _exprCache = {};
+function evalExpr(expr, env){
+    if (typeof expr !== 'string') return expr;
+    const scope = Object.assign({}, MATHENV, env);
+    const names = Object.keys(scope);
+    const key = expr + '|' + names.join(',');
+    let fn = _exprCache[key];
+    if (!fn){ try { fn = Function(...names, '"use strict";return ('+expr.replace(/\^/g,'**')+');'); }
+              catch(e){ fn = () => NaN; } _exprCache[key] = fn; }
+    try { const v = fn(...names.map(n=>scope[n])); return (typeof v==='number') ? v : NaN; }
+    catch(e){ return NaN; }
+}
+const resolveVal = (v, env) => (typeof v === 'string') ? evalExpr(v, env) : v;
+function fmt(x, d=2){
+    if (x === null || x === undefined || !isFinite(x)) return '—';
+    let s = x.toFixed(d);
+    if (s === '-' + (0).toFixed(d)) s = (0).toFixed(d);
+    return s;
+}
+
+// ===================== 画布与世界坐标 =====================
+const canvas = document.getElementById('math-canvas');
+const ctx = canvas.getContext('2d');
+let cssW = 0, cssH = 0, sc = 1, offX = 0, offY = 0;
+const view = BOARD.view || {xRange:[0,10], yRange:[0,6]};
+const SX = x => offX + x*sc;
+const SY = y => offY - y*sc;
+
+function resizeCanvas(){
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+    canvas.style.width = rect.width+'px'; canvas.style.height = rect.height+'px';
+    ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr,dpr);
+    cssW = rect.width; cssH = rect.height;
+    const spanX = view.xRange[1]-view.xRange[0], spanY = view.yRange[1]-view.yRange[0];
+    sc = Math.min((rect.width-30)/spanX, (rect.height-30)/spanY);
+    offX = rect.width/2 - ((view.xRange[0]+view.xRange[1])/2)*sc;
+    offY = rect.height/2 + ((view.yRange[0]+view.yRange[1])/2)*sc;
+    render();
+}
+
+// ===================== 绘制基元 =====================
+function arrow(x1,y1,x2,y2,color,lw=2.5,label=null){
+    const px1=SX(x1), py1=SY(y1), px2=SX(x2), py2=SY(y2);
+    const dx=px2-px1, dy=py2-py1, L=Math.hypot(dx,dy);
+    if (L < 4) return;
+    const ang=Math.atan2(dy,dx), hl=Math.min(10, L*0.45);
+    ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=lw;
+    ctx.beginPath(); ctx.moveTo(px1,py1); ctx.lineTo(px2-hl*Math.cos(ang), py2-hl*Math.sin(ang)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px2,py2);
+    ctx.lineTo(px2-hl*Math.cos(ang-0.42), py2-hl*Math.sin(ang-0.42));
+    ctx.lineTo(px2-hl*Math.cos(ang+0.42), py2-hl*Math.sin(ang+0.42));
+    ctx.closePath(); ctx.fill();
+    if (label){
+        ctx.font='bold 12px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        const mx=(px1+px2)/2, my=(py1+py2)/2;
+        const ox=Math.cos(ang+Math.PI/2)*13, oy=Math.sin(ang+Math.PI/2)*13;
+        ctx.fillText(label, mx+ox, my+oy);
+    }
+}
+function label(x,y,text,color='#e2e8f0',align='center',size=12){
+    ctx.font='bold '+size+'px system-ui'; ctx.textAlign=align; ctx.textBaseline='middle';
+    ctx.fillStyle=color; ctx.fillText(text, SX(x), SY(y));
+}
+function dashLine(x1,y1,x2,y2,color='#94a3b8',lw=1.2){
+    ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(SX(x1),SY(y1)); ctx.lineTo(SX(x2),SY(y2)); ctx.stroke();
+    ctx.setLineDash([]);
+}
+function rectBox(x,y,w,h,fill,stroke=null,lw=1.5){
+    ctx.fillStyle=fill;
+    ctx.fillRect(SX(x), SY(y+h), w*sc, h*sc);
+    if (stroke){ ctx.strokeStyle=stroke; ctx.lineWidth=lw; ctx.strokeRect(SX(x), SY(y+h), w*sc, h*sc); }
+}
+function groundLine(y, x0, x1, color='#64748b'){
+    ctx.strokeStyle=color; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.moveTo(SX(x0),SY(y)); ctx.lineTo(SX(x1),SY(y)); ctx.stroke();
+    ctx.lineWidth=1.2;
+    for (let x=x0; x<x1; x+=0.28){
+        ctx.beginPath(); ctx.moveTo(SX(x),SY(y)); ctx.lineTo(SX(x)-6,SY(y)+8); ctx.stroke();
+    }
+}
+// 标尺线（标注长度 L 的辅助线：两端短横 + 虚线 + 中点标签）
+function dimLine(x1,y1,x2,y2,text,color='#94a3b8'){
+    dashLine(x1,y1,x2,y2,color);
+    ctx.strokeStyle=color; ctx.lineWidth=1.5;
+    const nx=(y2===y1)?0:0, ny=(x2===x1)?0:0;
+    ctx.beginPath(); ctx.moveTo(SX(x1),SY(y1)-5+ny); ctx.lineTo(SX(x1),SY(y1)+5+ny); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(SX(x2),SY(y2)-5); ctx.lineTo(SX(x2),SY(y2)+5); ctx.stroke();
+    label((x1+x2)/2, (y1+y2)/2 + 0.22, text, color);
+}
+
+// ===================== 场景状态 =====================
+let PARAM_NAME = null;
+function buildScene(pval){
+    const env = {p: pval};
+    if (PARAM_NAME) env[PARAM_NAME] = pval;
+    (BOARD.scalars||[]).forEach(s=>{ env[s.name] = evalExpr(s.expr, env); });
+    const sc2 = BOARD.scene || {};
+    const out = {kind: sc2.kind, env, raw:{}};
+    // 把场景各数值字段（可为表达式）按 env 解析
+    for (const k in sc2){
+        if (k === 'kind') continue;
+        const v = sc2[k];
+        out.raw[k] = v;
+        if (typeof v === 'number') out[k] = v;
+        else if (typeof v === 'string'){ const v2 = evalExpr(v, env); out[k] = isFinite(v2) ? v2 : v; }
+        else if (Array.isArray(v)) out[k] = v.map(z => (typeof z==='string')? evalExpr(z,env) : z);
+        else out[k] = v;
+    }
+    return out;
+}
+// ===================== 热学 · 近代物理场景 =====================
+let animT = 0;
+
+// ---- 文字锚点自动收进画布；**文字比视窗还宽时自动缩小字号** ----
+function labelIn(x, y, text, color, align, size){
+    size = size || 12;
+    const x0 = view.xRange[0], x1 = view.xRange[1];
+    const pad = 0.06;
+    const avail = (x1 - x0) - 2 * pad;
+    let s = size;
+    const meas = () => { ctx.font = 'bold ' + s + 'px system-ui';
+                         return ctx.measureText(String(text)).width / (sc || 1); };
+    let w = meas();
+    while (w > avail && s > 7){ s -= 0.5; w = meas(); }
+    let a = x;
+    if (align === 'end')         a = Math.max(x, x0 + w + pad);
+    else if (align === 'center') a = Math.max(x0 + w/2 + pad, Math.min(x, x1 - w/2 - pad));
+    else                         a = Math.max(x0 + pad, Math.min(x, x1 - w - pad));
+    label(a, y, text, color, align, s);
+}
+
+// ---- 世界坐标绘图助手（直接用世界坐标，不经过数学缩放） ----
+function ws(x, y){ return [SX(x), SY(y)]; }
+function wSeg(x1, y1, x2, y2, col, lw, dash){
+    if (dash) ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 1.4;
+    const a = ws(x1, y1), b = ws(x2, y2);
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    if (dash) ctx.setLineDash([]);
+}
+function wPoly(pts, col, lw, fill){
+    if (pts.length < 2) return;
+    if (fill){ ctx.fillStyle = fill; ctx.beginPath();
+        pts.forEach((p,i)=>{ const q = ws(p[0], p[1]); i===0?ctx.moveTo(q[0],q[1]):ctx.lineTo(q[0],q[1]); });
+        if (fill.indexOf('rgba') === 0 && pts.length > 2) ctx.closePath();
+        ctx.fill(); }
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 2;
+    ctx.beginPath();
+    pts.forEach((p,i)=>{ const q = ws(p[0], p[1]); i===0?ctx.moveTo(q[0],q[1]):ctx.lineTo(q[0],q[1]); });
+    ctx.stroke();
+}
+function wDot(x, y, col, r){
+    const q = ws(x, y);
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(q[0], q[1], r || 5.5, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.4; ctx.stroke();
+}
+function wArrow(x1, y1, x2, y2, col, lw){
+    const a = ws(x1, y1), b = ws(x2, y2);
+    arrow(a[0], a[1], b[0], b[1], col, lw || 2.4, null);
+}
+// 数据坐标 → 世界坐标
+function axisBox(x0, y0, w, h, xr, yr){
+    return { x0: x0, y0: y0, w: w, h: h, xr: xr, yr: yr,
+        X: v => x0 + (v - xr[0]) / (xr[1] - xr[0]) * w,
+        Y: v => y0 + (v - yr[0]) / (yr[1] - yr[0]) * h };
+}
+function plotFrame(B, xlab, ylab, xticks, yticks){
+    wSeg(B.x0, B.y0, B.x0 + B.w, B.y0, 'rgba(148,163,184,0.85)', 1.6);
+    wSeg(B.x0, B.y0, B.x0, B.y0 + B.h, 'rgba(148,163,184,0.85)', 1.6);
+    xticks.forEach(t => {
+        const X = B.X(t);
+        wSeg(X, B.y0, X, B.y0 - 0.09, 'rgba(148,163,184,0.7)', 1.2);
+        labelIn(X, B.y0 - 0.30, String(t), '#64748b', 'center', 9);
+    });
+    yticks.forEach(t => {
+        const Y = B.Y(t);
+        wSeg(B.x0, Y, B.x0 - 0.09, Y, 'rgba(148,163,184,0.7)', 1.2);
+        labelIn(B.x0 - 0.16, Y, String(t), '#64748b', 'end', 9);
+    });
+    labelIn(B.x0 + B.w, B.y0 - 0.62, xlab, '#94a3b8', 'end', 10);
+    labelIn(B.x0 - 0.18, B.y0 + B.h + 0.24, ylab, '#94a3b8', 'start', 10);
+}
+// 规则网格线
+function wGrid(B, n){
+    for (let i = 1; i < n; i++){
+        const X = B.x0 + B.w * i / n, Y = B.y0 + B.h * i / n;
+        wSeg(X, B.y0, X, B.y0 + B.h, 'rgba(148,163,184,0.10)', 1);
+        wSeg(B.x0, Y, B.x0 + B.w, Y, 'rgba(148,163,184,0.10)', 1);
+    }
+}
+// 三个上区读数行
+function roText(lines){
+    const y0 = 5.72;
+    lines.forEach((l, i) => labelIn(0.20 + (l[3] || 0), y0 - i * 0.40,
+                                   l[0], l[1], l[2] || 'start', l[4] || 11));
+}
+
+// ---- 1) 等温过程：p-V 图 ----  p = nRT/V（1 mol，300 K ⇒ nRT = 2493 kPa·L）
+function drawGaspv(S){
+    const V = S.V, nRT = 2493;
+    const p = nRT / V;
+    const B = axisBox(1.30, 0.85, 7.60, 3.35, [4, 52], [0, 700]);
+    wGrid(B, 4);
+    // pV 的几何意义：矩形（先画填充，别盖住曲线）
+    const cx = B.X(V), cy = B.Y(p);
+    wPoly([[B.x0, B.y0], [cx, B.y0], [cx, cy], [B.x0, cy]],
+          'rgba(250,204,21,0.85)', 1.3, 'rgba(250,204,21,0.13)');
+    // 等温线
+    const pts = [];
+    for (let i = 0; i <= 200; i++){ const v = 3.4 + (52 - 3.4) * i / 200; pts.push([B.X(v), B.Y(nRT / v)]); }
+    wPoly(pts, '#38bdf8', 2.6, null);
+    plotFrame(B, 'V / L', 'p / kPa', [4, 16, 28, 40, 52], [0, 200, 400, 600]);
+    // 游标
+    wSeg(B.x0, cy, cx, cy, 'rgba(250,204,21,0.65)', 1.2, true);
+    wSeg(cx, B.y0, cx, cy, 'rgba(250,204,21,0.65)', 1.2, true);
+    wDot(cx, cy, '#facc15', 6.5);
+    labelIn(cx + 0.12, cy + 0.22, '(' + V.toFixed(1) + ', ' + p.toFixed(0) + ')', '#facc15', 'start', 10);
+    roText([
+        ['等温线 p = nRT/V 是双曲线：压强的下降靠体积换取', '#94a3b8', 'start', 0, 10],
+        ['V = ' + V.toFixed(2) + ' L      p = ' + p.toFixed(1) + ' kPa', '#38bdf8', 'start', 0, 12],
+        ['p·V = ' + (p * V).toFixed(1) + ' kPa·L（= nRT，定值）', '#34d399', 'start', 0, 11],
+        ['黄框面积就是 pV，滑动时面积不变', '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 2) 分子动理论：麦克斯韦速率分布 ----  g(v) ∝ v²·exp(−Mv²/2RT)
+function drawMolecules(S){
+    const T = S.T, M = 0.032, R = 8.31;         // 氧气 O₂
+    const B = axisBox(1.30, 0.85, 7.60, 3.35, [0, 2200], [0, 1.25]);
+    wGrid(B, 4);
+    const Bc = M / (2 * R * T);                 // v² 的系数
+    const vp = Math.sqrt(1 / Bc);
+    // 归一化到峰值 1：g(v) = (v/vp)²·exp(1 − (v/vp)²)
+    const g = v => { const r = v / vp; return r * r * Math.exp(1 - r * r); };
+    const pts = [];
+    for (let i = 0; i <= 240; i++){ const v = 2200 * i / 240; pts.push([B.X(v), B.Y(g(v))]); }
+    wPoly(pts, '#38bdf8', 2.6, null);
+    plotFrame(B, 'v / (m·s⁻¹)', '相对分子数', [0, 500, 1000, 1500, 2000], []);
+    // 三个特征速率的竖线
+    const vrms = Math.sqrt(3 * R * T / M), vbar = Math.sqrt(8 * R * T / Math.PI / M);
+    const marks = [[vp, '#facc15', 'v_p'], [vbar, '#34d399', 'v̄'], [vrms, '#f472b6', 'v_rms']];
+    marks.forEach(m => {
+        const X = B.X(m[0]);
+        wSeg(X, B.y0, X, B.y0 + B.h, m[1], 1.6, true);
+        labelIn(X, B.y0 + B.h + 0.22, m[2], m[1], 'center', 10);
+    });
+    const cur = g(vp);
+    wDot(B.X(vp), B.Y(cur), '#facc15', 6.0);
+    labelIn(0.20, 5.72, '温度升高 ⇒ 曲线右移、变矮、变平（面积恒为 1）', '#94a3b8', 'start', 11);
+    labelIn(0.20, 5.32, 'T = ' + T.toFixed(0) + ' K（氧气）    最概然 v_p = ' + vp.toFixed(1)
+            + ' m/s', '#facc15', 'start', 11);
+    labelIn(0.20, 4.92, '平均 v̄ = ' + vbar.toFixed(1) + ' m/s      方均根 v_rms = '
+            + vrms.toFixed(1) + ' m/s', '#34d399', 'start', 11);
+    labelIn(0.20, 4.52, 'v_p : v̄ : v_rms ≈ 1 : 1.128 : 1.225（与 T、气体种类无关）',
+            '#64748b', 'start', 10);
+}
+
+// ---- 3) 热力学第一定律：能量条 ----  ΔU = Q + W
+function drawEnergybar(S){
+    const Q = S.Q, W = 80;                      // W：外界对气体做的功
+    const dU = Q + W;
+    const lo = -240, hi = 340;
+    const Y = v => 1.10 + (v - lo) / (hi - lo) * 3.30;
+    const zero = Y(0);
+    wSeg(1.0, zero, 9.2, zero, 'rgba(148,163,184,0.85)', 1.6);
+    labelIn(0.20, zero + 0.20, '0', '#64748b', 'start', 10);
+    const bars = [[2.2, Q, '#f472b6', 'Q（吸热为正）'],
+                  [5.0, W, '#38bdf8', 'W（外界做功为正）'],
+                  [7.8, dU, '#facc15', 'ΔU = Q + W']];
+    bars.forEach(b => {
+        const y = Y(b[1]);
+        wPoly([[b[0] - 0.62, zero], [b[0] + 0.62, zero], [b[0] + 0.62, y], [b[0] - 0.62, y]],
+              b[2], 1.8, (b[1] >= 0 ? 'rgba(52,211,153,0.22)' : 'rgba(248,113,113,0.22)'));
+        labelIn(b[0], b[1] >= 0 ? y + 0.26 : y - 0.30, b[1].toFixed(0) + ' J', b[2], 'center', 11);
+        labelIn(b[0], 0.48, b[3], '#94a3b8', 'center', 9);
+    });
+    roText([
+        ['热力学第一定律 ΔU = Q + W（外界做功为正）', '#94a3b8', 'start', 0, 11],
+        ['吸热 Q = ' + Q.toFixed(0) + ' J（题设可调）', '#f472b6', 'start', 0, 12],
+        ['W = ' + W.toFixed(0) + ' J（定值）', '#38bdf8', 'start', 0, 11],
+        ['ΔU = ' + dU.toFixed(0) + ' J —— 蓝条不动，粉条决定黄条',
+         '#facc15', 'start', 0, 10],
+    ]);
+}
+
+// ---- 4) 矩形循环与热机效率 ----（单原子理想气体，kPa·L = J）
+function drawPvcycle(S){
+    const p2 = S.p2, p1 = 200, V1 = 2, V2 = 8;
+    const B = axisBox(1.30, 0.85, 7.60, 3.35, [0, 10], [0, 230]);
+    wGrid(B, 4);
+    const A = [B.X(V1), B.Y(p1)], Bp = [B.X(V2), B.Y(p1)];
+    const C = [B.X(V2), B.Y(p2)], D = [B.X(V1), B.Y(p2)];
+    // 循环包围的面积 = 净功
+    wPoly([A, Bp, C, D], 'rgba(250,204,21,0.85)', 1.6, 'rgba(250,204,21,0.16)');
+    // 四段边 + 方向箭头（顺时针 = 对外做正功）
+    wArrow(A[0], A[1], Bp[0], Bp[1], '#38bdf8', 2.6);      // 等压膨胀
+    wArrow(Bp[0], Bp[1], C[0], C[1], '#f472b6', 2.6);      // 等容降压
+    wArrow(C[0], C[1], D[0], D[1], '#f87171', 2.6);        // 等压压缩
+    wArrow(D[0], D[1], A[0], A[1], '#a78bfa', 2.6);        // 等容升压
+    plotFrame(B, 'V / L', 'p / kPa', [0, 2, 4, 6, 8, 10], [0, 50, 100, 150, 200]);
+    labelIn(A[0] - 0.18, A[1] + 0.24, 'A', '#38bdf8', 'end', 11);
+    labelIn(Bp[0] + 0.10, Bp[1] + 0.24, 'B', '#38bdf8', 'start', 11);
+    labelIn(C[0] + 0.10, C[1] - 0.30, 'C', '#f472b6', 'start', 11);
+    labelIn(D[0] - 0.18, D[1] - 0.30, 'D', '#f87171', 'end', 11);
+    const Wnet = (p1 - p2) * (V2 - V1);
+    const Qab = 2.5 * p1 * (V2 - V1);
+    const Qda = 1.5 * V1 * (p1 - p2);
+    const eta = Wnet / (Qab + Qda);
+    roText([
+        ['矩形循环：等压膨胀 → 等容降压 → 等压压缩 → 等容升压', '#94a3b8', 'start', 0, 10],
+        ['净功 = 黄框面积 = (p₁−p₂)(V₂−V₁) = ' + Wnet.toFixed(0) + ' J', '#facc15', 'start', 0, 12],
+        ['吸热 Q_in = Q_AB + Q_DA = ' + Qab.toFixed(0) + ' + ' + Qda.toFixed(0) + ' = '
+         + (Qab + Qda).toFixed(0) + ' J', '#f472b6', 'start', 0, 11],
+        ['单原子气体（Cv = 3R/2）热机效率 η = ' + (eta * 100).toFixed(2) + '%', '#34d399', 'start', 0, 10],
+    ]);
+}
+
+// ---- 5) 光电效应：E_k–ν 图 ----  E_k = hν − W₀
+//     横轴统一用 ×10¹⁴ Hz，纵轴用 ×10⁻¹⁹ J，避免单位混用。
+function drawPhoto(S){
+    const h = 6.63e-34, W0 = 4.0e-19;
+    const nu14 = S.nu / 1e14;                    // 当前频率（×10¹⁴ Hz）
+    const nu0 = W0 / h / 1e14;                   // 截止频率（×10¹⁴ Hz）
+    const Ek19 = v14 => (h * v14 * 1e14 - W0) / 1e-19;   // 输入 ×10¹⁴ Hz，输出 ×10⁻¹⁹ J
+    const B = axisBox(1.30, 0.85, 7.60, 3.35, [0, 15], [-5.5, 6.5]);
+    wGrid(B, 4);
+    // 零线
+    wSeg(B.x0, B.Y(0), B.x0 + B.w, B.Y(0), 'rgba(148,163,184,0.9)', 1.6);
+    // 直线 E_k = hν − W₀
+    wPoly([[B.X(0), B.Y(Ek19(0))], [B.X(15), B.Y(Ek19(15))]], '#38bdf8', 2.8, null);
+    plotFrame(B, 'ν / ×10¹⁴ Hz', 'E_k / ×10⁻¹⁹ J', [0, 3, 6, 9, 12, 15], [-4, -2, 0, 2, 4, 6]);
+    // 截止频率（横轴截距）
+    wSeg(B.X(nu0), B.y0, B.X(nu0), B.Y(0), '#34d399', 1.6, true);
+    labelIn(B.X(nu0), B.y0 - 0.62, 'ν₀ = ' + nu0.toFixed(2), '#34d399', 'center', 10);
+    wDot(B.X(nu0), B.Y(0), '#34d399', 5.5);
+    // 当前点
+    const cy = B.Y(Ek19(nu14));
+    wSeg(B.x0, cy, B.X(nu14), cy, 'rgba(250,204,21,0.6)', 1.2, true);
+    wSeg(B.X(nu14), B.Y(0), B.X(nu14), cy, 'rgba(250,204,21,0.6)', 1.2, true);
+    wDot(B.X(nu14), cy, '#facc15', 6.5);
+    const on = nu14 > nu0;
+    roText([
+        ['光电效应方程 E_k = hν − W₀：斜率 = h，截距 = ν₀', '#94a3b8', 'start', 0, 10],
+        ['ν = ' + nu14.toFixed(2) + ' ×10¹⁴ Hz', '#38bdf8', 'start', 0, 12],
+        ['E_k = ' + Ek19(nu14).toFixed(3) + ' ×10⁻¹⁹ J = ' + (Ek19(nu14) / 1.6).toFixed(3) + ' eV',
+         on ? '#facc15' : '#f87171', 'start', 0, 11],
+        [on ? '遏止电压 U = E_k/e = ' + (Ek19(nu14) / 1.6).toFixed(3) + ' V'
+            : 'ν < ν₀：光子能量不够付逸出功，光再强也不行',
+         on ? '#34d399' : '#f87171', 'start', 0, 11],
+    ]);
+}
+
+// ---- 6) 氢原子能级与跃迁 ----  Eₙ = −13.6/n² eV
+function drawLevels(S){
+    const n = S.n, EDGE = -14.6, TOP = 0.6;
+    const Y = E => 0.85 + (E - EDGE) / (TOP - EDGE) * 3.35;
+    const lv = E => -13.6 / (E * E);
+    // 能级线（n = 1..6）
+    for (let k = 1; k <= 6; k++){
+        const y = Y(lv(k)), hi = (k === n || k === 2);
+        wSeg(2.6, y, 8.4, y, hi ? (k === 2 ? '#f472b6' : '#facc15') : 'rgba(148,163,184,0.55)',
+             hi ? 2.6 : 1.3);
+        labelIn(2.45, y + 0.02, 'n=' + k, hi ? (k === 2 ? '#f472b6' : '#facc15') : '#64748b', 'end', 10);
+        labelIn(8.55, y + 0.02, lv(k).toFixed(k === 1 ? 1 : 3) + ' eV', '#94a3b8', 'start', 9);
+    }
+    // 基态标注
+    labelIn(0.20, Y(lv(1)) - 0.28, '基态 E₁ = −13.6 eV（能量为负 ⇒ 电子被束缚）', '#94a3b8', 'start', 10);
+    // 跃迁箭头 n → 2
+    const yF = Y(lv(n)), yT = Y(lv(2));
+    const ax = 6.6;
+    wArrow(ax, yF, ax, yT + 0.02, '#34d399', 3.0);
+    labelIn(ax + 0.16, (yF + yT) / 2, 'n=' + n + ' → 2', '#34d399', 'start', 11);
+    const dE = lv(n) - lv(2);
+    const lam = 1243.1 / dE;                       // hc ≈ 1243.1 eV·nm
+    const vis = lam >= 380 && lam <= 760;
+    roText([
+        ['巴耳末系：高能级跃迁到 n=2，光子能量 ΔE = Eₙ − E₂', '#94a3b8', 'start', 0, 10],
+        ['ΔE = ' + dE.toFixed(3) + ' eV      λ = hc/ΔE = ' + lam.toFixed(1) + ' nm',
+         vis ? '#34d399' : '#a78bfa', 'start', 0, 12],
+        [vis ? '落在可见光 380–760 nm：氢光谱里的亮线' : '不在可见光范围（紫外线）',
+         vis ? '#34d399' : '#a78bfa', 'start', 0, 11],
+        ['能级差越大 ⇒ 波长越短（656 → 410 nm）', '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 7) 放射性衰变：半衰期 ----  N = N₀·(1/2)^(t/T)
+function drawDecay(S){
+    const t = S.t, T = 5, N0 = 1000;
+    const B = axisBox(1.30, 0.85, 7.60, 3.35, [0, 30], [0, 1.08]);
+    wGrid(B, 4);
+    // 曲线
+    const pts = [];
+    for (let i = 0; i <= 200; i++){ const x = 30 * i / 200; pts.push([B.X(x), B.Y(Math.pow(0.5, x / T))]); }
+    wPoly(pts, '#38bdf8', 2.6, null);
+    plotFrame(B, 't / 年', 'N / N₀', [0, 5, 10, 15, 20, 25, 30], []);
+    // 半衰期阶梯线
+    let lvl = 0.5;
+    for (let k = 1; k <= 5; k++){
+        const y = B.Y(lvl);
+        wSeg(B.x0, y, B.X(k * T), y, 'rgba(52,211,153,0.55)', 1.2, true);
+        wSeg(B.X(k * T), B.y0, B.X(k * T), y, 'rgba(52,211,153,0.55)', 1.2, true);
+        if (k <= 3) labelIn(B.X(k * T) + 0.06, y + 0.20, '1/' + Math.pow(2, k), '#34d399', 'start', 9);
+        lvl /= 2;
+    }
+    // 游标
+    const ratio = Math.pow(0.5, t / T), cy = B.Y(ratio);
+    wSeg(B.x0, cy, B.X(t), cy, 'rgba(250,204,21,0.65)', 1.3, true);
+    wSeg(B.X(t), B.y0, B.X(t), cy, 'rgba(250,204,21,0.65)', 1.3, true);
+    wDot(B.X(t), cy, '#facc15', 6.5);
+    roText([
+        ['半衰期：每过 T 年，未衰变的核剩一半（与外界条件无关）', '#94a3b8', 'start', 0, 10],
+        ['t = ' + t.toFixed(1) + ' 年      经过 ' + (t / T).toFixed(2) + ' 个半衰期', '#38bdf8', 'start', 0, 12],
+        ['剩余 N/N₀ = ' + ratio.toFixed(5) + '      个数 = ' + (N0 * ratio).toFixed(2)
+         + ' / ' + N0, '#facc15', 'start', 0, 11],
+        ['已衰变 ' + ((1 - ratio) * 100).toFixed(2) + '%（T = 5 年、N₀ = 1000 定值）',
+         '#34d399', 'start', 0, 10],
+    ]);
+}
+function render(){
+    ctx.clearRect(0,0,cssW,cssH);
+    const S = buildScene(curParam);
+    switch(S.kind){
+        case 'gaspv':     drawGaspv(S);     break;
+        case 'molecules': drawMolecules(S); break;
+        case 'energybar': drawEnergybar(S); break;
+        case 'pvcycle':   drawPvcycle(S);   break;
+        case 'photo':     drawPhoto(S);     break;
+        case 'levels':    drawLevels(S);    break;
+        case 'decay':     drawDecay(S);     break;
+    }
+    updateReadouts(S);
+}
+
+// ===================== 读数 =====================
+function updateReadouts(S){
+    (BOARD.readouts||[]).forEach(r=>{
+        const el=document.getElementById('ro-'+r.id);
+        if (!el) return;
+        try{
+            if (r.type==='expr'){
+                const v=evalExpr(r.expr, S.env);
+                el.textContent=fmt(v, r.digits!=null?r.digits:2)+(r.unit?' '+r.unit:'');
+            } else if (r.type==='status'){
+                const v=evalExpr(r.expr, S.env), rhs=(r.rhs!=null?r.rhs:0), op=r.op||'>';
+                const ok = op==='<'? v<rhs-1e-9 : op==='>'? v>rhs+1e-9 : op==='=='? Math.abs(v-rhs)<1e-6 : v>rhs-1e-9;
+                el.textContent = ok?(r.okText||'满足'):(r.badText||'不满足');
+                el.style.color = ok?'#059669':'#dc2626';
+            }
+        }catch(e){ el.textContent='—'; }
+    });
+    // 能量/功率条
+    if (BOARD.bars){
+        const a=evalExpr(BOARD.bars.a.expr, S.env), b=evalExpr(BOARD.bars.b.expr, S.env);
+        const A=isFinite(a)&&a>0?a:0, B=isFinite(b)&&b>0?b:0, T=A+B||1;
+        document.getElementById('bar-seg1').style.width=(A/T*100)+'%';
+        document.getElementById('bar-seg2').style.width=(B/T*100)+'%';
+        document.getElementById('bar-seg1').textContent=fmt(A,1);
+        document.getElementById('bar-seg2').textContent=fmt(B,1);
+    }
+}
+
+// ===================== 控制台构建 =====================
+function renderKatex(el){ if (typeof renderMathInElement!=='undefined') renderMathInElement(el,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],throwOnError:false}); }
+let curParam = BOARD.param ? (BOARD.param.value!==undefined?BOARD.param.value:BOARD.param.min) : 0;
+function buildConsole(){
+    document.getElementById('prob-title').textContent=(DATA.lesson&&DATA.lesson.title)||'';
+    document.getElementById('prob-body').innerHTML=(DATA.lesson&&DATA.lesson.problem)||'';
+    document.getElementById('scene-caption').textContent=(BOARD.scene&&BOARD.scene.caption)||'';
+    const p=BOARD.param;
+    if (p){
+        document.getElementById('param-block').classList.remove('hidden');
+        document.getElementById('param-label').innerHTML=(p.label||p.name)+' :';
+        const s=document.getElementById('param-slider');
+        s.min=p.min; s.max=p.max; s.step=p.step||0.5; s.value=curParam;
+        document.getElementById('param-ticks').innerHTML=(p.ticks||[`${p.min}${p.unit||''}`,`${p.max}${p.unit||''}`]).map(t=>`<span>${t}</span>`).join('');
+        s.addEventListener('input', ()=>{ curParam=parseFloat(s.value); syncParamVal(); render(); });
+        syncParamVal();
+    }
+    document.getElementById('readouts').innerHTML=(BOARD.readouts||[]).map(r=>{
+        if (r.highlight) return `<div class="flex justify-between items-center pt-1"><span class="text-slate-800 font-semibold">${r.label}:</span><span id="ro-${r.id}" class="text-base font-bold bg-teal-50 text-teal-700 px-3 py-1 rounded-lg border border-teal-200">—</span></div>`;
+        return `<div class="flex justify-between border-b border-dashed border-slate-200 pb-1"><span>${r.label}:</span><span id="ro-${r.id}" class="font-bold" style="color:${r.color?col(r.color):'#0f172a'}">—</span></div>`;
+    }).join('');
+    if (BOARD.bars){
+        document.getElementById('bar-block').classList.remove('hidden');
+        document.getElementById('bar-label').textContent=BOARD.bars.label||'';
+        document.getElementById('bar-legend').innerHTML=
+            `<span><span class="inline-block w-2 h-2 rounded-sm" style="background:#4f46e5"></span> ${BOARD.bars.a.label}</span>`+
+            `<span><span class="inline-block w-2 h-2 rounded-sm" style="background:#0ea5e9"></span> ${BOARD.bars.b.label}</span>`;
+    }
+    if (BOARD.constant){ document.getElementById('constant-block').classList.remove('hidden');
+        document.getElementById('constant-val').innerHTML='≡ '+(BOARD.constant.label||''); }
+    const legend=document.getElementById('legend'); const items=[];
+    (BOARD.legend||[]).forEach(it=> items.push(`<div class="flex items-center gap-2"><span class="w-3 h-3 inline-block rounded" style="background:${col(it.color)}"></span> ${it.text}</div>`));
+    legend.innerHTML=items.join('');
+    document.getElementById('solution-body').innerHTML=(DATA.steps||[]).map((st,i)=>{
+        const no=String(i+1).padStart(2,'0');
+        return `<div class="${i>0?'border-t border-slate-100 pt-5':''}">
+            <div class="flex items-start gap-4 mb-3">
+                <span class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold font-mono text-sm flex-shrink-0">${no}</span>
+                <h3 class="text-base font-bold text-slate-900 pt-0.5">${st.title||''}</h3>
+            </div>
+            <div class="prose max-w-none text-slate-700 leading-relaxed text-sm space-y-2">${st.content||''}</div>
+        </div>`;
+    }).join('');
+    renderKatex(document.body);
+}
+function syncParamVal(){ document.getElementById('param-val').textContent = fmt(curParam,2)+((BOARD.param&&BOARD.param.unit)||''); }
+
+// ===================== 主循环 =====================
+function loop(now){ animT = now/1000; render(); requestAnimationFrame(loop); }
+window.addEventListener('resize', resizeCanvas);
+PARAM_NAME = (BOARD.param && /^[A-Za-z_$][\w$]*$/.test(BOARD.param.name||'')) ? BOARD.param.name : null;
+buildConsole();
+resizeCanvas();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
