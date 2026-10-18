@@ -1,0 +1,292 @@
+// ===================== 地理计算场景 =====================
+// 外壳 loop() 会给 animT 赋值；"use strict" 下未声明就赋值会 ReferenceError。
+let animT = 0;
+
+// 与 lib/geo_kernel.py 一致的常数（实测/约定）
+const GEO_OBLIQ = 23.44;        // 黄赤交角（度）
+const GEO_DPH = 15;             // 经度每 15° 差 1 小时
+const GEO_LAPSE = 6;            // 对流层气温垂直递减率 °C/km
+
+// ---- 与内核同式的天文量 ----
+function geoDecl(n){ return GEO_OBLIQ*Math.sin(2*Math.PI*(n-81)/365); }
+function geoCosW(phi, delta){
+    return -Math.tan(phi*Math.PI/180)*Math.tan(delta*Math.PI/180);
+}
+function geoDayLen(phi, delta){
+    const c = geoCosW(phi, delta);
+    if (c <= -1) return 24;
+    if (c >= 1) return 0;
+    return 2*Math.acos(c)*180/Math.PI/GEO_DPH;
+}
+function geoNoonAlt(phi, delta){ return 90 - Math.abs(phi - delta); }
+const GEO_MD = [31,28,31,30,31,30,31,31,30,31,30,31];
+function geoDate(n){
+    n = Math.round(n); let m = 0;
+    while (n > GEO_MD[m]){ n -= GEO_MD[m]; m++; }
+    return (m+1) + '月' + n + '日';
+}
+
+// ---- 1) 太阳直射点的回归运动 ----
+function drawDeclination(S){
+    const N = S.N;
+    const px0 = 1.00, px1 = 9.30, py = 3.00, A = 1.85;
+    const Y = d => py + d/GEO_OBLIQ*A;
+    // 赤道与南北回归线
+    [0, GEO_OBLIQ, -GEO_OBLIQ].forEach((d, i)=>{
+        dashLine(px0, Y(d), px1, Y(d), i===0 ? '#64748b' : '#475569', i===0 ? 1.4 : 1);
+        label(px0-0.12, Y(d), i===0 ? '赤道 0°' : (d>0 ? '北回归线' : '南回归线'),
+              i===0 ? '#94a3b8' : '#64748b', 'end', 9);
+    });
+    // 节气竖线
+    [[81,'春分'],[172,'夏至'],[264,'秋分'],[355,'冬至']].forEach(([n, nm])=>{
+        const X = px0 + (n-1)/364*(px1-px0);
+        dashLine(X, py-A-0.45, X, py+A+0.35, '#1e293b', 1);
+        label(X, py-A-0.62, nm, '#64748b', 'center', 10);
+    });
+    // 正弦曲线
+    ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2.8; ctx.beginPath();
+    for (let i=0; i<=364; i++){
+        const n = 1+i, X = px0 + i/364*(px1-px0), d = geoDecl(n);
+        i===0 ? ctx.moveTo(SX(X), SY(Y(d))) : ctx.lineTo(SX(X), SY(Y(d)));
+    }
+    ctx.stroke();
+    // 游标
+    const X = px0 + (N-1)/364*(px1-px0), d0 = geoDecl(N);
+    dashLine(X, py-A-0.30, X, py+A+0.30, '#f87171', 1.4);
+    ctx.fillStyle = '#f87171';
+    ctx.beginPath(); ctx.arc(SX(X), SY(Y(d0)), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.5; ctx.stroke();
+    label(5.0, 5.72, '太阳直射点纬度 δ 随日期的回归运动', '#94a3b8', 'center', 11);
+    label(9.85, 5.28, geoDate(N), '#f87171', 'end', 12);
+    label(9.85, 4.88, 'δ = ' + d0.toFixed(2) + '°', '#facc15', 'end', 12);
+    label(9.85, 4.48, d0 > 0 ? '直射北半球（北移或南移看导数）' : (d0 < 0 ? '直射南半球' : '直射赤道'),
+          '#64748b', 'end', 10);
+}
+
+// ---- 2) 正午太阳高度角（地球剖面） ----
+function drawSunAngle(S){
+    const phi = S.phi, delta = S.delta;
+    const H = geoNoonAlt(phi, delta);
+    // 太阳在正南还是正北由 φ 与 δ 的大小关系定（不在场景里写死 —— 那会随滑块失真）
+    const side = (phi > delta) ? '正南' : (phi < delta ? '正北' : '天顶');
+    const gy = 1.35, gx0 = 1.20, gx1 = 8.60;
+    groundLine(gy, gx0, gx1, '#64748b');
+    label(gx0-0.10, gy, '地平面', '#64748b', 'end', 10);
+    // 观测点
+    const ox = 4.20;
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath(); ctx.arc(SX(ox), SY(gy), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.5; ctx.stroke();
+    if (H > 0){
+        // 光线：以 H 角射向观测点（正午太阳在正南或正北，这里画在画布的水平方向）
+        const L = 4.30, r = H*Math.PI/180;
+        const dir = (side === '正北') ? 1 : -1;      // 正南→从左侧射入
+        const x2 = ox + dir*L*Math.cos(r), y2 = gy + L*Math.sin(r);
+        arrow(x2, y2, ox, gy, '#facc15', 2.6, null);
+        // 高度角弧
+        ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(SX(ox), SY(gy), 1.35*sc, dir>0 ? Math.PI : 0, dir>0 ? Math.PI - r : r, dir>0 ? true : false);
+        ctx.stroke();
+        label(ox + dir*1.85*Math.cos(r/2), gy + 1.85*Math.sin(r/2), 'H=' + H.toFixed(2) + '°',
+              '#facc15', 'center', 12);
+    } else {
+        label(ox, gy + 0.55, '正午太阳仍在地平线下 → 极夜', '#f87171', 'center', 12);
+    }
+    // 天顶方向
+    dashLine(ox, gy, ox, gy+4.20, '#334155', 1);
+    label(ox+0.10, gy+4.30, '天顶', '#475569', 'start', 10);
+    label(0.20, 5.72, '正午太阳高度 H = 90° − |φ − δ|', '#94a3b8', 'start', 11);
+    label(9.85, 5.24, '观测地纬度 φ = ' + phi.toFixed(1) + '°', '#38bdf8', 'end', 12);
+    label(9.85, 4.84, '当日直射点 δ = ' + delta.toFixed(2) + '°', '#facc15', 'end', 12);
+    label(9.85, 4.44, '|φ − δ| = ' + Math.abs(phi-delta).toFixed(2) + '°', '#a78bfa', 'end', 11);
+    label(9.85, 4.04, H > 0 ? ('正午太阳在' + side) : '极夜', '#f87171', 'end', 11);
+}
+
+// ---- 3) 昼长随纬度的变化 ----
+function drawDayCurve(S){
+    const phi = S.phi, delta = S.delta;
+    const px0 = 1.05, px1 = 8.55, py0 = 1.05, py1 = 4.95;
+    const X = p => px0 + (p+90)/180*(px1-px0);
+    const Y = h => py0 + h/24*(py1-py0);
+    // 网格：0/6/12/18/24 小时
+    [0,6,12,18,24].forEach(h=>{
+        dashLine(px0, Y(h), px1, Y(h), '#1e293b', 1);
+        label(px0-0.15, Y(h), String(h), '#64748b', 'end', 9);
+    });
+    label(px0-0.15, py1+0.42, '昼长(h)', '#64748b', 'center', 10);
+    // 纬度刻度
+    [-90,-60,-30,0,30,60,90].forEach(p=>{
+        label(X(p), py0-0.28, String(p), '#64748b', 'center', 9);
+    });
+    label((px0+px1)/2, py0-0.60, '纬度 φ', '#64748b', 'center', 10);
+    // 极昼极夜竖线（|φ| = 90 − |δ|）
+    const pc = 90 - Math.abs(delta);
+    dashLine(X(pc), py0, X(pc), py1, '#f472b6', 1.2);
+    dashLine(X(-pc), py0, X(-pc), py1, '#f472b6', 1.2);
+    label(X(pc), py1+0.28, '极昼界 ' + pc.toFixed(1) + '°', '#f472b6', 'center', 9);
+    label(X(-pc), py1+0.28, '极夜界', '#f472b6', 'center', 9);
+    // 曲线
+    ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2.8; ctx.beginPath();
+    for (let i=0; i<=360; i++){
+        const p = -90 + 180*i/360, h = geoDayLen(p, delta);
+        i===0 ? ctx.moveTo(SX(X(p)), SY(Y(h))) : ctx.lineTo(SX(X(p)), SY(Y(h)));
+    }
+    ctx.stroke();
+    // 12 小时参考线
+    dashLine(px0, Y(12), px1, Y(12), '#64748b', 1.4);
+    // 游标
+    const h0 = geoDayLen(phi, delta);
+    dashLine(X(phi), py0, X(phi), py1, '#facc15', 1.4);
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath(); ctx.arc(SX(X(phi)), SY(Y(h0)), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.5; ctx.stroke();
+    label(9.85, 5.66, '昼长 = ' + h0.toFixed(3) + ' h', '#34d399', 'end', 12);
+    label(9.85, 5.26, '纬度 φ = ' + phi.toFixed(1) + '°', '#38bdf8', 'end', 11);
+    label(9.85, 4.86, 'δ = ' + delta.toFixed(2) + '°（固定）', '#facc15', 'end', 10);
+}
+
+// ---- 4) 经度、时区与地方时 ----
+function drawGlobe(S){
+    const lam = S.lam, baseLam = S.base_lam, baseHour = S.base_hour;
+    const px0 = 0.60, px1 = 9.40, py = 3.20, band = 1.75;
+    const X = l => px0 + (l+180)/360*(px1-px0);
+    // 时区带
+    for (let z=-12; z<12; z++){
+        const x0 = X(z*15), x1 = X((z+1)*15);
+        ctx.fillStyle = (Math.abs(z%2)===0) ? 'rgba(56,189,248,0.10)' : 'rgba(56,189,248,0.03)';
+        ctx.fillRect(SX(x0), SY(py+band/2), (x1-x0)*sc, band*sc);
+    }
+    ctx.strokeStyle = '#334155'; ctx.lineWidth = 1.4;
+    ctx.strokeRect(SX(px0), SY(py+band/2), (px1-px0)*sc, band*sc);
+    // 时区竖线
+    for (let z=-12; z<=12; z++){
+        const x = X(z*15);
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(SX(x), SY(py+band/2)); ctx.lineTo(SX(x), SY(py-band/2)); ctx.stroke();
+        if (z % 3 === 0) label(x, py+band/2+0.30, (z>0?'东':(z<0?'西':'')) + Math.abs(z), '#64748b', 'center', 9);
+    }
+    label((px0+px1)/2, py+band/2+0.66, '时区（每 15° 一个）', '#64748b', 'center', 10);
+    // 基准经线
+    dashLine(X(baseLam), py-band/2-0.35, X(baseLam), py+band/2+0.10, '#facc15', 1.5);
+    label(X(baseLam), py-band/2-0.58, '基准 ' + baseLam + '°E  ' + baseHour + ':00', '#facc15', 'center', 10);
+    // 游标经度
+    const t = ((baseHour + (lam-baseLam)/GEO_DPH) % 24 + 24) % 24;
+    dashLine(X(lam), py-band/2-0.35, X(lam), py+band/2+0.10, '#f87171', 1.5);
+    ctx.fillStyle = '#f87171';
+    ctx.beginPath(); ctx.arc(SX(X(lam)), SY(py), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.5; ctx.stroke();
+    const hh = Math.floor(t), mm = Math.round((t-hh)*60);
+    label(X(lam), py-band/2-0.58, lam.toFixed(1) + '°', '#f87171', 'center', 10);
+    label(9.85, 5.66, '该地地方时 = ' + (hh<10?'0':'') + hh + ':' + (mm<10?'0':'') + mm, '#f87171', 'end', 12);
+    label(9.85, 5.26, '经度差 ' + (lam-baseLam).toFixed(1) + '° → 时差 '
+          + ((lam-baseLam)/GEO_DPH).toFixed(3) + ' h', '#38bdf8', 'end', 11);
+    label(0.20, 5.66, '经度每 15° 差 1 小时；东早西晚', '#94a3b8', 'start', 11);
+}
+
+// ---- 5) 等高线判读：相对高度 → 坡度（剖面视图） ----
+function drawContour(S){
+    const run = S.run, rise = S.rise, lmax = S.lmax;
+    const px0 = 1.10, px1 = 8.90, py0 = 1.10, py1 = 4.90;
+    const X = km => px0 + km/lmax*(px1-px0);
+    const Y = h => py0 + h/(rise*1.35)*(py1-py0);
+    // 等高线（水平）
+    for (let h=0; h<=rise; h+=S.dz){
+        dashLine(px0-0.12, Y(h), px1+0.12, Y(h), '#334155', 1);
+        label(px0-0.20, Y(h), h + ' m', '#64748b', 'end', 9);
+    }
+    groundLine(py0-0.02, px0-0.30, px1+0.30, '#475569');
+    // 地形剖面：A(0, 0) → B(run, rise)
+    ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2.8; ctx.beginPath();
+    ctx.moveTo(SX(X(0)), SY(Y(0)));
+    ctx.lineTo(SX(X(run)), SY(Y(rise)));
+    ctx.stroke();
+    // 两点
+    [[0,0,'A','#38bdf8','100 m'],[run,rise,'B','#f87171','500 m']].forEach(([km,h,nm,col,lab])=>{
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(SX(X(km)), SY(Y(h)), 6, 0, 7); ctx.fill();
+        ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.5; ctx.stroke();
+        label(X(km), Y(h)+0.30, nm + '（' + lab + '）', col, 'center', 11);
+    });
+    // 水平距离标注
+    dimLine(X(0), py0-0.42, X(run), py0-0.42, '水平 ' + run.toFixed(1) + ' km', '#38bdf8');
+    // 高度角弧
+    const ang = Math.atan((rise/(run*1000)));
+    ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(SX(X(0)), SY(Y(0)), 1.15*sc, -ang, 0); ctx.stroke();
+    label(X(0)+1.35, Y(0)+0.28, ang*180/Math.PI >= 0.02 ? (ang*180/Math.PI).toFixed(2)+'°' : '', '#facc15', 'start', 11);
+    label(9.85, 5.66, '相对高度 = ' + rise + ' m', '#f87171', 'end', 12);
+    label(9.85, 5.26, '坡度 = 相对高度 / 水平距离', '#38bdf8', 'end', 11);
+    label(9.85, 4.86, '= ' + rise + ' / ' + (run*1000).toFixed(0) + ' = '
+          + (rise/(run*1000)*100).toFixed(2) + '%', '#facc15', 'end', 11);
+}
+
+// ---- 6) 气温垂直递减率 ----
+function drawAtmos(S){
+    const T0 = S.T0, h = S.h, hmax = S.hmax, rate = S.rate;
+    const px0 = 1.10, px1 = 9.20, py0 = 1.05, py1 = 4.95;
+    const tmin = T0 - rate*hmax/1000, tmax = T0;
+    const X = T => px0 + (T-tmin)/Math.max(tmax-tmin,1e-9)*(px1-px0);
+    const Y = hh => py0 + hh/hmax*(py1-py0);
+    // 网格
+    for (let hh=0; hh<=hmax; hh+=hmax/5){
+        dashLine(px0, Y(hh), px1, Y(hh), '#1e293b', 1);
+        label(px0-0.16, Y(hh), (hh/1000).toFixed(1) + ' km', '#64748b', 'end', 9);
+    }
+    // 0 °C 线
+    if (tmin <= 0 && 0 <= tmax) {
+        dashLine(X(0), py0, X(0), py1, '#38bdf8', 1.4);
+        label(X(0), py1+0.30, '0 °C', '#38bdf8', 'center', 10);
+    }
+    // 温度曲线（线性递减）
+    ctx.strokeStyle = '#f87171'; ctx.lineWidth = 2.8; ctx.beginPath();
+    for (let i=0; i<=100; i++){
+        const hh = hmax*i/100, T = T0 - rate*hh/1000;
+        i===0 ? ctx.moveTo(SX(X(T)), SY(Y(hh))) : ctx.lineTo(SX(X(T)), SY(Y(hh)));
+    }
+    ctx.stroke();
+    // 游标
+    const T = T0 - rate*h/1000;
+    dashLine(px0, Y(h), X(T), Y(h), '#facc15', 1.2);
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath(); ctx.arc(SX(X(T)), SY(Y(h)), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.5; ctx.stroke();
+    label(X(T), Y(h)+0.30, T.toFixed(2) + ' °C', '#facc15', 'center', 11);
+    label(0.20, 5.72, '对流层气温随海拔递减（每千米约 ' + rate + ' °C）', '#94a3b8', 'start', 11);
+    label(9.85, 5.24, '海拔 h = ' + h.toFixed(0) + ' m', '#38bdf8', 'end', 12);
+    label(9.85, 4.84, '降温 ' + (rate*h/1000).toFixed(2) + ' °C', '#f87171', 'end', 11);
+    label(9.85, 4.44, '山脚 ' + T0 + ' °C → 此处 ' + T.toFixed(2) + ' °C', '#e2e8f0', 'end', 11);
+}
+
+// ---- 7) 水循环水量平衡 ----
+function drawBasin(S){
+    const P = S.P, e = S.e, area = S.area;
+    const E = P*e, R = P - E;
+    const vol = (R/1000)*area*1e6;
+    const bx = 2.20, by = 0.95, bw = 2.10, bh = 4.05;
+    const H = v => v/P*bh;
+    // 降水总柱
+    ctx.fillStyle = '#1e293b'; ctx.strokeStyle = '#334155'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(SX(bx), SY(by+bh), bw*sc, bh*sc);
+    // 蒸发（上段，蓝）
+    const hE = H(E), hR = H(R);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(SX(bx), SY(by+bh), bw*sc, hE*sc);
+    // 径流（下段，绿）
+    ctx.fillStyle = '#34d399';
+    ctx.fillRect(SX(bx), SY(by+hR), bw*sc, hR*sc);
+    label(bx+bw/2, by+bh+hE/2, '蒸发 ' + E.toFixed(1) + ' mm', '#0f172a', 'center', 11);
+    label(bx+bw/2, by+hR/2, '径流 ' + R.toFixed(1) + ' mm', '#0f172a', 'center', 11);
+    label(bx+bw/2, by+bh+0.36, '总降水 ' + P + ' mm', '#94a3b8', 'center', 11);
+    // 右侧说明与水量
+    label(5.10, 4.60, '水量平衡：降水 = 蒸发 + 径流', '#94a3b8', 'start', 12);
+    label(5.10, 4.15, '蒸发比例 e = ' + (e*100).toFixed(1) + '%', '#38bdf8', 'start', 11);
+    label(5.10, 3.75, '径流深 R = P(1−e) = ' + R.toFixed(1) + ' mm', '#34d399', 'start', 11);
+    // 换算示意（行长控制在画布内：右侧一列从 x=5.10 起，10px 字最宽约 160px）
+    label(5.10, 3.20, '折算水量 = 径流深(m) × 面积(m²)', '#94a3b8', 'start', 10);
+    label(5.10, 2.80, '= ' + (R/1000).toFixed(3) + ' m × ' + (area*1e6).toExponential(0)
+          + ' m²', '#e2e8f0', 'start', 10);
+    label(5.10, 2.36, '= ' + vol.toExponential(3) + ' m³', '#facc15', 'start', 13);
+    label(5.10, 1.90, '流域面积 ' + area + ' km²', '#64748b', 'start', 10);
+    label(5.10, 1.50, '注意单位：mm 要先化成 m 再乘面积', '#64748b', 'start', 10);
+}

@@ -89,6 +89,16 @@
   "tangent_line.html": "90870c4b54dacb7eb6e9763c4a1d3410256f24bb0b552fd746815e77854e6e7b",
   "zero_crossing.html": "73cec7135d25443ffc455b886fbb71bea73c5e864aa367ca96984b15d257b8c4"
  },
+ "edu-geography": {
+  "daylight.html": "5dc960c6af3ba67df0613fdc81e89f715b88e07dd5209680666ff89daaa954e0",
+  "declination.html": "61930570c8eb89edbf2a792262528156546bc61bc4a6c973f385583b531414c6",
+  "index.html": "8c547bd9b5e24fca0ec12d6657306eba4d81b5a8ee9906437c90c82d9a757ee1",
+  "lapse.html": "2dabcb1c3a0854915e72824f898ae8d636adacb2224d1a9fdd4bcf28e3c04e24",
+  "sunalt.html": "87bafac35750d3b3707443d0c0cd0fcb16de6ae52a7e11f57da4d658bc7baaff",
+  "terrain.html": "094163fa55a3a0c095ae12de02e33e841bbe9d7b33ecfdd00e3072388f613173",
+  "timezone.html": "7ab2644890946ab8da1d9aa67cb2090b177115c571af5f5b863a8986504cacc9",
+  "water.html": "f7404a662b5a07a04d515892569d2f7bec63cf4fbc4952cb8910b06e34c15473"
+ },
  "edu-knowledge-map": {
   "book.html": "737d6b7905df546eff4c9e62960d7e4f75e487acd0178002aa9bb76326e09ad6",
   "derivative.html": "9a08c7ba5f8a3f481f924c23d2e75f21341f135c934eb413681075adbec533f7",
