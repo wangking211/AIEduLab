@@ -1,0 +1,356 @@
+// ===================== 动量与碰撞场景 =====================
+let animT = 0;
+
+// ---- 文字锚点自动收进画布；文字比视窗还宽时自动缩小字号 ----
+function labelIn(x, y, text, color, align, size){
+    size = size || 12;
+    const x0 = view.xRange[0], x1 = view.xRange[1];
+    const pad = 0.06;
+    const avail = (x1 - x0) - 2 * pad;
+    let s = size;
+    const meas = () => { ctx.font = 'bold ' + s + 'px system-ui';
+                         return ctx.measureText(String(text)).width / (sc || 1); };
+    let w = meas();
+    while (w > avail && s > 7){ s -= 0.5; w = meas(); }
+    let a = x;
+    if (align === 'end')         a = Math.max(x, x0 + w + pad);
+    else if (align === 'center') a = Math.max(x0 + w/2 + pad, Math.min(x, x1 - w/2 - pad));
+    else                         a = Math.max(x0 + pad, Math.min(x, x1 - w - pad));
+    label(a, y, text, color, align, s);
+}
+
+// ---- 世界坐标绘图助手 ----
+function ws(x, y){ return [SX(x), SY(y)]; }
+function wSeg(x1, y1, x2, y2, col, lw, dash){
+    if (dash) ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 1.4;
+    const a = ws(x1, y1), b = ws(x2, y2);
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    if (dash) ctx.setLineDash([]);
+}
+function wPoly(pts, col, lw, fill){
+    if (pts.length < 2) return;
+    if (fill){ ctx.fillStyle = fill; ctx.beginPath();
+        pts.forEach((p,i)=>{ const q = ws(p[0], p[1]); i===0?ctx.moveTo(q[0],q[1]):ctx.lineTo(q[0],q[1]); });
+        if (pts.length > 2) ctx.closePath(); ctx.fill(); }
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 2;
+    ctx.beginPath();
+    pts.forEach((p,i)=>{ const q = ws(p[0], p[1]); i===0?ctx.moveTo(q[0],q[1]):ctx.lineTo(q[0],q[1]); });
+    ctx.stroke();
+}
+function wDot(x, y, col, r){
+    const q = ws(x, y);
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(q[0], q[1], r || 5.5, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.4; ctx.stroke();
+}
+function wArrow(x1, y1, x2, y2, col, lw){
+    const a = ws(x1, y1), b = ws(x2, y2);
+    arrow(a[0], a[1], b[0], b[1], col, lw || 2.4, null);
+}
+function axisBox(x0, y0, w, h, xr, yr){
+    return { x0: x0, y0: y0, w: w, h: h, xr: xr, yr: yr,
+        X: v => x0 + (v - xr[0]) / (xr[1] - xr[0]) * w,
+        Y: v => y0 + (v - yr[0]) / (yr[1] - yr[0]) * h };
+}
+function plotFrame(B, xlab, ylab, xticks, yticks){
+    wSeg(B.x0, B.y0, B.x0 + B.w, B.y0, 'rgba(148,163,184,0.85)', 1.6);
+    wSeg(B.x0, B.y0, B.x0, B.y0 + B.h, 'rgba(148,163,184,0.85)', 1.6);
+    xticks.forEach(t => {
+        const X = B.X(t);
+        wSeg(X, B.y0, X, B.y0 - 0.09, 'rgba(148,163,184,0.7)', 1.2);
+        labelIn(X, B.y0 - 0.30, String(t), '#64748b', 'center', 9);
+    });
+    yticks.forEach(t => {
+        const Y = B.Y(t);
+        wSeg(B.x0, Y, B.x0 - 0.09, Y, 'rgba(148,163,184,0.7)', 1.2);
+        labelIn(B.x0 - 0.16, Y, String(t), '#64748b', 'end', 9);
+    });
+    labelIn(B.x0 + B.w, B.y0 - 0.62, xlab, '#94a3b8', 'end', 10);
+    labelIn(B.x0 - 0.18, B.y0 + B.h + 0.24, ylab, '#94a3b8', 'start', 10);
+}
+function wGrid(B, n){
+    for (let i = 1; i < n; i++){
+        const X = B.x0 + B.w * i / n, Y = B.y0 + B.h * i / n;
+        wSeg(X, B.y0, X, B.y0 + B.h, 'rgba(148,163,184,0.10)', 1);
+        wSeg(B.x0, Y, B.x0 + B.w, Y, 'rgba(148,163,184,0.10)', 1);
+    }
+}
+function roText(lines){
+    const y0 = 5.72;
+    lines.forEach((l, i) => labelIn(0.20 + (l[3] || 0), y0 - i * 0.40,
+                                   l[0], l[1], l[2] || 'start', l[4] || 11));
+}
+// 小球（半径按质量开立方，视觉上「重的更大」）
+function ball(x, y, m, col, txt, alpha){
+    const r = (0.24 + 0.11 * Math.cbrt(m)) * (sc || 1);
+    const q = ws(x, y);
+    ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(q[0], q[1], r, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.6; ctx.stroke();
+    ctx.globalAlpha = 1;
+    if (txt) labelIn(x, y, txt, '#0f172a', 'center', 9);
+}
+// 速度箭头（水平，正数向右）
+function vArrowAt(x, y, r, v, scale, col){
+    if (Math.abs(v) < 1e-9) return;
+    const len = Math.max(0.45, Math.min(2.4, Math.abs(v) * scale)) * (v > 0 ? 1 : -1);
+    wArrow(x + Math.sign(v) * r, y, x + Math.sign(v) * r + len, y, col, 2.8);
+}
+
+// ---- 1) 动量定理：冲量 = 力-时间图的面积 ----
+function drawImpulse(S){
+    const t = S.t, m = 0.5, v1 = 10, v2 = -8;
+    const dp = m * (v2 - v1);              // = −9 kg·m/s
+    const F = Math.abs(dp) / t;            // 平均力大小
+    const B = axisBox(1.40, 0.95, 7.95, 3.05, [0, 0.52], [0, 1020]);
+    wGrid(B, 4);
+    wPoly([[B.x0, B.y0], [B.X(t), B.y0], [B.X(t), B.Y(F)], [B.x0, B.Y(F)]],
+          'rgba(250,204,21,0.9)', 1.8, 'rgba(250,204,21,0.18)');
+    plotFrame(B, 't / s', 'F̄ / N', [0, 0.1, 0.2, 0.3, 0.4, 0.5], [0, 250, 500, 750, 1000]);
+    labelIn((B.x0 + B.X(t)) / 2, (B.y0 + B.Y(F)) / 2, '面积 = 冲量', '#facc15', 'center', 10);
+    labelIn(B.x0 + 0.12, B.Y(F) + 0.22, 'F̄ = ' + F.toFixed(0) + ' N', '#facc15', 'start', 10);
+    // 两端的小球示意：撞墙前 / 反弹后
+    ball(2.0, 4.00, 0.5, '#38bdf8', 'm', 1);
+    vArrowAt(2.0, 4.00, 0.42, v1, 0.055, '#38bdf8');
+    labelIn(2.0, 3.62, '撞前 v = 10 m/s', '#38bdf8', 'center', 9);
+    wSeg(3.9, 3.55, 3.9, 4.45, 'rgba(148,163,184,0.9)', 3.0);
+    labelIn(4.05, 4.28, '墙', '#94a3b8', 'start', 9);
+    ball(2.0, 1.55, 0.5, '#f472b6', 'm', 1);
+    vArrowAt(2.0, 1.55, 0.42, v2, 0.055, '#f472b6');
+    labelIn(2.0, 1.17, '反弹 v = 8 m/s（反向）', '#f472b6', 'center', 9);
+    roText([
+        ['动量定理 Ft = Δp = mv₂ − mv₁：黄框面积恒等于动量的变化量', '#94a3b8', 'start', 0, 10],
+        ['碰撞时间 t = ' + t.toFixed(2) + ' s      平均力 F̄ = ' + F.toFixed(1) + ' N',
+         '#facc15', 'start', 0, 12],
+        ['|Δp| = |m(v₂ − v₁)| = ' + Math.abs(dp).toFixed(1) + ' kg·m/s（定值，方向向左）',
+         '#34d399', 'start', 0, 11],
+        ['缓冲原理：t 越大 F̄ 越小，但面积（冲量）不变 —— 安全气囊、跳垫都是这个道理',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 碰撞公共绘制（碰前 / 碰后两行） ----
+function drawCollisionRows(S, pre, post, cols){
+    const yA = 3.95, yB = 2.05, vs = 0.055;
+    // 碰前
+    labelIn(0.24, yA + 0.62, '碰前', '#94a3b8', 'start', 10);
+    let x = 1.5;
+    pre.forEach((b, i) => {
+        const r = 0.24 + 0.11 * Math.cbrt(b.m);
+        ball(x, yA, b.m, cols[i], b.m.toFixed(1) + ' kg', 1);
+        vArrowAt(x, yA, r, b.v, vs, cols[i]);
+        if (Math.abs(b.v) < 1e-9) labelIn(x, yA - 0.52, '静止', '#94a3b8', 'center', 9);
+        else labelIn(x, yA - 0.52, 'v = ' + b.v.toFixed(2) + ' m/s', cols[i], 'center', 9);
+        x += 2.4;
+    });
+    // 碰后
+    labelIn(0.24, yB + 0.62, '碰后', '#94a3b8', 'start', 10);
+    post.forEach((b, i) => {
+        const r = 0.24 + 0.11 * Math.cbrt(b.m);
+        const px = post.length === 1 ? 2.6 : 1.5 + i * 2.4;
+        ball(px, yB, b.m, cols[i], b.m.toFixed(2) + ' kg', 1);
+        vArrowAt(px, yB, r, b.v, vs, cols[i]);
+        labelIn(px, yB - 0.52, 'v′ = ' + b.v.toFixed(2) + ' m/s', cols[i], 'center', 9);
+    });
+}
+
+// ---- 2) 完全非弹性碰撞 ----
+function drawCollideIn(S){
+    const m2 = S.m2, m1 = 2.0, v1 = 6.0;
+    const vp = (m1 * v1) / (m1 + m2);
+    drawCollisionRows(S,
+        [{m: m1, v: v1}, {m: m2, v: 0.0}],
+        [{m: m1 + m2, v: vp}],
+        ['#38bdf8', '#f472b6']);
+    labelIn(5.9, 3.20, '粘在一起（完全非弹性）', '#facc15', 'start', 10);
+    roText([
+        ['完全非弹性碰撞：碰后共速，动量和恒为 12 kg·m/s', '#94a3b8', 'start', 0, 10],
+        ['m₂ = ' + m2.toFixed(1) + ' kg      碰后共速 v′ = ' + vp.toFixed(4) + ' m/s',
+         '#38bdf8', 'start', 0, 12],
+        ['动量守恒：2×6 = ' + (m1 * v1).toFixed(1) + '，碰后 (' + (m1 + m2).toFixed(1) + ')×'
+         + vp.toFixed(3) + ' = ' + ((m1 + m2) * vp).toFixed(3) + ' kg·m/s', '#34d399', 'start', 0, 11],
+        ['动能损失 ' + (18 - 0.5 * (m1 + m2) * vp * vp).toFixed(2)
+         + ' J（占 ' + ((18 - 0.5 * (m1 + m2) * vp * vp) / 18 * 100).toFixed(1) + '%）—— 变成了内能',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 3) 弹性碰撞 ----
+function drawCollideEl(S){
+    const m2 = S.m2, m1 = 1.0, v1 = 4.0;
+    const d = m1 + m2;
+    const v1p = ((m1 - m2) * v1) / d;
+    const v2p = (2 * m1 * v1) / d;
+    drawCollisionRows(S,
+        [{m: m1, v: v1}, {m: m2, v: 0.0}],
+        [{m: m1, v: v1p}, {m: m2, v: v2p}],
+        ['#38bdf8', '#f472b6']);
+    labelIn(5.9, 3.20, '弹开（动能不损失）', '#34d399', 'start', 10);
+    roText([
+        ['弹性碰撞：动量与动能**同时**守恒，总动能恒为 8 J', '#94a3b8', 'start', 0, 10],
+        ['m₂ = ' + m2.toFixed(1) + ' kg      v₁′ = ' + v1p.toFixed(4)
+         + ' m/s，v₂′ = ' + v2p.toFixed(4) + ' m/s', '#38bdf8', 'start', 0, 12],
+        ['碰后动能 = ½×1×' + (v1p * v1p).toFixed(3) + ' + ½×' + m2.toFixed(1) + '×'
+         + (v2p * v2p).toFixed(3) + ' = 8 J（定值）', '#34d399', 'start', 0, 11],
+        ['m₂ < m₁ 时 v₁′ > 0 继续前进；m₂ = m₁ 时交换速度；m₂ > m₁ 时被弹回（v₁′ < 0）',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 4) 反冲与爆炸 ----
+function drawRecoil(S){
+    const m2 = S.m2, m1 = 1.0, E = 100.0;
+    const v1 = Math.sqrt(2 * E * m2 / (m1 * (m1 + m2)));
+    const v2 = -Math.sqrt(2 * E * m1 / (m2 * (m1 + m2)));
+    const cx = 5.0, cy = 2.90;
+    const mx = Math.max(Math.abs(v1), Math.abs(v2));
+    const s = 3.9 / mx;
+    // 爆炸点
+    wDot(cx, cy, '#facc15', 6.5);
+    labelIn(cx, cy + 0.30, '爆炸前（静止）', '#facc15', 'center', 10);
+    // 两碎片
+    wArrow(cx, cy, cx + v1 * s, cy, '#38bdf8', 3.2);
+    ball(cx + v1 * s, cy, m1, '#38bdf8', m1.toFixed(1), 1);
+    labelIn(cx + v1 * s * 0.55, cy + 0.34, 'v₁ = ' + v1.toFixed(2) + ' m/s', '#38bdf8', 'center', 10);
+    wArrow(cx, cy, cx + v2 * s, cy, '#f472b6', 3.2);
+    ball(cx + v2 * s, cy, m2, '#f472b6', m2.toFixed(1), 1);
+    labelIn(cx + v2 * s * 0.55, cy - 0.42, 'v₂ = ' + v2.toFixed(2) + ' m/s', '#f472b6', 'center', 10);
+    // 动量等大反向（下方一对箭头）
+    const py = 1.55, plen = 1.7;
+    wArrow(cx, py, cx + plen, py, 'rgba(52,211,153,0.9)', 2.4);
+    wArrow(cx, py, cx - plen, py, 'rgba(52,211,153,0.9)', 2.4);
+    labelIn(cx, py + 0.28, '两块动量等大反向，矢量和为 0', '#34d399', 'center', 10);
+    roText([
+        ['反冲/爆炸：总动量始终为零 ⇒ 两块动量等大反向', '#94a3b8', 'start', 0, 10],
+        ['m₂ = ' + m2.toFixed(1) + ' kg      v₁ = ' + v1.toFixed(4)
+         + ' m/s，v₂ = ' + v2.toFixed(4) + ' m/s', '#38bdf8', 'start', 0, 12],
+        ['动能和 ½·1·v₁² + ½·m₂·v₂² = ' + (0.5 * m1 * v1 * v1 + 0.5 * m2 * v2 * v2).toFixed(2)
+         + ' J（恰等于释放的能量 100 J）', '#34d399', 'start', 0, 11],
+        ['质量小的跑得快：|v₁| : |v₂| = m₂ : m₁ —— 火箭喷气、枪炮后坐都是这个道理',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 5) 人船模型 ----
+function drawBoat(S){
+    const L = S.L, mp = 60.0, mb = 120.0;
+    const xp = L * mb / (mp + mb), xb = -L * mp / (mp + mb);
+    const s = 2.6 / 3.0;                         // 世界单位 / 米
+    const yW = 1.60, yD = 2.10;                  // 水面 / 甲板
+    // 水面
+    wSeg(0.4, yW, 9.6, yW, 'rgba(56,189,248,0.55)', 2.0);
+    labelIn(0.55, yW + 0.24, '水面', '#38bdf8', 'start', 9);
+    // 初位置（淡）
+    const bx0 = 2.0;
+    wPoly([[bx0, yD], [bx0 + 2.6, yD], [bx0 + 2.6, yD + 0.45], [bx0, yD + 0.45]],
+          'rgba(148,163,184,0.5)', 1.4, 'rgba(148,163,184,0.10)');
+    ball(bx0 + 2.05, yD + 0.72, 60, 'rgba(56,189,248,0.45)', '人', 1);
+    labelIn(bx0 + 1.3, yD - 0.30, '初位置', '#94a3b8', 'center', 9);
+    // 末位置（实）
+    const nx = bx0 + xb * s, npx = bx0 + 2.05 + (xp - xb) * s;
+    wPoly([[nx, yD], [nx + 2.6, yD], [nx + 2.6, yD + 0.45], [nx, yD + 0.45]],
+          '#f472b6', 2.0, 'rgba(244,114,182,0.16)');
+    ball(npx, yD + 0.72, 60, '#38bdf8', '人', 1);
+    labelIn(nx + 1.3, yD + 0.98, '末位置', '#f472b6', 'center', 9);
+    // 位移标注
+    wArrow(bx0 + 2.05, yD + 1.35, npx, yD + 1.35, '#38bdf8', 2.2);
+    labelIn((bx0 + 2.05 + npx) / 2, yD + 1.62, '人对地 ' + xp.toFixed(3) + ' m', '#38bdf8', 'center', 10);
+    wArrow(bx0 + 1.3, yD - 0.62, nx + 1.3, yD - 0.62, '#f472b6', 2.2);
+    labelIn((bx0 + 1.3 + nx + 1.3) / 2, yD - 0.92, '船对地 ' + xb.toFixed(3) + ' m', '#f472b6', 'center', 10);
+    // 质心（不动）
+    const cm0 = (mp * (bx0 + 2.05) + mb * (bx0 + 1.3)) / (mp + mb);
+    wSeg(cm0, 0.95, cm0, 4.25, 'rgba(52,211,153,0.75)', 1.4, true);
+    labelIn(cm0 + 0.10, 4.14, '质心不动', '#34d399', 'start', 9);
+    roText([
+        ['人船模型：系统动量恒为零 ⇒ 质心不动，人与船的位移按质量反比分配', '#94a3b8', 'start', 0, 10],
+        ['人相对船走过 L = ' + L.toFixed(2) + ' m（定值：人 60 kg、船 120 kg）',
+         '#38bdf8', 'start', 0, 12],
+        ['人对地 ' + xp.toFixed(4) + ' m（向前），船对地 ' + xb.toFixed(4) + ' m（向后）',
+         '#f472b6', 'start', 0, 11],
+        ['检查：' + xp.toFixed(3) + ' − (' + xb.toFixed(3) + ') = ' + (xp - xb).toFixed(3)
+         + ' m = L；且 60×' + xp.toFixed(3) + ' + 120×(' + xb.toFixed(3) + ') = 0',
+         '#34d399', 'start', 0, 10],
+    ]);
+}
+
+// ---- 6) 子弹打木块 ----
+function drawBullet(S){
+    const v = S.v, m = 0.02, M = 0.98, mu = 0.2, g = 9.8;
+    const vp = m * v / (m + M);
+    const dist = vp * vp / (2 * mu * g);
+    const s = 5.8 / 40.0;                        // 世界单位 / 米（量程 40 m）
+    const gy = 2.30;
+    // 地面
+    wSeg(0.6, gy, 9.4, gy, 'rgba(148,163,184,0.85)', 2.0);
+    for (let i = 0; i <= 20; i++) wSeg(1.0 + i * 0.4, gy, 1.0 + i * 0.4, gy - 0.10, 'rgba(148,163,184,0.35)', 1.0);
+    // 子弹（左侧飞行）
+    ball(1.35, gy + 0.60, 0.3, '#facc15', '', 1);
+    wArrow(1.10, gy + 0.60, 0.75, gy + 0.60, 'rgba(148,163,184,0.6)', 1.6);
+    labelIn(1.35, gy + 0.95, '子弹 ' + v.toFixed(0) + ' m/s', '#facc15', 'center', 9);
+    // 木块初位置（淡）
+    const bx0 = 3.0;
+    wPoly([[bx0, gy], [bx0 + 1.5, gy], [bx0 + 1.5, gy + 1.05], [bx0, gy + 1.05]],
+          'rgba(148,163,184,0.55)', 1.5, 'rgba(148,163,184,0.12)');
+    labelIn(bx0 + 0.75, gy + 1.28, '木块（初）', '#94a3b8', 'center', 9);
+    // 木块末位置
+    const nx = bx0 + dist * s;
+    wPoly([[nx, gy], [nx + 1.5, gy], [nx + 1.5, gy + 1.05], [nx, gy + 1.05]],
+          '#f472b6', 2.0, 'rgba(244,114,182,0.16)');
+    ball(nx + 0.75, gy + 0.45, 0.3, '#facc15', '', 1);
+    labelIn(nx + 0.75, gy + 1.28, '木块（末，含子弹）', '#f472b6', 'center', 9);
+    // 滑行距离标注
+    wArrow(bx0 + 0.75, gy - 0.42, nx + 0.75, gy - 0.42, '#34d399', 2.2);
+    labelIn((bx0 + nx) / 2 + 0.75, gy - 0.70, '滑行 ' + dist.toFixed(2) + ' m', '#34d399', 'center', 10);
+    roText([
+        ['子弹嵌入木块：动量守恒求共同速度，再用动能定理求滑行距离', '#94a3b8', 'start', 0, 10],
+        ['子弹 v = ' + v.toFixed(0) + ' m/s      共同速度 v′ = ' + vp.toFixed(4) + ' m/s',
+         '#38bdf8', 'start', 0, 12],
+        ['动能损失 = ½mv² − ½(m+M)v′² = '
+         + (0.5 * m * v * v - 0.5 * (m + M) * vp * vp).toFixed(1) + ' J（占 '
+         + ((1 - (m + M) * vp * vp / (m * v * v)) * 100).toFixed(2) + '%）', '#f472b6', 'start', 0, 11],
+        ['滑行距离 s = v′²/(2μg) = ' + dist.toFixed(3) + ' m（m = 0.02 kg、M = 0.98 kg、μ = 0.2 定值）',
+         '#34d399', 'start', 0, 10],
+    ]);
+}
+
+// ---- 7) 等质量弹性斜碰：90° 定理 ----
+function drawCollide2d(S){
+    const th = S.theta, v = 5.0;
+    const t = th * Math.PI / 180;
+    const L0 = 2.75;
+    const a1 = L0 * Math.cos(t), a2 = L0 * Math.sin(t);
+    const O = [2.15, 1.75];
+    const P1 = [O[0] + a1 * Math.cos(t), O[1] + a1 * Math.sin(t)];
+    const P2 = [O[0] + a2 * Math.sin(t), O[1] - a2 * Math.cos(t)];
+    const PV = [O[0] + L0, O[1]];
+    // 入射动量（虚线，沿 +x）
+    wArrow(O[0], O[1], PV[0], PV[1], 'rgba(148,163,184,0.85)', 2.2);
+    labelIn(PV[0] + 0.08, PV[1] + 0.22, '碰前 v', '#94a3b8', 'start', 10);
+    // 出射两速度
+    wArrow(O[0], O[1], P1[0], P1[1], '#38bdf8', 3.0);
+    wArrow(O[0], O[1], P2[0], P2[1], '#f472b6', 3.0);
+    labelIn(P1[0] + 0.10, P1[1] + 0.20, 'v₁′', '#38bdf8', 'start', 11);
+    labelIn(P2[0] + 0.10, P2[1] - 0.22, 'v₂′', '#f472b6', 'start', 11);
+    // 矢量三角形：从 v₁′ 的末端到 v 的末端就是 v₂′
+    wSeg(P1[0], P1[1], PV[0], PV[1], 'rgba(244,114,182,0.55)', 1.4, true);
+    // 直角标记
+    const r0 = 0.34;
+    const u1 = [Math.cos(t), Math.sin(t)], u2 = [Math.sin(t), -Math.cos(t)];
+    wPoly([[O[0] + r0 * u1[0], O[1] + r0 * u1[1]],
+           [O[0] + r0 * (u1[0] + u2[0]), O[1] + r0 * (u1[1] + u2[1])],
+           [O[0] + r0 * u2[0], O[1] + r0 * u2[1]]], '#34d399', 1.6, null);
+    labelIn(O[0] + 0.55, O[1] + 0.05, '90°', '#34d399', 'start', 10);
+    // 质心/靶球示意
+    ball(1.15, 3.90, 1.0, '#38bdf8', 'm', 1);
+    vArrowAt(1.15, 3.90, 0.38, 5.0, 0.11, '#38bdf8');
+    labelIn(1.15, 3.52, '入射球（靶球静止）', '#38bdf8', 'center', 9);
+    roText([
+        ['等质量弹性斜碰：动量与动能同时守恒 ⇒ 两出射速度恒成 90°', '#94a3b8', 'start', 0, 10],
+        ['偏转角 θ = ' + th.toFixed(0) + '°      |v₁′| = ' + (v * Math.cos(t)).toFixed(4)
+         + '，|v₂′| = ' + (v * Math.sin(t)).toFixed(4) + ' m/s', '#38bdf8', 'start', 0, 12],
+        ['点积 v₁′·v₂′ = ' + (a1 * a2 * (Math.cos(t) * Math.sin(t) - Math.sin(t) * Math.cos(t))).toFixed(6)
+         + '（恒为 0 ⇒ 恒垂直）', '#34d399', 'start', 0, 11],
+        ['θ=0° 是「擦过」（入射球不偏转、靶球不动）；θ=90° 是正碰（入射球停下、靶球带走 v）',
+         '#64748b', 'start', 0, 10],
+    ]);
+}

@@ -191,6 +191,16 @@
   "pulley.html": "109a78f9d313eb7a9bf72f8abbdca6c482497a7e097fd080f74f44688b4292f6",
   "series.html": "5dfddec04ec5b6fd0c0e8670ceb3eaeacc03cc6daa94d9ed24e879c9055ca43a"
  },
+ "edu-physics-momentum": {
+  "boat.html": "b627254541d84f5944090866c47095620fa57a9321c8271184a28665b29494d6",
+  "bullet.html": "fe9562e0b891deb87e29b79e3e3e81d6ed349cf50ea739571cef5950a1ac3137",
+  "elastic.html": "528e7732bfb575a3ed8e0300e68da2031f61f1a7e5c8b38fd4704c0b322ed5ba",
+  "impulse.html": "36743bba9ce8d88c1feac30d5cef2a31f12a1d296de87728ae118c7ffe754335",
+  "index.html": "abf857e74aab7cc1ac08101dea9a7ebd94bc2706390fdee9845c334c5e1d75da",
+  "inelastic.html": "d802e8c7065e6bf93f035092d05c8980e7e4f6f0244ee9854dc55c8dc88e7771",
+  "recoil.html": "4ec56155a8ec26b5abd5a2c54c2148fd742fd8403b4a20486bff2924e2d47fa8",
+  "twod.html": "8e9fdaec45796be779f9f67a0b8231cd9b873726e0a04835e6c4edabb1516999"
+ },
  "edu-physics-senior": {
   "belt.html": "75d547e877cf0fb799247d823b579a3f1fa0f19606b086aa3500bd471a2a5cfa",
   "chase.html": "b710c4076a5a976eaf2115e7f1ffc3d231b45ae7d17180c86f8f309540a08abd",
