@@ -78,6 +78,16 @@
   "stack_lifo.html": "381eaeb15441f0abb9564e90cc62e96cdad2bdb24729a18a3ae74ba3ad63eba0",
   "tree_traversal.html": "40153c973f7a3d391aa146d7d6cc277de4acbe716a4553f235a48a4b98c4d245"
  },
+ "edu-economics": {
+  "cobb_douglas.html": "51dd4507a5494aa16c67e33bc3dafc7fe7566c323fbbdbbca46aaa3cc14f11fd",
+  "elasticity.html": "863e9237014fb79cb7052f3184ef0c64a7bed8fc18fbcdda48cf7557d6148d76",
+  "gini.html": "bc416b33ec79a7d5e375e3590674a1b4ba850d2f4a0a320b1796b5a67d633213",
+  "growth.html": "58e88beccb7a3d577e503f1ba03df13d4ff6b160d2e27dccfa57c39a3e37a060",
+  "index.html": "227e3f13464b03531691784672f41948d20a247827bdf17b61bae524bc5f09e5",
+  "monopoly.html": "98f730342a5eb0b569fa32ae073d900d90431a0c6ffcc50cdb7985ee247e3371",
+  "nash.html": "14db284591d270a0b99190642c00bf5122b10469cc3701aea0fe551dc9a07b53",
+  "supply.html": "0ae3c5ec4c19787c3caf60ef5e8240abc5743310b364daa62cda90548e801483"
+ },
  "edu-function-derivative": {
   "abs_corner.html": "a6c7b55b160a029a588331485dae917e973a1f1dddfb7706eb029a8796fc331c",
   "cubic_extrema.html": "3ce28a86c38c0ae158bb11535ce7fe382616b180d3c73a4bc4e374b65b1ce038",

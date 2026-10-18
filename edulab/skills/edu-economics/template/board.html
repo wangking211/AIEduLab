@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>经济学 · 交互学习</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+<style>
+    body { font-family: "PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
+    .katex { font-size: 1.02em; }
+    canvas { display:block; }
+    input[type=range] { -webkit-appearance:none; appearance:none; height:6px; border-radius:3px; background:#cbd5e1; outline:none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#4f46e5; cursor:pointer; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.3); }
+    .scroll-thin::-webkit-scrollbar { width:6px; }
+    .scroll-thin::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+<div class="flex h-screen overflow-hidden">
+    <!-- 左：题面 + 动态控制台 -->
+    <aside class="w-[30%] min-w-[300px] max-w-[420px] bg-white border-r border-slate-200 flex flex-col">
+        <div class="px-5 py-4 border-b border-slate-200">
+            <div class="text-[11px] uppercase tracking-wider text-indigo-500 font-bold mb-1">互动教学 · 题面</div>
+            <h1 id="prob-title" class="text-lg font-bold text-slate-900"></h1>
+        </div>
+        <div class="flex-1 overflow-y-auto scroll-thin px-5 py-4 text-sm leading-relaxed" id="prob-body"></div>
+        <div class="border-t border-slate-200 px-5 py-4 bg-slate-50">
+            <div class="text-[11px] uppercase tracking-wider text-teal-600 font-bold mb-3" id="console-title">动态控制台</div>
+            <!-- 参数滑块 -->
+            <div id="param-block" class="hidden">
+                <div class="flex justify-between text-xs text-slate-600 mb-1"><span id="param-label"></span><span id="param-val" class="font-mono font-bold text-teal-700"></span></div>
+                <input id="param-slider" type="range" class="w-full">
+                <div id="param-ticks" class="flex justify-between text-[10px] text-slate-400 mt-1"></div>
+            </div>
+            <!-- 读数 -->
+            <div id="readouts" class="mt-3 space-y-2 text-sm"></div>
+            <!-- 能量/功率条 -->
+            <div id="bar-block" class="hidden mt-4">
+                <div class="text-xs text-slate-600 mb-1" id="bar-label"></div>
+                <div class="h-5 w-full bg-slate-200 rounded-full overflow-hidden flex text-[10px] text-white font-bold">
+                    <div id="bar-seg1" class="h-full flex items-center justify-center" style="width:0%;background:#4f46e5"></div>
+                    <div id="bar-seg2" class="h-full flex items-center justify-center" style="width:0%;background:#0ea5e9"></div>
+                </div>
+                <div class="flex gap-4 text-[10px] text-slate-500 mt-1" id="bar-legend"></div>
+            </div>
+            <!-- 定值指示器 -->
+            <div id="constant-block" class="hidden mt-4 border-t border-slate-200 pt-3">
+                <span class="text-[11px] text-slate-500">定值指示</span>
+                <span id="constant-val" class="ml-auto font-bold text-emerald-700"></span>
+            </div>
+        </div>
+    </aside>
+    <!-- 中：分步解析 -->
+    <main class="flex-1 bg-white overflow-y-auto scroll-thin px-6 py-5">
+        <div class="text-[11px] uppercase tracking-wider text-indigo-500 font-bold mb-2">分步解析</div>
+        <div id="solution-body" class="space-y-5"></div>
+    </main>
+    <!-- 右：数学画板 -->
+    <section class="w-[36%] min-w-[340px] bg-slate-900 flex flex-col">
+        <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+            <div class="text-[11px] uppercase tracking-wider text-teal-400 font-bold">经济学</div>
+            <div id="scene-caption" class="text-xs text-slate-400"></div>
+        </div>
+        <div class="flex-1 relative"><canvas id="math-canvas" class="absolute inset-0"></canvas></div>
+        <div id="legend" class="px-4 py-3 border-t border-slate-700 text-[11px] text-slate-300 space-y-1"></div>
+    </section>
+</div>
+
+<script type="application/json" id="lesson-data">__LESSON_DATA__</script>
+<script>
+"use strict";
+// ===================== 数据装载 =====================
+const DATA = JSON.parse(document.getElementById('lesson-data').textContent);
+const BOARD = DATA.board || {};
+const UI = Object.assign({
+    consoleTitle: "动态控制台", solutionTitle: "详细解析", current: "当前:"
+}, (DATA.lesson && DATA.lesson.ui) || {});
+
+const COLORS = {
+    force:'#f87171', effort:'#38bdf8', aux:'#94a3b8', label:'#e2e8f0',
+    obj:'#a78bfa', load:'#fbbf24', rope:'#e2e8f0', water:'#38bdf8',
+    water2:'#0ea5e9', sponge:'#34d399', ground:'#64748b', metal:'#cbd5e1',
+    wire:'#94a3b8', current:'#22d3ee', battery:'#facc15', bulb:'#fde047',
+    meter:'#f472b6', arrow:'#f87171', good:'#34d399', bad:'#f87171'
+};
+const col = c => (c && COLORS[c]) ? COLORS[c] : (c || '#e2e8f0');
+
+// ===================== 安全表达式求值 =====================
+// 表达式由 generate.py 生成（可信本地内容）：可用 @param 名(或别名 p)、+ - * / ^、
+// 及 sqrt/abs/min/max/pow/sign/PI 等白名单函数。
+const MATHENV = {sqrt:Math.sqrt, abs:Math.abs, min:Math.min, max:Math.max,
+    pow:Math.pow, sign:Math.sign, floor:Math.floor, ceil:Math.ceil, PI:Math.PI, E:Math.E,
+    sin:Math.sin, cos:Math.cos, tan:Math.tan, asin:Math.asin, acos:Math.acos, atan:Math.atan, exp:Math.exp, log:Math.log};
+const _exprCache = {};
+function evalExpr(expr, env){
+    if (typeof expr !== 'string') return expr;
+    const scope = Object.assign({}, MATHENV, env);
+    const names = Object.keys(scope);
+    const key = expr + '|' + names.join(',');
+    let fn = _exprCache[key];
+    if (!fn){ try { fn = Function(...names, '"use strict";return ('+expr.replace(/\^/g,'**')+');'); }
+              catch(e){ fn = () => NaN; } _exprCache[key] = fn; }
+    try { const v = fn(...names.map(n=>scope[n])); return (typeof v==='number') ? v : NaN; }
+    catch(e){ return NaN; }
+}
+const resolveVal = (v, env) => (typeof v === 'string') ? evalExpr(v, env) : v;
+function fmt(x, d=2){
+    if (x === null || x === undefined || !isFinite(x)) return '—';
+    let s = x.toFixed(d);
+    if (s === '-' + (0).toFixed(d)) s = (0).toFixed(d);
+    return s;
+}
+
+// ===================== 画布与世界坐标 =====================
+const canvas = document.getElementById('math-canvas');
+const ctx = canvas.getContext('2d');
+let cssW = 0, cssH = 0, sc = 1, offX = 0, offY = 0;
+const view = BOARD.view || {xRange:[0,10], yRange:[0,6]};
+const SX = x => offX + x*sc;
+const SY = y => offY - y*sc;
+
+function resizeCanvas(){
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+    canvas.style.width = rect.width+'px'; canvas.style.height = rect.height+'px';
+    ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr,dpr);
+    cssW = rect.width; cssH = rect.height;
+    const spanX = view.xRange[1]-view.xRange[0], spanY = view.yRange[1]-view.yRange[0];
+    sc = Math.min((rect.width-30)/spanX, (rect.height-30)/spanY);
+    offX = rect.width/2 - ((view.xRange[0]+view.xRange[1])/2)*sc;
+    offY = rect.height/2 + ((view.yRange[0]+view.yRange[1])/2)*sc;
+    render();
+}
+
+// ===================== 绘制基元 =====================
+function arrow(x1,y1,x2,y2,color,lw=2.5,label=null){
+    const px1=SX(x1), py1=SY(y1), px2=SX(x2), py2=SY(y2);
+    const dx=px2-px1, dy=py2-py1, L=Math.hypot(dx,dy);
+    if (L < 4) return;
+    const ang=Math.atan2(dy,dx), hl=Math.min(10, L*0.45);
+    ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=lw;
+    ctx.beginPath(); ctx.moveTo(px1,py1); ctx.lineTo(px2-hl*Math.cos(ang), py2-hl*Math.sin(ang)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px2,py2);
+    ctx.lineTo(px2-hl*Math.cos(ang-0.42), py2-hl*Math.sin(ang-0.42));
+    ctx.lineTo(px2-hl*Math.cos(ang+0.42), py2-hl*Math.sin(ang+0.42));
+    ctx.closePath(); ctx.fill();
+    if (label){
+        ctx.font='bold 12px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        const mx=(px1+px2)/2, my=(py1+py2)/2;
+        const ox=Math.cos(ang+Math.PI/2)*13, oy=Math.sin(ang+Math.PI/2)*13;
+        ctx.fillText(label, mx+ox, my+oy);
+    }
+}
+function label(x,y,text,color='#e2e8f0',align='center',size=12){
+    ctx.font='bold '+size+'px system-ui'; ctx.textAlign=align; ctx.textBaseline='middle';
+    ctx.fillStyle=color; ctx.fillText(text, SX(x), SY(y));
+}
+function dashLine(x1,y1,x2,y2,color='#94a3b8',lw=1.2){
+    ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(SX(x1),SY(y1)); ctx.lineTo(SX(x2),SY(y2)); ctx.stroke();
+    ctx.setLineDash([]);
+}
+function rectBox(x,y,w,h,fill,stroke=null,lw=1.5){
+    ctx.fillStyle=fill;
+    ctx.fillRect(SX(x), SY(y+h), w*sc, h*sc);
+    if (stroke){ ctx.strokeStyle=stroke; ctx.lineWidth=lw; ctx.strokeRect(SX(x), SY(y+h), w*sc, h*sc); }
+}
+function groundLine(y, x0, x1, color='#64748b'){
+    ctx.strokeStyle=color; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.moveTo(SX(x0),SY(y)); ctx.lineTo(SX(x1),SY(y)); ctx.stroke();
+    ctx.lineWidth=1.2;
+    for (let x=x0; x<x1; x+=0.28){
+        ctx.beginPath(); ctx.moveTo(SX(x),SY(y)); ctx.lineTo(SX(x)-6,SY(y)+8); ctx.stroke();
+    }
+}
+// 标尺线（标注长度 L 的辅助线：两端短横 + 虚线 + 中点标签）
+function dimLine(x1,y1,x2,y2,text,color='#94a3b8'){
+    dashLine(x1,y1,x2,y2,color);
+    ctx.strokeStyle=color; ctx.lineWidth=1.5;
+    const nx=(y2===y1)?0:0, ny=(x2===x1)?0:0;
+    ctx.beginPath(); ctx.moveTo(SX(x1),SY(y1)-5+ny); ctx.lineTo(SX(x1),SY(y1)+5+ny); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(SX(x2),SY(y2)-5); ctx.lineTo(SX(x2),SY(y2)+5); ctx.stroke();
+    label((x1+x2)/2, (y1+y2)/2 + 0.22, text, color);
+}
+
+// ===================== 场景状态 =====================
+let PARAM_NAME = null;
+function buildScene(pval){
+    const env = {p: pval};
+    if (PARAM_NAME) env[PARAM_NAME] = pval;
+    (BOARD.scalars||[]).forEach(s=>{ env[s.name] = evalExpr(s.expr, env); });
+    const sc2 = BOARD.scene || {};
+    const out = {kind: sc2.kind, env, raw:{}};
+    // 把场景各数值字段（可为表达式）按 env 解析
+    for (const k in sc2){
+        if (k === 'kind') continue;
+        const v = sc2[k];
+        out.raw[k] = v;
+        if (typeof v === 'number') out[k] = v;
+        else if (typeof v === 'string'){ const v2 = evalExpr(v, env); out[k] = isFinite(v2) ? v2 : v; }
+        else if (Array.isArray(v)) out[k] = v.map(z => (typeof z==='string')? evalExpr(z,env) : z);
+        else out[k] = v;
+    }
+    return out;
+}
+// ===================== 经济学场景 =====================
+let animT = 0;
+
+// ---- 通用防御：把文字锚点自动收进画布 ----
+function labelIn(x, y, text, color, align, size){
+    size = size || 12;
+    ctx.font = 'bold ' + size + 'px system-ui';
+    const w = ctx.measureText(String(text)).width / (sc || 1);
+    const x0 = view.xRange[0], x1 = view.xRange[1];
+    const pad = 0.06;
+    let a = x;
+    if (align === 'end')         a = Math.max(x, x0 + w + pad);
+    else if (align === 'center') a = Math.max(x0 + w/2 + pad, Math.min(x, x1 - w/2 - pad));
+    // 注意：文字比视窗还宽时，x1−w−pad 会是负数（标签被推到画布外）。
+    // 所以再用 x0+pad 兜一次 —— 至少让它从左边开始，而不是跑到画布外面去。
+    else                         a = Math.max(x0 + pad, Math.min(x, x1 - w - pad));
+    label(a, y, text, color, align, size);
+}
+
+function ecPlot(px0, px1, py0, py1, xr, yr){
+    const X = x => px0 + (x - xr[0])/(xr[1]-xr[0])*(px1-px0);
+    const Y = y => py0 + (y - yr[0])/(yr[1]-yr[0])*(py1-py0);
+    return {X, Y, px0, px1, py0, py1, xr, yr};
+}
+function ecSeg(P, x1, y1, x2, y2, col, lw){
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 1;
+    ctx.beginPath(); ctx.moveTo(SX(P.X(x1)), SY(P.Y(y1)));
+    ctx.lineTo(SX(P.X(x2)), SY(P.Y(y2))); ctx.stroke();
+}
+function ecPoly(P, pts, col, lw){
+    if (!pts.length) return;
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 2.2; ctx.beginPath();
+    pts.forEach((p,i)=>{ const X=SX(P.X(p[0])), Y=SY(P.Y(p[1]));
+        i===0 ? ctx.moveTo(X,Y) : ctx.lineTo(X,Y); });
+    ctx.stroke();
+}
+function ecFill(P, pts, fill){
+    if (pts.length < 3) return;
+    ctx.fillStyle = fill; ctx.beginPath();
+    pts.forEach((p,i)=>{ const X=SX(P.X(p[0])), Y=SY(P.Y(p[1]));
+        i===0 ? ctx.moveTo(X,Y) : ctx.lineTo(X,Y); });
+    ctx.closePath(); ctx.fill();
+}
+function ecFrame(P, xlab, ylab){
+    ecSeg(P, P.xr[0], P.yr[0], P.xr[1], P.yr[0], '#334155', 1.4);
+    ecSeg(P, P.xr[0], P.yr[0], P.xr[0], P.yr[1], '#334155', 1.4);
+    labelIn(P.X(P.xr[1]), P.Y(P.yr[0])-0.28, xlab, '#64748b', 'end', 10);
+    labelIn(P.X(P.xr[0])+0.14, P.Y(P.yr[1])-0.20, ylab, '#64748b', 'start', 10);
+}
+// 与内核同式
+function ecDemand(p, a, b){ return a - b*p; }
+function ecSupply(p, c, d){ return c + d*p; }
+function ecEq(a, b, c, d){ const p = (a-c)/(b+d); return [p, a - b*p]; }
+function ecEpsilon(p, a, b){ const q = a - b*p; return q === 0 ? null : -b*p/q; }
+function ecCobb(A, K, L, al){ return A*Math.pow(K,al)*Math.pow(L,1-al); }
+
+// ---- 1) 供需均衡与消费者/生产者剩余 ----
+function drawMarket(S){
+    const a = S.a, b = 2, c = 2, d = 2;
+    const P = ecPlot(1.30, 8.10, 0.95, 4.85, [0, 18], [-0.5, 20]);
+    ecFrame(P, '数量 q', '价格 p');
+    const p1 = ecEq(a, b, c, d)[0], q1 = ecEq(a, b, c, d)[1];
+    // 需求（p 从 0 到 a/b）
+    ecSeg(P, 0, a, a/b, 0, '#38bdf8', 2.6);
+    // 供给（p = (q − c)/d，从 q=0 处的 −c/d 起）
+    ecSeg(P, 0, -c/d, 20, (20 - c)/d, '#f472b6', 2.6);
+    // 消费者剩余（p* 以上、需求以下的三角形）
+    ecFill(P, [[q1, p1], [0, p1], [0, a]], 'rgba(56,189,248,0.28)');
+    // 生产者剩余（p* 以下、供给以上的三角形）
+    ecFill(P, [[q1, p1], [0, p1], [0, -c/d]], 'rgba(244,114,182,0.28)');
+    // 均衡点
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath(); ctx.arc(SX(P.X(q1)), SY(P.Y(p1)), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.5; ctx.stroke();
+    ecSeg(P, q1, 0, q1, p1, 'rgba(250,204,21,0.5)', 1.2);
+    ecSeg(P, 0, p1, q1, p1, 'rgba(250,204,21,0.5)', 1.2);
+    labelIn(P.X(0.4), P.Y(a)-0.24, '需求', '#38bdf8', 'start', 10);
+    labelIn(P.X(16.5), P.Y(8.5), '供给', '#f472b6', 'end', 10);
+    const cs = (a - b*p1)*(a - b*p1)/(2*b);
+    const ps = (c + d*p1)*(c + d*p1)/(2*d);
+    labelIn(0.20, 5.72, '供需交点决定价格与数量；两块三角形是两种「剩余」', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, '均衡 (' + q1.toFixed(2) + ', ' + p1.toFixed(2) + ')', '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, '消费者剩余 = ' + cs.toFixed(3), '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.44, '生产者剩余 = ' + ps.toFixed(3), '#f472b6', 'end', 11);
+    labelIn(9.90, 4.04, '总剩余 = ' + (cs+ps).toFixed(3), '#34d399', 'end', 11);
+}
+
+// ---- 2) 需求价格弹性 ----
+function drawElastic(S){
+    const p = S.p, a = 10, b = 2;
+    const P = ecPlot(1.30, 8.10, 0.95, 4.85, [0, 10], [-0.3, 11]);
+    ecFrame(P, '数量 q', '价格 p');
+    ecSeg(P, 0, a, a/b, 0, '#38bdf8', 2.6);
+    // |ε| = 1 的分界点：ε = −1 ⟺ −bp/q = −1 ⟺ q = bp ⟺ a−bp = bp ⟺ p = a/(2b)
+    const pUnit = a/(2*b), qUnit = a - b*pUnit;
+    ctx.fillStyle = '#a78bfa';
+    ctx.beginPath(); ctx.arc(SX(P.X(qUnit)), SY(P.Y(pUnit)), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.5; ctx.stroke();
+    labelIn(P.X(qUnit), P.Y(pUnit)-0.45, '|ε| = 1', '#a78bfa', 'center', 11);
+    // 富有/缺乏 两段的文字
+    labelIn(P.X(1.0), P.Y(9.2), '富有弹性段（|ε| > 1）', '#34d399', 'start', 10);
+    labelIn(P.X(3.4), P.Y(1.6), '缺乏弹性段（|ε| < 1）', '#f87171', 'end', 10);
+    // 当前点
+    const q = a - b*p, e = ecEpsilon(p, a, b);
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath(); ctx.arc(SX(P.X(q)), SY(P.Y(p)), 6.5, 0, 7); ctx.fill();
+    ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.5; ctx.stroke();
+    ecSeg(P, 0, p, q, p, 'rgba(250,204,21,0.5)', 1.2);
+    ecSeg(P, q, 0, q, p, 'rgba(250,204,21,0.5)', 1.2);
+    labelIn(0.20, 5.72, 'ε = (dq/dp)(p/q) = −bp/q（线性需求）', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, 'p = ' + p.toFixed(2) + ' 时 q = ' + q.toFixed(3), '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, 'ε = ' + (e === null ? '—' : e.toFixed(4)), '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.44, '|ε| = ' + (e === null ? '—' : Math.abs(e).toFixed(4))
+            + (e === null ? '' : (Math.abs(e) > 1 ? '（富有弹性）' : (Math.abs(e) < 1 ? '（缺乏弹性）' : '（单位弹性）'))),
+            '#34d399', 'end', 11);
+}
+
+// ---- 3) 索洛增长：稳态 ----
+function drawSolow(S){
+    const s = S.s, n = 0.01, g = 0.02, dl = 0.07, al = 0.3;
+    const P = ecPlot(1.30, 8.10, 0.95, 4.85, [0, 6], [0, 1.5]);
+    ecFrame(P, '人均资本 k', '人均产出/投资');
+    // 人均产出 y = k^α
+    const yPts = [], invPts = [], depPts = [];
+    for (let i=0;i<=240;i++){ const k = 6*i/240;
+        yPts.push([k, Math.pow(k, al)]);
+        invPts.push([k, s*Math.pow(k, al)]);
+        depPts.push([k, (n+g+dl)*k]);
+    }
+    ecPoly(P, yPts, 'rgba(148,163,184,0.9)', 1.8);
+    ecPoly(P, invPts, '#34d399', 2.6);
+    ecPoly(P, depPts, '#f87171', 2.4);
+    labelIn(P.X(5.2), P.Y(Math.pow(5.2,al))-0.22, 'y = k^α', '#94a3b8', 'end', 10);
+    labelIn(P.X(5.6), P.Y(s*Math.pow(5.6,al))+0.22, 's·y 投资', '#34d399', 'end', 10);
+    labelIn(P.X(3.4), P.Y((n+g+dl)*3.4)+0.24, '(n+g+δ)k 持平投资', '#f87171', 'start', 10);
+    // 稳态交点
+    const ks = Math.pow(s/(n+g+dl), 1/(1-al));
+    if (ks <= 6){
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath(); ctx.arc(SX(P.X(ks)), SY(P.Y(s*Math.pow(ks,al))), 6, 0, 7); ctx.fill();
+        ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.5; ctx.stroke();
+        ecSeg(P, ks, 0, ks, s*Math.pow(ks,al), 'rgba(250,204,21,0.5)', 1.2);
+        labelIn(P.X(ks), P.Y(0)-0.30, 'k* = ' + ks.toFixed(3), '#facc15', 'center', 10);
+    }
+    const ys = Math.pow(ks, al);
+    labelIn(0.20, 5.72, '索洛图：投资曲线与持平投资线的交点就是稳态', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, '储蓄率 s = ' + s.toFixed(3), '#34d399', 'end', 12);
+    labelIn(9.90, 4.84, '稳态 k* = ' + ks.toFixed(4) + '，y* = ' + ys.toFixed(4), '#facc15', 'end', 11);
+    labelIn(9.90, 4.44, '稳态处 sf(k*) = (n+g+δ)k*', '#64748b', 'end', 10);
+}
+
+// ---- 4) Cobb–Douglas：边际产量递减 ----
+function drawCobb(S){
+    const Kq = S.K, A = 1, L = 9, al = 0.5;
+    // 纵轴要装得下 K=20 时的 Y=13.42（否则曲线与切线会冲出绘图框）
+    const P = ecPlot(1.30, 8.10, 0.95, 4.85, [0, 20], [0, 14.5]);
+    ecFrame(P, '资本 K', '产出 Y');
+    const pts = [];
+    for (let i=0;i<=240;i++){ const k = 20*i/240; pts.push([k, ecCobb(A, k, L, al)]); }
+    ecPoly(P, pts, '#38bdf8', 2.6);
+    // 当前点的切线（斜率 = MPK）
+    const Y = ecCobb(A, Kq, L, al);
+    const mpk = A*al*Math.pow(Kq, al-1)*Math.pow(L, 1-al);
+    ecSeg(P, Math.max(0, Kq-3), Y-mpk*Math.min(3, Kq), Math.min(20, Kq+3), Y+mpk*Math.min(3, 20-Kq),
+          '#facc15', 2.2);
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath(); ctx.arc(SX(P.X(Kq)), SY(P.Y(Y)), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.5; ctx.stroke();
+    // 等产量线的含义：固定 Y 时 K 与 L 的组合
+    labelIn(0.20, 5.72, 'Cobb–Douglas：黄线切线斜率 = MPK', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, 'K = ' + Kq.toFixed(2) + ' → Y = ' + Y.toFixed(4), '#38bdf8', 'end', 12);
+    labelIn(9.90, 4.84, 'MPK = αY/K = ' + mpk.toFixed(6), '#facc15', 'end', 11);
+    const mpl = A*(1-al)*Math.pow(Kq, al)*Math.pow(L, -al);
+    labelIn(9.90, 4.44, 'MPL = (1−α)Y/L = ' + mpl.toFixed(6), '#a78bfa', 'end', 11);
+    labelIn(9.90, 4.04, 'K·MPK + L·MPL = ' + (Kq*mpk + L*mpl).toFixed(6) + ' = Y（欧拉定理）',
+            '#34d399', 'end', 10);
+}
+
+// ---- 5) 垄断定价 ----
+function drawMonopoly(S){
+    const mc = S.mc, a = 10, b = 1;
+    const P = ecPlot(1.30, 8.10, 0.95, 4.85, [0, 11], [-0.5, 11]);
+    ecFrame(P, '数量 q', '价格 / 成本');
+    ecSeg(P, 0, a, a/b, 0, '#38bdf8', 2.6);              // 需求
+    ecSeg(P, 0, a, a/(2*b), 0, '#a78bfa', 2.4);          // 边际收益 MR
+    ecSeg(P, 0, mc, 11, mc, '#f87171', 2.4);             // 边际成本
+    const qm = (a - mc)/(2*b), pm = a - b*qm;
+    // 垄断利润矩形
+    if (qm > 0) ecFill(P, [[0, mc], [qm, mc], [qm, pm], [0, pm]], 'rgba(250,204,21,0.25)');
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath(); ctx.arc(SX(P.X(qm)), SY(P.Y(pm)), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.5; ctx.stroke();
+    ecSeg(P, qm, 0, qm, pm, 'rgba(250,204,21,0.6)', 1.2);
+    ecSeg(P, 0, pm, qm, pm, 'rgba(250,204,21,0.6)', 1.2);
+    ctx.fillStyle = '#f87171';
+    ctx.beginPath(); ctx.arc(SX(P.X(qm)), SY(P.Y(mc)), 5, 0, 7); ctx.fill();
+    labelIn(P.X(0.3), P.Y(a)-0.24, '需求 p = a − bq', '#38bdf8', 'start', 10);
+    labelIn(P.X(a/(2*b)-0.4), P.Y(a/(2*b)+0.6), 'MR = a − 2bq', '#a78bfa', 'end', 10);
+    labelIn(P.X(10.6), P.Y(mc)+0.26, 'MC', '#f87171', 'end', 10);
+    const li = pm > 0 ? (pm - mc)/pm : 0;
+    labelIn(0.20, 5.72, '垄断：在 MR = MC 处定产，再回到需求曲线定价格', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, 'q* = ' + qm.toFixed(3) + '，p* = ' + pm.toFixed(3), '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, '利润 = (p* − MC)·q* = ' + ((pm-mc)*qm).toFixed(4), '#34d399', 'end', 11);
+    labelIn(9.90, 4.44, '勒纳指数 (p−MC)/p = ' + li.toFixed(4) + '（= 1/|ε|）', '#a78bfa', 'end', 11);
+}
+
+// ---- 6) 2×2 纳什均衡（猎鹿博弈） ----
+function drawNash(S){
+    const t = S.t;
+    // payoffs[i][j] = (行收益, 列收益)；下标 0 = 合作（猎鹿）、1 = 独自（猎兔）
+    const pay = [[[t, t], [0, 2]], [[2, 0], [1, 1]]];
+    const P = ecPlot(1.60, 7.60, 1.20, 4.60, [0, 3], [0, 3]);
+    // 画矩阵
+    const cellW = 1, cellH = 1;
+    for (let i=0;i<2;i++) for (let j=0;j<2;j++){
+        const x0 = 1 + j*cellW, y0 = 2 - i*cellH;
+        ecSeg(P, x0, y0, x0+cellW, y0, '#475569', 1.6);
+        ecSeg(P, x0, y0+cellH, x0+cellW, y0+cellH, '#475569', 1.6);
+        ecSeg(P, x0, y0, x0, y0+cellH, '#475569', 1.6);
+        ecSeg(P, x0+cellW, y0, x0+cellW, y0+cellH, '#475569', 1.6);
+    }
+    // 最优反应
+    const rowBR = [0, 1].map(j=>{ const v=[pay[0][j][0], pay[1][j][0]]; const mx=Math.max(v[0],v[1]);
+        return v.map((x,i)=> Math.abs(x-mx)<1e-12 ? i : -1).filter(i=>i>=0); });
+    const colBR = [0, 1].map(i=>{ const v=[pay[i][0][1], pay[i][1][1]]; const mx=Math.max(v[0],v[1]);
+        return v.map((x,j)=> Math.abs(x-mx)<1e-12 ? j : -1).filter(j=>j>=0); });
+    const isNE = (i,j)=> rowBR[j].indexOf(i) >= 0 && colBR[i].indexOf(j) >= 0;
+    for (let i=0;i<2;i++) for (let j=0;j<2;j++){
+        const x0 = 1 + j*cellW, y0 = 2 - i*cellH;
+        const ne = isNE(i, j);
+        ecFill(P, [[x0, y0], [x0+cellW, y0], [x0+cellW, y0+cellH], [x0, y0+cellH]],
+               ne ? 'rgba(250,204,21,0.28)' : 'rgba(99,102,241,0.10)');
+    }
+    // 重画边框 + 文字
+    for (let i=0;i<2;i++) for (let j=0;j<2;j++){
+        const x0 = 1 + j*cellW, y0 = 2 - i*cellH;
+        ecSeg(P, x0, y0, x0+cellW, y0, '#475569', 1.6);
+        ecSeg(P, x0, y0+cellH, x0+cellW, y0+cellH, '#475569', 1.6);
+        ecSeg(P, x0, y0, x0, y0+cellH, '#475569', 1.6);
+        ecSeg(P, x0+cellW, y0, x0+cellW, y0+cellH, '#475569', 1.6);
+        const ne = isNE(i, j);
+        labelIn(P.X(x0+cellW/2), P.Y(y0+cellH/2)+0.10,
+                '(' + pay[i][j][0] + ', ' + pay[i][j][1] + ')',
+                ne ? '#facc15' : '#cbd5e1', 'center', 13);
+    }
+    labelIn(P.X(1.5), P.Y(3.16), '猎鹿（合作）', '#34d399', 'center', 10);
+    labelIn(P.X(2.5), P.Y(3.16), '猎兔（独自）', '#f472b6', 'center', 10);
+    labelIn(P.X(0.92), P.Y(2.5), '猎鹿', '#34d399', 'end', 10);
+    labelIn(P.X(0.92), P.Y(1.5), '猎兔', '#f472b6', 'end', 10);
+    const neCount = (isNE(0,0)?1:0) + (isNE(1,1)?1:0) + (isNE(0,1)?1:0) + (isNE(1,0)?1:0);
+    labelIn(0.20, 5.72, '黄格 = 纯策略纳什均衡（双方都在对方策略下用了最优反应）', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, '合作收益 t = ' + t.toFixed(3), '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, '均衡个数 = ' + neCount, neCount >= 2 ? '#34d399' : '#f87171', 'end', 12);
+    labelIn(9.90, 4.44, neCount >= 2 ? 't ≥ 2：合作与独自都是均衡（选哪个看预期）'
+            : 't < 2：只有「独自」是均衡 —— 互不信任把好结果挤掉了', '#64748b', 'end', 10);
+}
+
+// ---- 7) 洛伦兹曲线与基尼系数 ----
+function drawLorenz(S){
+    const beta = S.beta;
+    const P = ecPlot(1.60, 8.10, 0.95, 4.85, [0, 1], [0, 1]);
+    ecFrame(P, '人口累计比例 x', '收入累计比例 L(x)');
+    // 完全平等线
+    ecSeg(P, 0, 0, 1, 1, 'rgba(148,163,184,0.9)', 1.8);
+    labelIn(P.X(0.78), P.Y(0.86), '完全平等线', '#94a3b8', 'end', 10);
+    // 洛伦兹曲线
+    const pts = [];
+    for (let i=0;i<=200;i++){ const x = i/200; pts.push([x, Math.pow(x, beta)]); }
+    // 不平等面积（对角线以下、曲线以上）
+    ecFill(P, [[0,0]].concat(pts).concat([[1,1]]), 'rgba(248,113,113,0.22)');
+    ecPoly(P, pts, '#facc15', 2.8);
+    // 面积 A：用梯形法数值算，画布上标注
+    let area = 0;
+    for (let i=0;i<pts.length-1;i++){
+        area += (pts[i][1] + pts[i+1][1])/2 * (pts[i+1][0] - pts[i][0]);
+    }
+    const gini = 1 - 2*area;
+    const f20 = Math.pow(0.2, beta);
+    labelIn(0.20, 5.72, '洛伦兹曲线越弯，收入越不平等；红线面积 ×2 就是基尼系数', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, 'β = ' + beta.toFixed(3), '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, '基尼系数 = ' + gini.toFixed(4), '#f87171', 'end', 12);
+    labelIn(9.90, 4.44, '最穷 20% 占有收入 ' + (f20*100).toFixed(2) + '%', '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.04, 'β = 1 完全平等（基尼 0）', '#64748b', 'end', 10);
+}
+function render(){
+    ctx.clearRect(0,0,cssW,cssH);
+    const S = buildScene(curParam);
+    switch(S.kind){
+        case 'market':   drawMarket(S);   break;
+        case 'elastic':  drawElastic(S);  break;
+        case 'solow':    drawSolow(S);    break;
+        case 'cobb':     drawCobb(S);     break;
+        case 'monopoly': drawMonopoly(S); break;
+        case 'nash':     drawNash(S);     break;
+        case 'lorenz':   drawLorenz(S);   break;
+    }
+    updateReadouts(S);
+}
+
+// ===================== 读数 =====================
+function updateReadouts(S){
+    (BOARD.readouts||[]).forEach(r=>{
+        const el=document.getElementById('ro-'+r.id);
+        if (!el) return;
+        try{
+            if (r.type==='expr'){
+                const v=evalExpr(r.expr, S.env);
+                el.textContent=fmt(v, r.digits!=null?r.digits:2)+(r.unit?' '+r.unit:'');
+            } else if (r.type==='status'){
+                const v=evalExpr(r.expr, S.env), rhs=(r.rhs!=null?r.rhs:0), op=r.op||'>';
+                const ok = op==='<'? v<rhs-1e-9 : op==='>'? v>rhs+1e-9 : op==='=='? Math.abs(v-rhs)<1e-6 : v>rhs-1e-9;
+                el.textContent = ok?(r.okText||'满足'):(r.badText||'不满足');
+                el.style.color = ok?'#059669':'#dc2626';
+            }
+        }catch(e){ el.textContent='—'; }
+    });
+    // 能量/功率条
+    if (BOARD.bars){
+        const a=evalExpr(BOARD.bars.a.expr, S.env), b=evalExpr(BOARD.bars.b.expr, S.env);
+        const A=isFinite(a)&&a>0?a:0, B=isFinite(b)&&b>0?b:0, T=A+B||1;
+        document.getElementById('bar-seg1').style.width=(A/T*100)+'%';
+        document.getElementById('bar-seg2').style.width=(B/T*100)+'%';
+        document.getElementById('bar-seg1').textContent=fmt(A,1);
+        document.getElementById('bar-seg2').textContent=fmt(B,1);
+    }
+}
+
+// ===================== 控制台构建 =====================
+function renderKatex(el){ if (typeof renderMathInElement!=='undefined') renderMathInElement(el,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],throwOnError:false}); }
+let curParam = BOARD.param ? (BOARD.param.value!==undefined?BOARD.param.value:BOARD.param.min) : 0;
+function buildConsole(){
+    document.getElementById('prob-title').textContent=(DATA.lesson&&DATA.lesson.title)||'';
+    document.getElementById('prob-body').innerHTML=(DATA.lesson&&DATA.lesson.problem)||'';
+    document.getElementById('scene-caption').textContent=(BOARD.scene&&BOARD.scene.caption)||'';
+    const p=BOARD.param;
+    if (p){
+        document.getElementById('param-block').classList.remove('hidden');
+        document.getElementById('param-label').innerHTML=(p.label||p.name)+' :';
+        const s=document.getElementById('param-slider');
+        s.min=p.min; s.max=p.max; s.step=p.step||0.5; s.value=curParam;
+        document.getElementById('param-ticks').innerHTML=(p.ticks||[`${p.min}${p.unit||''}`,`${p.max}${p.unit||''}`]).map(t=>`<span>${t}</span>`).join('');
+        s.addEventListener('input', ()=>{ curParam=parseFloat(s.value); syncParamVal(); render(); });
+        syncParamVal();
+    }
+    document.getElementById('readouts').innerHTML=(BOARD.readouts||[]).map(r=>{
+        if (r.highlight) return `<div class="flex justify-between items-center pt-1"><span class="text-slate-800 font-semibold">${r.label}:</span><span id="ro-${r.id}" class="text-base font-bold bg-teal-50 text-teal-700 px-3 py-1 rounded-lg border border-teal-200">—</span></div>`;
+        return `<div class="flex justify-between border-b border-dashed border-slate-200 pb-1"><span>${r.label}:</span><span id="ro-${r.id}" class="font-bold" style="color:${r.color?col(r.color):'#0f172a'}">—</span></div>`;
+    }).join('');
+    if (BOARD.bars){
+        document.getElementById('bar-block').classList.remove('hidden');
+        document.getElementById('bar-label').textContent=BOARD.bars.label||'';
+        document.getElementById('bar-legend').innerHTML=
+            `<span><span class="inline-block w-2 h-2 rounded-sm" style="background:#4f46e5"></span> ${BOARD.bars.a.label}</span>`+
+            `<span><span class="inline-block w-2 h-2 rounded-sm" style="background:#0ea5e9"></span> ${BOARD.bars.b.label}</span>`;
+    }
+    if (BOARD.constant){ document.getElementById('constant-block').classList.remove('hidden');
+        document.getElementById('constant-val').innerHTML='≡ '+(BOARD.constant.label||''); }
+    const legend=document.getElementById('legend'); const items=[];
+    (BOARD.legend||[]).forEach(it=> items.push(`<div class="flex items-center gap-2"><span class="w-3 h-3 inline-block rounded" style="background:${col(it.color)}"></span> ${it.text}</div>`));
+    legend.innerHTML=items.join('');
+    document.getElementById('solution-body').innerHTML=(DATA.steps||[]).map((st,i)=>{
+        const no=String(i+1).padStart(2,'0');
+        return `<div class="${i>0?'border-t border-slate-100 pt-5':''}">
+            <div class="flex items-start gap-4 mb-3">
+                <span class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold font-mono text-sm flex-shrink-0">${no}</span>
+                <h3 class="text-base font-bold text-slate-900 pt-0.5">${st.title||''}</h3>
+            </div>
+            <div class="prose max-w-none text-slate-700 leading-relaxed text-sm space-y-2">${st.content||''}</div>
+        </div>`;
+    }).join('');
+    renderKatex(document.body);
+}
+function syncParamVal(){ document.getElementById('param-val').textContent = fmt(curParam,2)+((BOARD.param&&BOARD.param.unit)||''); }
+
+// ===================== 主循环 =====================
+function loop(now){ animT = now/1000; render(); requestAnimationFrame(loop); }
+window.addEventListener('resize', resizeCanvas);
+PARAM_NAME = (BOARD.param && /^[A-Za-z_$][\w$]*$/.test(BOARD.param.name||'')) ? BOARD.param.name : null;
+buildConsole();
+resizeCanvas();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
