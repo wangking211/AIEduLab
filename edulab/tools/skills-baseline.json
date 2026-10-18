@@ -305,6 +305,16 @@
   "skew.html": "91b359258acc7ef792e2d146dd48ea207530aedc45389f00c3274641a69805c5",
   "tetra.html": "65099c6e776c0ef50170ce0ea2d8f46387b1d5d15dcc21924fb5944b510942fa"
  },
+ "edu-stat-inference": {
+  "ci.html": "bc7a629190cd06bfbee0dee71b283ada275103b28d0d2c804bea2928de9d2b62",
+  "index.html": "e0ce9bd45d542d7f9d84561039c3faf9affb6e2a251b0046b9184b6d3bce546c",
+  "power.html": "cbb68a8299f5e1bfd7b030b9d60f08e586104af48dfd629e6bb94ccbb7d3d489",
+  "proportion.html": "5b351a90076707847a8aa804ba377b696180e2954d9f08eebdcf4951489b50b5",
+  "regression.html": "3eeb74f40626848572abebb79b28bb4cb75921672ab668fc9e7da6b20b301f26",
+  "sampling.html": "49a89a4fd06b7462534ce94b16bb572a58df041f5ac4dd25ee0dcc4703ee5895",
+  "ttest.html": "a63fec7e3069e9370aa21e2b4838f87926fb5e4de92e1278bfd1c824e2642e76",
+  "unbiased.html": "0a9d27672216dbb0b7aabf20ad0e4f40db12d17d08429f8087b28277b875db30"
+ },
  "edu-thermochem": {
   "bond.html": "73ff6201a5c06da2e146e5b49a9a363f18ba220fafdf984008b143463c430433",
   "catalyst.html": "50947753af9d770d01e30e1a78f34dcec2aa57f142944b1146aec0c28d5735ea",

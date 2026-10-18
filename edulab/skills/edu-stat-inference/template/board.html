@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+﻿<title>统计推断 · 交互学习</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+<style>
+    body { font-family: "PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
+    .katex { font-size: 1.02em; }
+    canvas { display:block; }
+    input[type=range] { -webkit-appearance:none; appearance:none; height:6px; border-radius:3px; background:#cbd5e1; outline:none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#4f46e5; cursor:pointer; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.3); }
+    .scroll-thin::-webkit-scrollbar { width:6px; }
+    .scroll-thin::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+<div class="flex h-screen overflow-hidden">
+    <!-- 左：题面 + 动态控制台 -->
+    <aside class="w-[30%] min-w-[300px] max-w-[420px] bg-white border-r border-slate-200 flex flex-col">
+        <div class="px-5 py-4 border-b border-slate-200">
+            <div class="text-[11px] uppercase tracking-wider text-indigo-500 font-bold mb-1">互动教学 · 题面</div>
+            <h1 id="prob-title" class="text-lg font-bold text-slate-900"></h1>
+        </div>
+        <div class="flex-1 overflow-y-auto scroll-thin px-5 py-4 text-sm leading-relaxed" id="prob-body"></div>
+        <div class="border-t border-slate-200 px-5 py-4 bg-slate-50">
+            <div class="text-[11px] uppercase tracking-wider text-teal-600 font-bold mb-3" id="console-title">动态控制台</div>
+            <!-- 参数滑块 -->
+            <div id="param-block" class="hidden">
+                <div class="flex justify-between text-xs text-slate-600 mb-1"><span id="param-label"></span><span id="param-val" class="font-mono font-bold text-teal-700"></span></div>
+                <input id="param-slider" type="range" class="w-full">
+                <div id="param-ticks" class="flex justify-between text-[10px] text-slate-400 mt-1"></div>
+            </div>
+            <!-- 读数 -->
+            <div id="readouts" class="mt-3 space-y-2 text-sm"></div>
+            <!-- 能量/功率条 -->
+            <div id="bar-block" class="hidden mt-4">
+                <div class="text-xs text-slate-600 mb-1" id="bar-label"></div>
+                <div class="h-5 w-full bg-slate-200 rounded-full overflow-hidden flex text-[10px] text-white font-bold">
+                    <div id="bar-seg1" class="h-full flex items-center justify-center" style="width:0%;background:#4f46e5"></div>
+                    <div id="bar-seg2" class="h-full flex items-center justify-center" style="width:0%;background:#0ea5e9"></div>
+                </div>
+                <div class="flex gap-4 text-[10px] text-slate-500 mt-1" id="bar-legend"></div>
+            </div>
+            <!-- 定值指示器 -->
+            <div id="constant-block" class="hidden mt-4 border-t border-slate-200 pt-3">
+                <span class="text-[11px] text-slate-500">定值指示</span>
+                <span id="constant-val" class="ml-auto font-bold text-emerald-700"></span>
+            </div>
+        </div>
+    </aside>
+    <!-- 中：分步解析 -->
+    <main class="flex-1 bg-white overflow-y-auto scroll-thin px-6 py-5">
+        <div class="text-[11px] uppercase tracking-wider text-indigo-500 font-bold mb-2">分步解析</div>
+        <div id="solution-body" class="space-y-5"></div>
+    </main>
+    <!-- 右：数学画板 -->
+    <section class="w-[36%] min-w-[340px] bg-slate-900 flex flex-col">
+        <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+﻿            <div class="text-[11px] uppercase tracking-wider text-cyan-400 font-bold">统计推断</div>
+            <div id="scene-caption" class="text-xs text-slate-400"></div>
+        </div>
+        <div class="flex-1 relative"><canvas id="math-canvas" class="absolute inset-0"></canvas></div>
+        <div id="legend" class="px-4 py-3 border-t border-slate-700 text-[11px] text-slate-300 space-y-1"></div>
+    </section>
+</div>
+
+<script type="application/json" id="lesson-data">__LESSON_DATA__</script>
+<script>
+"use strict";
+// ===================== 数据装载 =====================
+const DATA = JSON.parse(document.getElementById('lesson-data').textContent);
+const BOARD = DATA.board || {};
+const UI = Object.assign({
+    consoleTitle: "动态控制台", solutionTitle: "详细解析", current: "当前:"
+}, (DATA.lesson && DATA.lesson.ui) || {});
+
+const COLORS = {
+    force:'#f87171', effort:'#38bdf8', aux:'#94a3b8', label:'#e2e8f0',
+    obj:'#a78bfa', load:'#fbbf24', rope:'#e2e8f0', water:'#38bdf8',
+    water2:'#0ea5e9', sponge:'#34d399', ground:'#64748b', metal:'#cbd5e1',
+    wire:'#94a3b8', current:'#22d3ee', battery:'#facc15', bulb:'#fde047',
+    meter:'#f472b6', arrow:'#f87171', good:'#34d399', bad:'#f87171'
+};
+const col = c => (c && COLORS[c]) ? COLORS[c] : (c || '#e2e8f0');
+
+// ===================== 安全表达式求值 =====================
+// 表达式由 generate.py 生成（可信本地内容）：可用 @param 名(或别名 p)、+ - * / ^、
+// 及 sqrt/abs/min/max/pow/sign/PI 等白名单函数。
+const MATHENV = {sqrt:Math.sqrt, abs:Math.abs, min:Math.min, max:Math.max,
+    pow:Math.pow, sign:Math.sign, floor:Math.floor, ceil:Math.ceil, PI:Math.PI, E:Math.E,
+    sin:Math.sin, cos:Math.cos, tan:Math.tan, asin:Math.asin, acos:Math.acos, atan:Math.atan, exp:Math.exp, log:Math.log};
+const _exprCache = {};
+function evalExpr(expr, env){
+    if (typeof expr !== 'string') return expr;
+    const scope = Object.assign({}, MATHENV, env);
+    const names = Object.keys(scope);
+    const key = expr + '|' + names.join(',');
+    let fn = _exprCache[key];
+    if (!fn){ try { fn = Function(...names, '"use strict";return ('+expr.replace(/\^/g,'**')+');'); }
+              catch(e){ fn = () => NaN; } _exprCache[key] = fn; }
+    try { const v = fn(...names.map(n=>scope[n])); return (typeof v==='number') ? v : NaN; }
+    catch(e){ return NaN; }
+}
+const resolveVal = (v, env) => (typeof v === 'string') ? evalExpr(v, env) : v;
+function fmt(x, d=2){
+    if (x === null || x === undefined || !isFinite(x)) return '—';
+    let s = x.toFixed(d);
+    if (s === '-' + (0).toFixed(d)) s = (0).toFixed(d);
+    return s;
+}
+
+// ===================== 画布与世界坐标 =====================
+const canvas = document.getElementById('math-canvas');
+const ctx = canvas.getContext('2d');
+let cssW = 0, cssH = 0, sc = 1, offX = 0, offY = 0;
+const view = BOARD.view || {xRange:[0,10], yRange:[0,6]};
+const SX = x => offX + x*sc;
+const SY = y => offY - y*sc;
+
+function resizeCanvas(){
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+    canvas.style.width = rect.width+'px'; canvas.style.height = rect.height+'px';
+    ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr,dpr);
+    cssW = rect.width; cssH = rect.height;
+    const spanX = view.xRange[1]-view.xRange[0], spanY = view.yRange[1]-view.yRange[0];
+    sc = Math.min((rect.width-30)/spanX, (rect.height-30)/spanY);
+    offX = rect.width/2 - ((view.xRange[0]+view.xRange[1])/2)*sc;
+    offY = rect.height/2 + ((view.yRange[0]+view.yRange[1])/2)*sc;
+    render();
+}
+
+// ===================== 绘制基元 =====================
+function arrow(x1,y1,x2,y2,color,lw=2.5,label=null){
+    const px1=SX(x1), py1=SY(y1), px2=SX(x2), py2=SY(y2);
+    const dx=px2-px1, dy=py2-py1, L=Math.hypot(dx,dy);
+    if (L < 4) return;
+    const ang=Math.atan2(dy,dx), hl=Math.min(10, L*0.45);
+    ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=lw;
+    ctx.beginPath(); ctx.moveTo(px1,py1); ctx.lineTo(px2-hl*Math.cos(ang), py2-hl*Math.sin(ang)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px2,py2);
+    ctx.lineTo(px2-hl*Math.cos(ang-0.42), py2-hl*Math.sin(ang-0.42));
+    ctx.lineTo(px2-hl*Math.cos(ang+0.42), py2-hl*Math.sin(ang+0.42));
+    ctx.closePath(); ctx.fill();
+    if (label){
+        ctx.font='bold 12px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        const mx=(px1+px2)/2, my=(py1+py2)/2;
+        const ox=Math.cos(ang+Math.PI/2)*13, oy=Math.sin(ang+Math.PI/2)*13;
+        ctx.fillText(label, mx+ox, my+oy);
+    }
+}
+function label(x,y,text,color='#e2e8f0',align='center',size=12){
+    ctx.font='bold '+size+'px system-ui'; ctx.textAlign=align; ctx.textBaseline='middle';
+    ctx.fillStyle=color; ctx.fillText(text, SX(x), SY(y));
+}
+function dashLine(x1,y1,x2,y2,color='#94a3b8',lw=1.2){
+    ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(SX(x1),SY(y1)); ctx.lineTo(SX(x2),SY(y2)); ctx.stroke();
+    ctx.setLineDash([]);
+}
+function rectBox(x,y,w,h,fill,stroke=null,lw=1.5){
+    ctx.fillStyle=fill;
+    ctx.fillRect(SX(x), SY(y+h), w*sc, h*sc);
+    if (stroke){ ctx.strokeStyle=stroke; ctx.lineWidth=lw; ctx.strokeRect(SX(x), SY(y+h), w*sc, h*sc); }
+}
+function groundLine(y, x0, x1, color='#64748b'){
+    ctx.strokeStyle=color; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.moveTo(SX(x0),SY(y)); ctx.lineTo(SX(x1),SY(y)); ctx.stroke();
+    ctx.lineWidth=1.2;
+    for (let x=x0; x<x1; x+=0.28){
+        ctx.beginPath(); ctx.moveTo(SX(x),SY(y)); ctx.lineTo(SX(x)-6,SY(y)+8); ctx.stroke();
+    }
+}
+// 标尺线（标注长度 L 的辅助线：两端短横 + 虚线 + 中点标签）
+function dimLine(x1,y1,x2,y2,text,color='#94a3b8'){
+    dashLine(x1,y1,x2,y2,color);
+    ctx.strokeStyle=color; ctx.lineWidth=1.5;
+    const nx=(y2===y1)?0:0, ny=(x2===x1)?0:0;
+    ctx.beginPath(); ctx.moveTo(SX(x1),SY(y1)-5+ny); ctx.lineTo(SX(x1),SY(y1)+5+ny); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(SX(x2),SY(y2)-5); ctx.lineTo(SX(x2),SY(y2)+5); ctx.stroke();
+    label((x1+x2)/2, (y1+y2)/2 + 0.22, text, color);
+}
+
+// ===================== 场景状态 =====================
+let PARAM_NAME = null;
+function buildScene(pval){
+    const env = {p: pval};
+    if (PARAM_NAME) env[PARAM_NAME] = pval;
+    (BOARD.scalars||[]).forEach(s=>{ env[s.name] = evalExpr(s.expr, env); });
+    const sc2 = BOARD.scene || {};
+    const out = {kind: sc2.kind, env, raw:{}};
+    // 把场景各数值字段（可为表达式）按 env 解析
+    for (const k in sc2){
+        if (k === 'kind') continue;
+        const v = sc2[k];
+        out.raw[k] = v;
+        if (typeof v === 'number') out[k] = v;
+        else if (typeof v === 'string'){ const v2 = evalExpr(v, env); out[k] = isFinite(v2) ? v2 : v; }
+        else if (Array.isArray(v)) out[k] = v.map(z => (typeof z==='string')? evalExpr(z,env) : z);
+        else out[k] = v;
+    }
+    return out;
+}
+// ===================== 统计推断场景 =====================
+let animT = 0;
+
+function labelIn(x, y, text, color, align, size){
+    size = size || 12;
+    const x0 = view.xRange[0], x1 = view.xRange[1];
+    const pad = 0.06;
+    const avail = (x1 - x0) - 2 * pad;
+    let s = size;
+    const meas = () => { ctx.font = 'bold ' + s + 'px system-ui';
+                         return ctx.measureText(String(text)).width / (sc || 1); };
+    let w = meas();
+    while (w > avail && s > 7){ s -= 0.5; w = meas(); }
+    let a = x;
+    if (align === 'end')         a = Math.max(x, x0 + w + pad);
+    else if (align === 'center') a = Math.max(x0 + w/2 + pad, Math.min(x, x1 - w/2 - pad));
+    else                         a = Math.max(x0 + pad, Math.min(x, x1 - w - pad));
+    label(a, y, text, color, align, s);
+}
+function ws(x, y){ return [SX(x), SY(y)]; }
+function wSeg(x1, y1, x2, y2, col, lw, dash){
+    if (dash) ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 1.4;
+    const a = ws(x1, y1), b = ws(x2, y2);
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    if (dash) ctx.setLineDash([]);
+}
+function wPoly(pts, col, lw, fill){
+    if (pts.length < 2) return;
+    if (fill){ ctx.fillStyle = fill; ctx.beginPath();
+        pts.forEach((p,i)=>{ const q = ws(p[0], p[1]); i===0?ctx.moveTo(q[0],q[1]):ctx.lineTo(q[0],q[1]); });
+        if (pts.length > 2) ctx.closePath(); ctx.fill(); }
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 2;
+    ctx.beginPath();
+    pts.forEach((p,i)=>{ const q = ws(p[0], p[1]); i===0?ctx.moveTo(q[0],q[1]):ctx.lineTo(q[0],q[1]); });
+    ctx.stroke();
+}
+function wDot(x, y, col, r){
+    const q = ws(x, y);
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(q[0], q[1], r || 5.5, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.2; ctx.stroke();
+}
+function wArrow(x1, y1, x2, y2, col, lw){
+    const a = ws(x1, y1), b = ws(x2, y2);
+    arrow(a[0], a[1], b[0], b[1], col, lw || 2.4, null);
+}
+function roText(lines){
+    const y0 = 5.72;
+    lines.forEach((l, i) => labelIn(0.20 + (l[3] || 0), y0 - i * 0.40,
+                                   l[0], l[1], l[2] || 'start', l[4] || 11));
+}
+// 直方图：counts 是各区间计数，[x0,x1]×[y0,y1] 是绘图框
+function histBars(counts, x0, x1, y0, y1, col, maxv, pad){
+    const n = counts.length;
+    const mx = maxv || Math.max(1, ...counts);
+    const W = (x1 - x0) / n;
+    const p = pad === undefined ? 0.03 : pad;
+    for (let i = 0; i < n; i++){
+        const h = (y1 - y0) * counts[i] / mx;
+        if (h <= 0) continue;
+        wPoly([[x0 + i * W + p, y0], [x0 + (i + 1) * W - p, y0],
+               [x0 + (i + 1) * W - p, y0 + h], [x0 + i * W + p, y0 + h]],
+              col, 1.1, col.replace('rgb', 'rgba').replace(')', ',0.28)'));
+    }
+}
+// 理论曲线（在同一坐标系里叠加）
+function overlayCurve(fn, x0, x1, y0, y1, col, lw){
+    const pts = [];
+    for (let i = 0; i <= 160; i++){
+        const t = i / 160;
+        const y = fn(x0 + (x1 - x0) * t);
+        pts.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * Math.max(0, Math.min(1, y))]);
+    }
+    wPoly(pts, col, lw || 2.2, null);
+}
+// 坐标框
+function axesBox(x0, y0, x1, y1, xlab, col){
+    wSeg(x0, y0, x1, y0, col || 'rgba(148,163,184,0.85)', 1.6);
+    wSeg(x0, y0, x0, y1, col || 'rgba(148,163,184,0.85)', 1.6);
+    if (xlab) labelIn((x0 + x1) / 2, y0 - 0.30, xlab, '#64748b', 'center', 10);
+}
+
+// ---- 1) 抽样分布与标准误 ----
+function drawSampling(S){
+    const k = Math.round(S.ni) - 1;
+    const counts = S.countsAll[k], nv = S.nList[k];
+    const lo = S.range[0], hi = S.range[1], nb = counts.length;
+    const X0 = 1.45, X1 = 9.30, Y0 = 0.95, Y1 = 4.05;
+    axesBox(X0, Y0, X1, Y1, '样本均值的取值', null);
+    const mx = Math.max(1, ...counts);
+    histBars(counts, X0, X1, Y0, Y1, '#38bdf8', mx);
+    // 理论正态曲线（同坐标系下的密度，按直方图峰值缩放）
+    const se = S.sigma / Math.sqrt(nv);
+    const mu = S.mu;
+    const peak = Math.exp(-0.5 * 0);   // 峰值处的密度比例
+    overlayCurve(x => {
+        const v = lo + (hi - lo) * ((x - X0) / (X1 - X0));
+        const dens = Math.exp(-0.5 * Math.pow((v - mu) / se, 2));
+        return dens * (mx * 0.92) / mx;
+    }, X0, X1, Y0, Y1, '#facc15', 2.4);
+    // 真值线
+    const xm = X0 + (X1 - X0) * (mu - lo) / (hi - lo);
+    wSeg(xm, Y0, xm, Y1, '#34d399', 2.0, true);
+    labelIn(xm + 0.08, Y1 - 0.10, '真值 μ = ' + mu.toFixed(0), '#34d399', 'start', 9);
+    labelIn(X0 + 0.10, Y1 - 0.10, '蓝柱 = 真实模拟 800 次得到的分布', '#38bdf8', 'start', 9);
+    labelIn(X0 + 0.10, Y1 - 0.42, '黄线 = 理论正态曲线（同尺度）', '#facc15', 'start', 9);
+    roText([
+        ['样本均值本身也是随机的 —— 重复抽样 800 次画出来就是这条钟形分布', '#94a3b8', 'start', 0, 10],
+        ['样本量 n = ' + nv + '      样本均值的标准误 SE = σ/√n = ' + se.toFixed(4),
+         '#38bdf8', 'start', 0, 12],
+        ['n 越大分布越窄：n = ' + nv + ' 时 SE = ' + se.toFixed(4)
+         + '（n=1 时 SE = ' + S.sigma.toFixed(2) + '）', '#facc15', 'start', 0, 11],
+        ['注意：分布变窄但**中心不变** —— 样本均值始终围绕真值 μ 波动', '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 2) 无偏估计 ----
+function drawUnbiased(S){
+    const k = Math.round(S.ni) - 1;
+    const nv = S.nList[k];
+    const cN = S.countsNAll[k], cN1 = S.countsN1All[k];
+    const lo = S.range[0], hi = S.range[1];
+    const X0 = 1.45, X1 = 9.30, Y0 = 0.95, Y1 = 4.05;
+    axesBox(X0, Y0, X1, Y1, '估计出的方差', null);
+    const mx = Math.max(1, ...cN, ...cN1);
+    histBars(cN, X0, X1, Y0, Y1, '#f87171', mx, 0.02);
+    histBars(cN1, X0, X1, Y0, Y1, '#38bdf8', mx, 0.02);
+    const xm = X0 + (X1 - X0) * (S.sigma2 - lo) / (hi - lo);
+    wSeg(xm, Y0, xm, Y1, '#34d399', 2.4, true);
+    labelIn(xm + 0.08, Y1 - 0.10, '真值 σ² = ' + S.sigma2.toFixed(1), '#34d399', 'start', 9);
+    labelIn(X0 + 0.10, Y1 - 0.10, '蓝 = 除以 n−1（无偏）    红 = 除以 n（有偏）', '#94a3b8', 'start', 9);
+    labelIn(X0 + 0.10, Y1 - 0.42, '两种估计量的中心不同 —— 红的一堆整体偏左', '#f87171', 'start', 9);
+    const en = S.meanNAll[k], en1 = S.meanN1All[k];
+    roText([
+        ['同一个样本可以构造出不同的方差估计量，它们的**中心**可能落在不同位置', '#94a3b8', 'start', 0, 10],
+        ['n = ' + nv + '      模拟 4000 次的平均：除以 n → ' + en.toFixed(3)
+         + '，除以 n−1 → ' + en1.toFixed(3), '#38bdf8', 'start', 0, 11],
+        ['真值 σ² = ' + S.sigma2.toFixed(2) + '      '
+         + '除以 n 的偏小比例 = (n−1)/n = ' + ((nv - 1) / nv).toFixed(4), '#facc15', 'start', 0, 11],
+        ['除以 n−1 的那个平均值**正对着真值** —— 这就是「无偏」的含义', '#34d399', 'start', 0, 10],
+    ]);
+}
+
+// ---- 3) 置信区间与覆盖率 ----
+function drawCI(S){
+    const k = Math.round(S.li) - 1;
+    const level = S.levels[k];
+    const ivs = S.ivsAll[k], means = S.meansAll[k];
+    const lo = S.range[0], hi = S.range[1];
+    const X0 = 1.45, X1 = 8.55, Y0 = 0.85, Y1 = 4.15;
+    const N = ivs.length;
+    const toX = v => X0 + (X1 - X0) * (v - lo) / (hi - lo);
+    let covered = 0;
+    for (let i = 0; i < N; i++){
+        const y = Y1 - (Y1 - Y0) * (i + 0.5) / N;
+        const [a, b] = ivs[i];
+        const hit = (a <= S.mu && S.mu <= b);
+        if (hit) covered++;
+        wSeg(toX(a), y, toX(b), y, hit ? 'rgba(52,211,153,0.85)' : '#f87171', hit ? 1.4 : 2.0);
+        wDot(toX(means[i]), y, hit ? 'rgba(52,211,153,0.9)' : '#f87171', 1.6);
+    }
+    const xm = toX(S.mu);
+    wSeg(xm, Y0 - 0.10, xm, Y1 + 0.10, '#facc15', 2.4);
+    labelIn(xm + 0.08, Y1 + 0.14, '真值 μ', '#facc15', 'start', 9);
+    labelIn(X0, Y1 + 0.14, '每一条 = 一次抽样得到的置信区间', '#94a3b8', 'start', 9);
+    roText([
+        ['置信区间的真正含义：**重复抽样时，有 (1−α) 比例的区间会盖住真值**', '#94a3b8', 'start', 0, 10],
+        ['置信水平 = ' + (level * 100).toFixed(0) + '%      模拟 ' + N + ' 次，盖住真值 '
+         + covered + ' 次 ⇒ 覆盖率 = ' + (covered / N * 100).toFixed(1) + '%',
+         '#38bdf8', 'start', 0, 12],
+        ['区间宽度 = 2·z·SE = ' + S.widths[k].toFixed(4) + '（σ = ' + S.sigma
+         + '、n = ' + S.n + ' 固定）', '#facc15', 'start', 0, 11],
+        ['红条是「没盖住」的那几条 —— 它们本来就是允许存在的，比例约 α', '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 4) t 检验与 p 值 ----
+function drawTTest(S){
+    const k = Math.round(S.di) - 1;
+    const delta = S.deltas[k];
+    const counts = S.pHistAll[k];
+    const nb = counts.length;
+    const X0 = 1.45, X1 = 9.30, Y0 = 0.95, Y1 = 4.05;
+    axesBox(X0, Y0, X1, Y1, 'p 值的取值（0 → 1）', null);
+    const mx = Math.max(1, ...counts);
+    histBars(counts, X0, X1, Y0, Y1, delta === 0 ? '#facc15' : '#38bdf8', mx);
+    // 均匀参考线
+    const uni = mx / nb * 1.0;
+    wSeg(X0, Y0 + (Y1 - Y0) * uni / mx, X1, Y0 + (Y1 - Y0) * uni / mx,
+         'rgba(52,211,153,0.9)', 2.0, true);
+    labelIn(X1 - 0.06, Y0 + (Y1 - Y0) * uni / mx + 0.18, '若 p 值均匀，应落在这条线上',
+            '#34d399', 'end', 9);
+    // 0.05 临界线
+    const xc = X0 + (X1 - X0) * 0.05;
+    wSeg(xc, Y0, xc, Y1, '#f87171', 2.0, true);
+    labelIn(xc + 0.06, Y1 - 0.10, 'p = 0.05（拒绝域）', '#f87171', 'start', 9);
+    const small = counts.slice(0, 1).reduce((a, b) => a + b, 0);
+    roText([
+        ['p 值是「假设 H₀ 成立时，观察到这么极端结果的概率」', '#94a3b8', 'start', 0, 10],
+        ['真实效应 δ = ' + delta.toFixed(2) + '      模拟 ' + S.np +
+         ' 次检验，p < 0.05 的比例 = ' + (S.rejAll[k] * 100).toFixed(1) + '%',
+         delta === 0 ? '#facc15' : '#38bdf8', 'start', 0, 12],
+        ['δ = 0（H₀ 真）时 p 值**服从均匀分布** ⇒ 落在 0.05 以下的恰占 5%',
+         '#34d399', 'start', 0, 11],
+        ['δ > 0 时分布明显向左压 —— 真实效应越大，小 p 值越多（功效越高）',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 5) 功效与样本量 ----
+function drawPower(S){
+    const k = Math.round(S.ni) - 1;
+    const nv = S.nList[k];
+    const X0 = 1.45, X1 = 9.30, Y0 = 0.95, Y1 = 4.05;
+    axesBox(X0, Y0, X1, Y1, '真实效应 δ / σ（横轴）', null);
+    const dmax = S.dmax;
+    const toX = d => X0 + (X1 - X0) * d / dmax;
+    const toY = p => Y0 + (Y1 - Y0) * p;
+    // α 参考线
+    wSeg(X0, toY(0.05), X1, toY(0.05), 'rgba(248,113,113,0.8)', 1.8, true);
+    labelIn(X1 - 0.06, toY(0.05) + 0.20, 'α = 0.05（δ=0 时的功效）', '#f87171', 'end', 9);
+    // 当前 n 的功效曲线
+    const curve = S.powerAll[k];
+    const pts = curve.map((p, i) => [toX(dmax * i / (curve.length - 1)), toY(p)]);
+    wPoly(pts, '#38bdf8', 2.8, null);
+    // 其他 n 的曲线（淡）
+    S.powerAll.forEach((c2, j) => {
+        if (j === k) return;
+        const p2 = c2.map((p, i) => [toX(dmax * i / (c2.length - 1)), toY(p)]);
+        wPoly(p2, 'rgba(148,163,184,0.35)', 1.2, null);
+    });
+    labelIn(X0 + 0.10, Y1 - 0.10, '蓝粗线 = 当前 n 的功效曲线；灰细线 = 其他 n', '#94a3b8', 'start', 9);
+    roText([
+        ['功效 = 「真有效应时能检验出来」的概率；δ = 0 时功效恰等于 α', '#94a3b8', 'start', 0, 10],
+        ['n = ' + nv + '      在 δ/σ = 0.5 处的功效 = ' + S.powerAt05[k].toFixed(4),
+         '#38bdf8', 'start', 0, 12],
+        ['要达到 0.80 的功效，需要 δ/σ ≈ ' + S.dNeeded[k].toFixed(3)
+         + '（或把 n 增大到 ' + S.nFor80 + '）', '#facc15', 'start', 0, 11],
+        ['规律：δ 越大、σ 越小、n 越大、α 越大 ⇒ 功效越高', '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 6) 最小二乘回归 ----
+function drawRegression(S){
+    const k = Math.round(S.si) - 1;
+    const sigma = S.sigmas[k];
+    const pts = S.ptsAll[k];
+    const b = S.bAll[k], a = S.aAll[k], r2 = S.r2All[k];
+    const X0 = 1.45, X1 = 9.30, Y0 = 0.95, Y1 = 4.05;
+    const xlo = 0, xhi = 10, ylo = S.yrange[0], yhi = S.yrange[1];
+    const toX = v => X0 + (X1 - X0) * (v - xlo) / (xhi - xlo);
+    const toY = v => Y0 + (Y1 - Y0) * (v - ylo) / (yhi - ylo);
+    axesBox(X0, Y0, X1, Y1, 'x', null);
+    // 拟合直线
+    wSeg(toX(xlo), toY(a + b * xlo), toX(xhi), toY(a + b * xhi), '#facc15', 2.8);
+    labelIn(toX(xhi) - 0.10, toY(a + b * xhi) + 0.24,
+            'ŷ = ' + a.toFixed(2) + ' + ' + b.toFixed(3) + 'x', '#facc15', 'end', 10);
+    // 残差竖线 + 散点
+    pts.forEach(p => {
+        wSeg(toX(p[0]), toY(a + b * p[0]), toX(p[0]), toY(p[1]), 'rgba(148,163,184,0.55)', 1.0, true);
+        wDot(toX(p[0]), toY(p[1]), '#38bdf8', 4.0);
+    });
+    labelIn(X0 + 0.10, Y1 - 0.10, '蓝点 = 观测数据；黄线 = 最小二乘直线', '#94a3b8', 'start', 9);
+    labelIn(X0 + 0.10, Y1 - 0.42, '灰虚线 = 残差（观测值 − 拟合值）', '#64748b', 'start', 9);
+    roText([
+        ['最小二乘：选一条直线，使**残差平方和**最小（等价于让灰虚线尽量短）', '#94a3b8', 'start', 0, 10],
+        ['噪声 σ = ' + sigma.toFixed(2) + '      拟合斜率 ' + b.toFixed(4)
+         + '（真值 2.0000）      截距 ' + a.toFixed(4) + '（真值 1.0000）', '#38bdf8', 'start', 0, 11],
+        ['决定系数 R² = ' + r2.toFixed(4) + ' —— 表示「x 能解释 y 的多少变化」',
+         '#facc15', 'start', 0, 12],
+        ['噪声越大，R² 越小、斜率估计越不稳；但残差之和恒为 0（最小二乘的必然性质）',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 7) 比例的估计与检验 ----
+function drawProportion(S){
+    const k = Math.round(S.ni) - 1;
+    const nv = S.nList[k];
+    const counts = S.countsAll[k];
+    const lo = S.range[0], hi = S.range[1];
+    const X0 = 1.45, X1 = 9.30, Y0 = 0.95, Y1 = 4.05;
+    axesBox(X0, Y0, X1, Y1, '样本比例 p̂ 的取值', null);
+    const mx = Math.max(1, ...counts);
+    histBars(counts, X0, X1, Y0, Y1, '#38bdf8', mx);
+    // 理论正态曲线
+    const se = Math.sqrt(S.pTrue * (1 - S.pTrue) / nv);
+    overlayCurve(x => {
+        const v = lo + (hi - lo) * ((x - X0) / (X1 - X0));
+        return Math.exp(-0.5 * Math.pow((v - S.pTrue) / se, 2)) * 0.92;
+    }, X0, X1, Y0, Y1, '#facc15', 2.4);
+    const xm = X0 + (X1 - X0) * (S.pTrue - lo) / (hi - lo);
+    wSeg(xm, Y0, xm, Y1, '#34d399', 2.2, true);
+    labelIn(xm + 0.08, Y1 - 0.10, '真值 p = ' + S.pTrue.toFixed(2), '#34d399', 'start', 9);
+    labelIn(X0 + 0.10, Y1 - 0.42, '黄线 = 理论抽样分布（二项的正态近似）', '#facc15', 'start', 9);
+    roText([
+        ['比例的抽样分布：把每次「取 n 个样本算比例」的结果堆积起来', '#94a3b8', 'start', 0, 10],
+        ['n = ' + nv + '      样本比例的标准误 √(p(1−p)/n) = ' + se.toFixed(4),
+         '#38bdf8', 'start', 0, 12],
+        ['95% 置信区间半宽 = 1.96 × ' + se.toFixed(4) + ' = ' + (1.96 * se).toFixed(4)
+         + '（p̂ ≈ ' + S.pTrue.toFixed(2) + ' 时）', '#facc15', 'start', 0, 11],
+        ['n 越大区间越窄，但**按 √n 的比例**变窄 —— 想让精度翻倍要把 n 增到 4 倍',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+function render(){
+    ctx.clearRect(0,0,cssW,cssH);
+    const S = buildScene(curParam);
+    switch(S.kind){
+﻿        case 'histmean':    drawSampling(S);   break;
+        case 'histvar':     drawUnbiased(S);   break;
+        case 'ciplot':      drawCI(S);         break;
+        case 'phist':       drawTTest(S);      break;
+        case 'powercurve':  drawPower(S);      break;
+        case 'scatter':     drawRegression(S); break;
+        case 'prophist':    drawProportion(S); break;    }
+    updateReadouts(S);
+}
+
+// ===================== 读数 =====================
+function updateReadouts(S){
+    (BOARD.readouts||[]).forEach(r=>{
+        const el=document.getElementById('ro-'+r.id);
+        if (!el) return;
+        try{
+            if (r.type==='expr'){
+                const v=evalExpr(r.expr, S.env);
+                el.textContent=fmt(v, r.digits!=null?r.digits:2)+(r.unit?' '+r.unit:'');
+            } else if (r.type==='status'){
+                const v=evalExpr(r.expr, S.env), rhs=(r.rhs!=null?r.rhs:0), op=r.op||'>';
+                const ok = op==='<'? v<rhs-1e-9 : op==='>'? v>rhs+1e-9 : op==='=='? Math.abs(v-rhs)<1e-6 : v>rhs-1e-9;
+                el.textContent = ok?(r.okText||'满足'):(r.badText||'不满足');
+                el.style.color = ok?'#059669':'#dc2626';
+            }
+        }catch(e){ el.textContent='—'; }
+    });
+    // 能量/功率条
+    if (BOARD.bars){
+        const a=evalExpr(BOARD.bars.a.expr, S.env), b=evalExpr(BOARD.bars.b.expr, S.env);
+        const A=isFinite(a)&&a>0?a:0, B=isFinite(b)&&b>0?b:0, T=A+B||1;
+        document.getElementById('bar-seg1').style.width=(A/T*100)+'%';
+        document.getElementById('bar-seg2').style.width=(B/T*100)+'%';
+        document.getElementById('bar-seg1').textContent=fmt(A,1);
+        document.getElementById('bar-seg2').textContent=fmt(B,1);
+    }
+}
+
+// ===================== 控制台构建 =====================
+function renderKatex(el){ if (typeof renderMathInElement!=='undefined') renderMathInElement(el,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],throwOnError:false}); }
+let curParam = BOARD.param ? (BOARD.param.value!==undefined?BOARD.param.value:BOARD.param.min) : 0;
+function buildConsole(){
+    document.getElementById('prob-title').textContent=(DATA.lesson&&DATA.lesson.title)||'';
+    document.getElementById('prob-body').innerHTML=(DATA.lesson&&DATA.lesson.problem)||'';
+    document.getElementById('scene-caption').textContent=(BOARD.scene&&BOARD.scene.caption)||'';
+    const p=BOARD.param;
+    if (p){
+        document.getElementById('param-block').classList.remove('hidden');
+        document.getElementById('param-label').innerHTML=(p.label||p.name)+' :';
+        const s=document.getElementById('param-slider');
+        s.min=p.min; s.max=p.max; s.step=p.step||0.5; s.value=curParam;
+        document.getElementById('param-ticks').innerHTML=(p.ticks||[`${p.min}${p.unit||''}`,`${p.max}${p.unit||''}`]).map(t=>`<span>${t}</span>`).join('');
+        s.addEventListener('input', ()=>{ curParam=parseFloat(s.value); syncParamVal(); render(); });
+        syncParamVal();
+    }
+    document.getElementById('readouts').innerHTML=(BOARD.readouts||[]).map(r=>{
+        if (r.highlight) return `<div class="flex justify-between items-center pt-1"><span class="text-slate-800 font-semibold">${r.label}:</span><span id="ro-${r.id}" class="text-base font-bold bg-teal-50 text-teal-700 px-3 py-1 rounded-lg border border-teal-200">—</span></div>`;
+        return `<div class="flex justify-between border-b border-dashed border-slate-200 pb-1"><span>${r.label}:</span><span id="ro-${r.id}" class="font-bold" style="color:${r.color?col(r.color):'#0f172a'}">—</span></div>`;
+    }).join('');
+    if (BOARD.bars){
+        document.getElementById('bar-block').classList.remove('hidden');
+        document.getElementById('bar-label').textContent=BOARD.bars.label||'';
+        document.getElementById('bar-legend').innerHTML=
+            `<span><span class="inline-block w-2 h-2 rounded-sm" style="background:#4f46e5"></span> ${BOARD.bars.a.label}</span>`+
+            `<span><span class="inline-block w-2 h-2 rounded-sm" style="background:#0ea5e9"></span> ${BOARD.bars.b.label}</span>`;
+    }
+    if (BOARD.constant){ document.getElementById('constant-block').classList.remove('hidden');
+        document.getElementById('constant-val').innerHTML='≡ '+(BOARD.constant.label||''); }
+    const legend=document.getElementById('legend'); const items=[];
+    (BOARD.legend||[]).forEach(it=> items.push(`<div class="flex items-center gap-2"><span class="w-3 h-3 inline-block rounded" style="background:${col(it.color)}"></span> ${it.text}</div>`));
+    legend.innerHTML=items.join('');
+    document.getElementById('solution-body').innerHTML=(DATA.steps||[]).map((st,i)=>{
+        const no=String(i+1).padStart(2,'0');
+        return `<div class="${i>0?'border-t border-slate-100 pt-5':''}">
+            <div class="flex items-start gap-4 mb-3">
+                <span class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold font-mono text-sm flex-shrink-0">${no}</span>
+                <h3 class="text-base font-bold text-slate-900 pt-0.5">${st.title||''}</h3>
+            </div>
+            <div class="prose max-w-none text-slate-700 leading-relaxed text-sm space-y-2">${st.content||''}</div>
+        </div>`;
+    }).join('');
+    renderKatex(document.body);
+}
+function syncParamVal(){ document.getElementById('param-val').textContent = fmt(curParam,2)+((BOARD.param&&BOARD.param.unit)||''); }
+
+// ===================== 主循环 =====================
+function loop(now){ animT = now/1000; render(); requestAnimationFrame(loop); }
+window.addEventListener('resize', resizeCanvas);
+PARAM_NAME = (BOARD.param && /^[A-Za-z_$][\w$]*$/.test(BOARD.param.name||'')) ? BOARD.param.name : null;
+buildConsole();
+resizeCanvas();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
