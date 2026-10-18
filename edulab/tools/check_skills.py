@@ -283,6 +283,13 @@ def main(argv):
             print(f"  ✗ {s:24s} 运行失败 exit={r1.returncode}/{r2.returncode}")
             continue
 
+        # 记号零盲区：render_html 已把「无法判定」的记号逐行打到 stderr（行首 ?）。
+        # 有盲区却让闸门变绿，等于默认「没看见的地方都是对的」—— 那正是 verify_scene
+        # 当初静默跳过的病根，只是换了个位置复发。所以盲区必须让闸门变红。
+        blind = [ln.strip() for ln in (r1.stderr or "").splitlines()
+                 if ln.startswith("[记号守卫]")
+                 and ln[len("[记号守卫]"):].lstrip().startswith("?")]
+
         nondet = [k for k in set(h1) | set(h2) if h1.get(k) != h2.get(k)]
         art = artifact_problems(base / "a")
         # 新增项**没有基线记录时不能默认通过**：否则加一个新技能闸门就自动对它
@@ -296,6 +303,8 @@ def main(argv):
             flags.append(f"不可复现 {nondet}")
         if art:
             flags.append(f"产物有问题 {art}")
+        if blind:
+            flags.append(f"记号有 {len(blind)} 处无法判定（盲区不许静默通过）")
         if nobase:
             flags.append(f"无基线记录（{len(h1)} 个产物，需 --update 建立）")
         elif drift:

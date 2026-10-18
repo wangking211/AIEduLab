@@ -42,7 +42,7 @@ from pathlib import Path
 
 __all__ = ["SKILL_DIR", "shared_dir", "load_template", "render_html",
            "write_index", "default_validate", "required_sections", "cli",
-           "verify_scene", "SceneMarkError"]
+           "verify_scene", "SceneMarkError", "SceneReport"]
 
 # 本文件所在目录即共享根（edulab/shared 或 .agents/shared）
 SHARED_DIR = Path(__file__).resolve().parent
@@ -98,29 +98,106 @@ def _resolve(v, env):
     return None
 
 
-def _xy(points, name, env):
+def _point_xy(points, name, env):
+    """解析点的 (x, y)。任一分量解析不出就返回 None —— 由 _point_state 定状态。
+
+    坐标格式以**真实产物**为准：`{"xy": [x, y]}`（`{"x":…,"y":…}` 仅作兼容）。
+    分量可以是数字，也可以是参数表达式字符串（如 `"2*cos(ang*PI/180)"`），
+    后者按 env 求值，求不出即视为不可判定。
+
+    「点不存在」与「坐标求不出」在这里**不区分**：前者由 `name in points` 判，
+    后者由本函数判。混为一谈会把写错点名的硬错误降级成「无法判定」。
+    """
     p = points.get(name)
     if not isinstance(p, dict):
         return None
-    if isinstance(p.get("x"), (int, float)) and isinstance(p.get("y"), (int, float)):
-        return (float(p["x"]), float(p["y"]))
-    xy = p.get("xy")
-    if isinstance(xy, (list, tuple)) and len(xy) == 2:
-        ax, ay = _resolve(xy[0], env), _resolve(xy[1], env)
-        if ax is None or ay is None:
-            return None
-        return (ax, ay)
-    return None
+    raw = p.get("xy")
+    if isinstance(raw, (list, tuple)) and len(raw) == 2:
+        xs, ys = raw
+    else:
+        xs, ys = p.get("x"), p.get("y")
+    x = _resolve(xs, env)
+    y = _resolve(ys, env)
+    return (x, y) if x is not None and y is not None else None
 
 
 def _angle_at(pa, pv, pb):
-    ux, uy = pa[0] - pv[0], pa[1] - pv[1]
-    wx, wy = pb[0] - pv[0], pb[1] - pv[1]
-    nu, nw = math.hypot(ux, uy), math.hypot(wx, wy)
-    if nu == 0 or nw == 0:
+    """∠apb 的角度（度）。三点共线或重合返回 None —— 调用方按退化处理。"""
+    ax, ay = pa[0] - pv[0], pa[1] - pv[1]
+    bx, by = pb[0] - pv[0], pb[1] - pv[1]
+    na = math.hypot(ax, ay)
+    nb = math.hypot(bx, by)
+    if na < 1e-12 or nb < 1e-12:
         return None
-    c = max(-1.0, min(1.0, (ux * wx + uy * wy) / (nu * nw)))
+    c = max(-1.0, min(1.0, (ax * bx + ay * by) / (na * nb)))
     return math.degrees(math.acos(c))
+
+
+def _point_state(points, name, env):
+    """(坐标, 状态)，状态三值化 —— 这是本守卫能诚实的前提。
+
+      'ok'      —— 坐标是数字，或表达式能按 env 求值 → 可以下结论；
+      'missing' —— 点根本没定义（引用写错了名字）→ 硬错误：记号指向一个不存在的点；
+      'blind'   —— 点定义了，但坐标是按默认参数求不出来的表达式 → **无法判定**。
+
+    「算不出来」与「算出来是错的」是两回事。前者不报错，但必须留痕；
+    若把 blind 也并进 errors，就是把「我不知道」谎报成「它错了」。
+    """
+    p = points.get(name)
+    if not isinstance(p, dict):
+        return None, "missing"
+    got = _point_xy(points, name, env)
+    if got is not None:
+        return got, "ok"
+    return None, "blind"
+
+
+class SceneReport:
+    """记号守卫的结论。
+
+    · `errors` —— **读懂了记号，且算出来它在撒谎**。必须拒绝绘制。
+    · `unread` —— **没读懂**：记号引用的东西按当前信息判不了。既不算通过，
+      也不算失败，但必须打印出来，并在结论里声明「不覆盖这些地方」。
+
+    二者互不替代。把 unread 混进 errors 会误杀合法的动态场景；把 unread 静默
+    吞掉则等于假装验证过 —— 后者更危险。
+    """
+
+    __slots__ = ("errors", "unread")
+
+    def __init__(self):
+        self.errors = []
+        self.unread = []
+
+    @property
+    def ok(self):
+        """没有**确定为错**的记号。注意：ok 不代表全部验证过，看 unread。"""
+        return not self.errors
+
+    def __bool__(self):
+        return self.ok
+
+    def lines(self):
+        """给人看的两段报告（空段不出现）。"""
+        out = []
+        if self.errors:
+            out.append("错误（记号与真实坐标不符，已拒绝绘制）：")
+            out += [f"  ✗ {m}" for m in self.errors]
+        if self.unread:
+            out.append("无法判定（按默认参数解析不出记号依赖的坐标）：")
+            out += [f"  ? {m}" for m in self.unread]
+        if not self.errors and not self.unread:
+            out.append("记号守卫：全部记号均已验证通过。")
+        return out
+
+    def summary(self):
+        """一句话结论，**必须**包含 unread 的声明。"""
+        head = f"直角/等长记号：{len(self.errors)} 个确定为错"
+        if self.unread:
+            head += f"，{len(self.unread)} 个无法判定（结论不覆盖这些地方）"
+        else:
+            head += "，无未判定项"
+        return head
 
 
 def verify_scene(data, *, angle_tol=1e-4, len_tol=1e-6):
@@ -135,37 +212,64 @@ def verify_scene(data, *, angle_tol=1e-4, len_tol=1e-6):
     安静地画出去。原话借自 geometry-dsl：*a wrong figure fails loudly instead
     of lying quietly*。
 
+    **两种不通过要分开报**（见 `SceneReport`）：
+      · 算出来是错的 → errors，抛 `SceneMarkError`；
+      · 判不了（坐标是解析不出的表达式）→ unread，**不抛错**，返回并要求打印。
+
+    判定在**参数默认值**上进行：动态场景的坐标可以写成表达式，
+    按默认参数代入后能判就判，判不了就如实记为 unread。
+
+    **任何预期外的异常都会被转成 unread 并让 `ok` 为 False。** 这是通用性质，
+    不是针对某个场景的特例：校验器若能因自身 bug 静默失效，就比没有更危险 ——
+    调用方会以为已验证过。异常走 unread 而不是 errors，是因为「我不知道」不等于
+    「它错了」；但两者都让 `ok` 为 False，所以下游闸门照样拦得住。
+
     只处理 `board` 里带 `points` + `derived` 的结构；其它形态（如物理的
-    `board.scene`）直接跳过，不做猜测。
+    `board.scene`）直接跳过，不做猜测。返回 `SceneReport`。
     """
+    report = SceneReport()
     board = data.get("board") if isinstance(data, dict) else None
     if not isinstance(board, dict):
-        return
+        return report
     points = board.get("points")
     derived = board.get("derived")
     if not isinstance(points, dict) or not isinstance(derived, list):
-        return
+        return report
 
-    problems = []
     tick_groups = {}
+    tick_blind = []
 
     # 参数默认值：坐标可以写成表达式（如 "2*cos(ang*PI/180)"），按默认值验证。
     param = board.get("param") or {}
     env = {param.get("name"): param.get("value")} if param.get("name") else {}
 
     def xy(name):
-        """(坐标, 是否可判定)。坐标解析不出来时第二项为 False —— 不能据此下结论。"""
-        p = points.get(name)
-        if not isinstance(p, dict):
-            return None, True
-        got = _xy(points, name, env)
-        if got is not None:
-            return got, True
-        # 有 xy 但解析失败：可能是依赖未登记的变量，当作「不可判定」
-        if isinstance(p.get("xy"), (list, tuple)):
-            return None, False
-        return None, True
+        return _point_state(points, name, env)
 
+    try:
+        _verify_derived(report, derived, points, env, xy, tick_groups, tick_blind,
+                        angle_tol, len_tol)
+    except SceneMarkError:
+        raise
+    except Exception as exc:            # noqa: BLE001 —— 必须兜住一切，不能漏
+        report.unread.append(
+            f"verify_scene 内部异常 {type(exc).__name__}: {exc} —— "
+            f"该场景未验证，不代表记号正确")
+    if report.errors:
+        raise SceneMarkError(
+            "几何记号与真实坐标不符，拒绝绘制（记号必须是真的）：\n  · "
+            + "\n  · ".join(report.errors))
+    return report
+
+
+def _verify_derived(report, derived, points, env, xy, tick_groups, tick_blind,
+                    angle_tol, len_tol):
+    """验证 derived 里的记号。**所有**异常由 verify_scene 兜住，这里只管判定。
+
+    拆出来的理由：verify_scene 的职责是「绝不让异常逃出去」，本函数的职责是
+    「判定得对」。两件事分开，才好在 verify_scene 里用一个 except 覆盖全部路径，
+    而不是给每个分支各补一个特例。
+    """
     for i, d in enumerate(derived):
         if not isinstance(d, dict):
             continue
@@ -173,21 +277,24 @@ def verify_scene(data, *, angle_tol=1e-4, len_tol=1e-6):
 
         if kind == "right_angle_mark":
             a, v, b = d.get("a"), d.get("vertex"), d.get("b")
-            pa, oka = xy(a)
-            pv, okv = xy(v)
-            pb, okb = xy(b)
-            if pa is None or pv is None or pb is None:
-                if oka and okv and okb:
-                    problems.append(
-                        f"derived[{i}] 直角记号引用了缺坐标的点 "
-                        f"{a}/{v}/{b}（图上会出现一个没有依据的直角符号）")
-                # 否则：坐标是表达式但按默认参数解析不出来 —— 无法判定，跳过
+            (pa, sa), (pv, sv), (pb, sb) = xy(a), xy(v), xy(b)
+            if "missing" in (sa, sv, sb):
+                bad = [n for n, s in ((a, sa), (v, sv), (b, sb)) if s == "missing"]
+                report.errors.append(
+                    f"derived[{i}] 直角记号引用了不存在的点 {bad}"
+                    f"（图上会出现一个没有依据的直角符号）")
+                continue
+            if "blind" in (sa, sv, sb):
+                bad = [n for n, s in ((a, sa), (v, sv), (b, sb)) if s == "blind"]
+                report.unread.append(
+                    f"derived[{i}] 直角记号 ∠{a}{v}{b} 的点 {bad} 按默认参数解析不出坐标，"
+                    f"无法判定它是否真为 90°")
                 continue
             ang = _angle_at(pa, pv, pb)
             if ang is None:
-                problems.append(f"derived[{i}] 直角记号 ∠{a}{v}{b} 退化（有重合点）")
+                report.errors.append(f"derived[{i}] 直角记号 ∠{a}{v}{b} 退化（有重合点）")
             elif abs(ang - 90.0) > angle_tol:
-                problems.append(
+                report.errors.append(
                     f"derived[{i}] 直角记号 ∠{a}{v}{b} 实际 {ang:.4f}°，不是 90°")
 
         elif kind == "segment":
@@ -195,32 +302,39 @@ def verify_scene(data, *, angle_tol=1e-4, len_tol=1e-6):
             if not isinstance(n, int) or n <= 0:
                 continue
             name = d.get("name") or f"{d.get('a')}{d.get('b')}"
-            pa, _ = xy(d.get("a"))
-            pb, _ = xy(d.get("b"))
-            if pa is None or pb is None:
+            (pa, sa), (pb, sb) = xy(d.get("a")), xy(d.get("b"))
+            if "missing" in (sa, sb):
+                report.errors.append(
+                    f"derived[{i}] 等长记号 {name} 引用了不存在的点 "
+                    f"{[x for x, s in ((d.get('a'), sa), (d.get('b'), sb)) if s == 'missing']}")
+                continue
+            if "blind" in (sa, sb):
+                tick_blind.append(f"{n} 道杠（{name}）")
                 continue
             tick_groups.setdefault(n, []).append((name, math.dist(pa, pb)))
 
-    for n, items in tick_groups.items():
+    for n, items in sorted(tick_groups.items()):
         if len(items) < 2:
             continue
         base = items[0][1]
-        off = [f"{nm}={L:g}" for nm, L in items if abs(L - base) > len_tol]
-        if off:
+        if any(abs(L - base) > len_tol for _nm, L in items):
             desc = "，".join(f"{nm}={L:g}" for nm, L in items)
-            problems.append(
+            report.errors.append(
                 f"{n} 道等长记号被画在并不等长的线段上（{desc}）"
                 f" —— 同杠数按约定表示等长")
 
-    if problems:
-        raise SceneMarkError(
-            "几何记号与真实坐标不符，拒绝绘制（记号必须是真的）：\n  · "
-            + "\n  · ".join(problems))
+    if tick_blind:
+        report.unread.append(
+            "以下等长记号的端点按默认参数解析不出坐标，无法判定是否真等长："
+            + "、".join(sorted(set(tick_blind))))
+    # 注意：这里**不** raise。是否拒绝绘制由 verify_scene 统一裁决，
+    # 这样它才能在一个 except 里同时处理「判定出错」与「判定本身崩了」。
 
 
 def render_html(data, out_path, *, template=None, token="__LESSON_DATA__",
                 compact=False, escape_close=False, json_default=None,
-                ensure_parent=True, skill_dir=None):
+                ensure_parent=True, skill_dir=None,
+                require_full_verification=False):
     """把 lesson 数据注入模板占位符，写出单文件 HTML。
 
     参数是为了让历史产物**逐字节不变**而保留的：
@@ -228,13 +342,23 @@ def render_html(data, out_path, *, template=None, token="__LESSON_DATA__",
       escape_close   把 "</" 转成 "<\\/"（防止 payload 里的 </script> 逃逸）
       json_default  给 json.dumps 的 default=（例如 str）
       ensure_parent  自动建父目录（重构前有 3 个技能漏了这步，会直接抛异常）
+      require_full_verification  记号守卫有**无法判定**项（unread）时也判失败。
+        默认 False：unread 只打印不阻断，历史产物逐字节不变。
+        生成新内容时应传 True —— 盲区不该静默溜过，否则等于假装验证过。
     """
     if template is None:
         template = load_template(skill_dir=skill_dir)
     if token not in template:
         raise RuntimeError(f"模板中未找到占位符 {token}")
     # 记号先验证再画：直角符号 / 等长刻度必须与真实坐标一致。
-    verify_scene(data)
+    report = verify_scene(data)
+    for _line in report.lines():
+        print("[记号守卫] " + _line, file=sys.stderr)
+    if report.unread and require_full_verification:
+        raise SceneMarkError(
+            f"记号守卫有 {len(report.unread)} 个记号无法判定"
+            f"（默认参数下解析不出坐标），拒绝出图：\n  · "
+            + "\n  · ".join(report.unread))
     kw = {"ensure_ascii": False}
     if compact:
         kw["separators"] = (",", ":")
@@ -363,8 +487,14 @@ def cli(registry, *, doc=None, seeds=None, meta=None, groups=None,
     def _render(key, data, out):
         if render is not None:
             return render(key, data, out)
+        # require_full_verification：记号守卫有「按默认参数解析不出坐标」的盲区时，
+        # 直接拒绝出图。理由是「没验到的地方不等于没问题」—— 若只打印不阻断，
+        # 生成出来的图看起来和验证过的图一模一样，读者无从分辨。14 个技能当前
+        # 全部零盲区，所以这条不会误伤；将来真出现盲区，宁可 build 红，也别让它
+        # 安静地画出去。需要绕过时传自己的 render= 回调。
         return render_html(data, out, template=_tpl, token=token, compact=compact,
-                           escape_close=escape_close, json_default=json_default)
+                           escape_close=escape_close, json_default=json_default,
+                           require_full_verification=True)
 
     def _emit(key):
         data = registry[key]()
