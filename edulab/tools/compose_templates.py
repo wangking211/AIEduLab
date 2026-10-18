@@ -60,9 +60,9 @@ FAMILIES = {
                   "edu-math-junior"],
     },
     "seq-phys": {
-        "desc": "数列与三角 / 初中物理 / 高中物理 / 高中电磁学 / 概率与统计",
+        "desc": "数列与三角 / 初中物理 / 高中物理 / 高中电磁学 / 概率与统计 / 化学计算",
         "users": ["edu-math-sequences", "edu-physics-junior", "edu-physics-senior",
-                  "edu-physics-em", "edu-probability"],
+                  "edu-physics-em", "edu-probability", "edu-chem-calc"],
     },
 }
 

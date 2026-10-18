@@ -1,0 +1,7 @@
+const MATHENV = {sqrt:Math.sqrt, abs:Math.abs, min:Math.min, max:Math.max,
+    pow:Math.pow, sign:Math.sign, floor:Math.floor, ceil:Math.ceil, PI:Math.PI, E:Math.E,
+    sin:Math.sin, cos:Math.cos, tan:Math.tan, asin:Math.asin, acos:Math.acos, atan:Math.atan, exp:Math.exp, log:Math.log,
+    // 化学计算新增：pH 用 −lg，而基础 MATHENV 只有自然对数 log。
+    // 语义与 lib/chemcalc_kernel.py 的 math.log10 一致（见内核自检）。
+    log10:(x)=>{ return Math.log10(x); },
+    lg:(x)=>{ return Math.log10(x); }};

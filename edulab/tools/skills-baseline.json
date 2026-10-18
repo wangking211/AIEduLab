@@ -24,6 +24,17 @@
   "testcross.html": "2cbb7407afa0031914b4a8b1c804680f12c123e146ed81041b541ced1e216c34",
   "urine.html": "ffed1cd5dfac640d43f20ccb7022293878d1d8de74f3c6ff9bdc61c1e9ba1e4c"
  },
+ "edu-chem-calc": {
+  "concentration.html": "71903656264ae24b04d99a1eda585ce940cdbc8ea4ebaa51a1863ab2a5dc37c9",
+  "electrolysis.html": "a07a6c4d8f6d4782e8cf2f1c131ebcd65afddd50e87d7e48e69c9bfd1ad425b0",
+  "equilibrium.html": "f067382b76ec6a5dcf1236dcca8eefa5e9be21a5adfdabf35ee6d5daf79b0fed",
+  "index.html": "3d209c9500abfd410ab49a40f606e93236f6009886ab0eae178fca35c1b08145",
+  "ksp.html": "e49ab6bb3446175abb6c2d352eb4383df1093bcf9bf3c80eb410bbb854656fc4",
+  "mole.html": "9fdf51b1681235ea4456621978ae9be8712d133833877028c626ff46579e8ec4",
+  "rate.html": "1bc1c38bb50d39af27522095b984ba7da8b25c7a9b73f9df6df27018dfb8c427",
+  "stoich.html": "75e409107c8c9a77368fff1ee694d855ebede95f576c4e2cacaeb079a2673382",
+  "titration.html": "9c587fc885b2f5bdf11ff15f11704bf01611daef65d6811f47aff7325ea8aa7d"
+ },
  "edu-chem-reaction": {
   "acid_carbonate_caco3.html": "4ed1815ce787a8850711f144bd09a91a99c91541dc90635fedee6707968fd527",
   "acid_metal_oxide_fe2o3.html": "d4bf95b4f114e79bb095b10a9de0c9b408d7f7b1586373995887ade55cc80573",

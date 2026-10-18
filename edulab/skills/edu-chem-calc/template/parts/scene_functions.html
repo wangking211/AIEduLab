@@ -1,0 +1,332 @@
+// ===================== 化学计算场景 =====================
+// 外壳 loop() 会给 animT 赋值；"use strict" 下未声明就赋值会 ReferenceError。
+let animT = 0;
+
+// 与 lib/chemcalc_kernel.py 一致的常数（实测类）
+const CHEM_NA = 6.02e23;      // 阿伏加德罗常数
+const CHEM_VM = 22.4;         // 标准状况气体摩尔体积 L/mol
+const CHEM_F  = 96485;        // 法拉第常数 C/mol
+const CHEM_KW = 1e-14;        // 25 ℃ 水的离子积
+
+// ---- 与内核同式的中和滴定 pH（强酸 + 强碱，一元） ----
+function chemTitration(ca, va, cb, vb){
+    const nH = ca*va/1000, nOH = cb*vb/1000, vt = (va+vb)/1000;
+    if (vt <= 0) return 7;
+    const diff = nH - nOH;
+    const scale = Math.max(nH, nOH, 1e-18);
+    if (Math.abs(diff) <= 1e-12*scale) return 7;
+    if (diff > 0) return -Math.log10(diff/vt);
+    return 14 + Math.log10(-diff/vt);
+}
+// ---- 与内核同式的 N₂O₄ ⇌ 2NO₂ 平衡解 ----
+function chemIce(K, c0){ return (-K + Math.sqrt(K*K + 16*K*c0))/8; }
+function chemExp(x){ return Math.exp(x); }
+
+// ---- 1) 物质的量换算关系图 ----
+function drawMole(S){
+    const n = S.n, M = S.M, vm = S.vm || CHEM_VM, na = S.na || CHEM_NA;
+    const m = n*M, N = n*na, Vg = n*vm;
+    const cx = 4.55, cy = 3.0;
+    // 中心节点
+    rectBox(cx-1.35, cy-0.44, 2.70, 0.88, '#1d4ed8', '#60a5fa', 2);
+    label(cx, cy+0.14, '物质的量 n', '#dbeafe', 'center', 12);
+    label(cx, cy-0.24, n.toFixed(2) + ' mol', '#facc15', 'center', 13);
+    // 三个卫星节点
+    const node = (x, y, title, val, col)=>{
+        rectBox(x-1.45, y-0.42, 2.90, 0.84, '#0f172a', col, 2);
+        label(x, y+0.13, title, '#94a3b8', 'center', 11);
+        label(x, y-0.22, val, '#f1f5f9', 'center', 12);
+    };
+    node(cx, 5.10, '质量 m', m.toFixed(3) + ' g', '#34d399');
+    node(1.90, 1.15, '粒子数 N', N.toExponential(3).replace('e+', '×10^'), '#f472b6');
+    node(7.20, 1.15, '标况气体体积 V', Vg.toFixed(2) + ' L', '#38bdf8');
+    // 连边（带换算因子）
+    arrow(cx, cy+0.52, cx, 4.62, '#34d399', 2.2, null);
+    arrow(1.95, cy-0.52, 1.92, 1.66, '#f472b6', 2.2, null);
+    arrow(7.15, cy-0.52, 7.18, 1.66, '#38bdf8', 2.2, null);
+    label(cx+0.22, 4.05, '×M', '#34d399', 'start', 12);
+    label(1.14, 2.55, '×N_A', '#f472b6', 'start', 12);
+    label(7.42, 2.55, '×V_m', '#38bdf8', 'start', 12);
+    label(0.15, 5.74, 'M = 44 g/mol（题设）· N_A = 6.02×10²³', '#64748b', 'start', 10);
+    label(0.15, 0.30, 'V_m = 22.4 L/mol（标准状况，实测常数）', '#64748b', 'start', 10);
+}
+
+// ---- 2) 烧杯：液面随体积上升，溶质粒子数不变（稀释不变量） ----
+function drawBeaker(S){
+    const V = S.V, n0 = S.n0;
+    const c = n0 / V;
+    const bx = 2.30, by = 0.80, bw = 3.40, bh = 4.30;
+    // 烧杯壁
+    ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(SX(bx-0.18), SY(by+bh));
+    ctx.lineTo(SX(bx-0.18), SY(by-0.02));
+    ctx.lineTo(SX(bx+bw+0.18), SY(by-0.02));
+    ctx.lineTo(SX(bx+bw+0.18), SY(by+bh));
+    ctx.stroke();
+    // 液面：体积越大越高（Vmax 由场景给出）
+    const level = Math.min(1, V / (S.vmax || 2.0));
+    const lh = Math.max(0.06, bh*level);
+    ctx.fillStyle = 'rgba(56,189,248,0.28)';
+    ctx.fillRect(SX(bx), SY(by+lh), bw*sc, lh*sc);
+    ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(SX(bx), SY(by+lh)); ctx.lineTo(SX(bx+bw), SY(by+lh)); ctx.stroke();
+    // 溶质粒子：数目固定（与 V 无关）—— 稀释不变量就长这样
+    const DOTS = 28;
+    const cols = 7, rows = 4;
+    for (let i=0; i<DOTS; i++){
+        const gx = bx + 0.30 + (i % cols)*(bw-0.60)/(cols-1);
+        const gy = by + 0.26 + Math.floor(i/cols)*(Math.max(lh-0.50, 0.10))/(rows-1);
+        if (gy > by + lh - 0.14) continue;
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath(); ctx.arc(SX(gx), SY(gy), 3.6, 0, 7); ctx.fill();
+    }
+    // 刻度：体积
+    for (let k=1; k<=4; k++){
+        const vv = (S.vmax||2.0)*k/4, yv = by + bh*(vv/(S.vmax||2.0));
+        ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(SX(bx+bw+0.18), SY(yv)); ctx.lineTo(SX(bx+bw+0.55), SY(yv)); ctx.stroke();
+        label(bx+bw+0.66, yv, vv.toFixed(2)+' L', '#64748b', 'start', 9);
+    }
+    label(bx, by+bh+0.42, '加水稀释：液面上升，黄点（溶质）数目不动', '#94a3b8', 'start', 11);
+    label(9.85, 5.55, '溶质的物质的量 n = ' + n0.toFixed(3) + ' mol（定值）', '#facc15', 'end', 12);
+    label(9.85, 5.15, 'V = ' + V.toFixed(2) + ' L', '#38bdf8', 'end', 12);
+    label(9.85, 4.75, 'c = n/V = ' + c.toFixed(4) + ' mol/L', '#34d399', 'end', 12);
+}
+
+// ---- 3) 化学计量与限量试剂（N₂ + 3H₂ → 2NH₃） ----
+function drawStoich(S){
+    const nN2 = S.n_n2, nH2 = S.n_h2;
+    const C_N2 = S.c_n2, C_H2 = S.c_h2, C_NH3 = S.c_nh3;
+    const xi = Math.min(nN2/C_N2, nH2/C_H2);
+    const used = [C_N2*xi, C_H2*xi];
+    const left = [nN2 - used[0], nH2 - used[1]];
+    const made = C_NH3*xi;
+    const limIdx = (nN2/C_N2 <= nH2/C_H2) ? 0 : 1;
+    const py0 = 0.95, py1 = 4.35, maxv = Math.max(nN2, nH2, made, 1);
+    const groups = [
+        {x: 1.55, name: 'N₂', init: nN2, used: used[0], left: left[0], col: '#38bdf8'},
+        {x: 4.25, name: 'H₂', init: nH2, used: used[1], left: left[1], col: '#a78bfa'},
+        {x: 7.35, name: 'NH₃', init: 0, used: 0, left: made, col: '#34d399', isProduct: true},
+    ];
+    const bw = 1.15;
+    groundLine(py0, 0.90, 8.70, '#334155');
+    groups.forEach(g=>{
+        const hAll = (g.init/maxv)*(py1-py0);
+        const hLeft = (g.left/maxv)*(py1-py0);
+        if (g.isProduct){
+            rectBox(g.x-bw/2, py0, bw, Math.max(hLeft,0.02), '#34d399');
+        } else {
+            // 已反应（深色）+ 剩余（浅色）叠在总高里
+            rectBox(g.x-bw/2, py0+hLeft, bw, Math.max(hAll-hLeft,0.0), g.col);
+            rectBox(g.x-bw/2, py0, bw, Math.max(hLeft,0.02), '#334155', g.col, 1.5);
+        }
+        label(g.x, py0-0.34, g.name, '#cbd5e1', 'center', 13);
+        const topv = g.isProduct ? made : g.init;
+        label(g.x, py0 + (topv/maxv)*(py1-py0) + 0.28, topv.toFixed(2), '#f1f5f9', 'center', 11);
+    });
+    // 限量试剂标记
+    const lx = groups[limIdx].x;
+    label(lx, py1+0.52, '限量试剂', '#f87171', 'center', 12);
+    arrow(lx, py1+0.34, lx, py0 + (groups[limIdx].init/maxv)*(py1-py0) + 0.50, '#f87171', 2);
+    // 结果行
+    label(0.15, 5.72, 'N₂ + 3H₂ → 2NH₃   反应进度 ξ = ' + xi.toFixed(3) + ' mol',
+          '#94a3b8', 'start', 11);
+    label(9.85, 5.20, '生成 NH₃ = ' + made.toFixed(3) + ' mol', '#34d399', 'end', 12);
+    label(9.85, 4.80, '剩余 N₂ = ' + left[0].toFixed(3) + '   H₂ = ' + left[1].toFixed(3),
+          '#94a3b8', 'end', 11);
+}
+
+// ---- 4) 中和滴定曲线（pH vs 加碱体积） ----
+function drawTitration(S){
+    const ca = S.ca, va = S.va, cb = S.cb, vmax = S.vmax, V = S.V;
+    const px0 = 0.95, px1 = 9.30, pz0 = 0.95, pz1 = 5.05;
+    const X = v => px0 + v/vmax*(px1-px0);
+    const Y = pH => pz0 + Math.max(0, Math.min(14, pH))/14*(pz1-pz0);
+    const Veq = ca*va/cb;
+    // 网格：pH 7 与 0/7/14
+    ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+    [0, 7, 14].forEach(pH=>{
+        ctx.beginPath(); ctx.moveTo(SX(px0), SY(Y(pH))); ctx.lineTo(SX(px1), SY(Y(pH))); ctx.stroke();
+        label(px0-0.30, Y(pH), String(pH), '#64748b', 'center', 10);
+    });
+    label(px0-0.34, (Y(0)+Y(14))/2, 'pH', '#64748b', 'center', 10);
+    // 曲线
+    ctx.strokeStyle = '#818cf8'; ctx.lineWidth = 2.8; ctx.beginPath();
+    for (let i=0; i<=400; i++){
+        const v = vmax*i/400;
+        const pH = chemTitration(ca, va, cb, v);
+        i===0 ? ctx.moveTo(SX(X(v)), SY(Y(pH))) : ctx.lineTo(SX(X(v)), SY(Y(pH)));
+    }
+    ctx.stroke();
+    // 等当点
+    dashLine(X(Veq), pz0-0.15, X(Veq), pz1+0.15, '#f87171', 1.5);
+    label(X(Veq), pz1+0.46, '等当点 V=' + Veq.toFixed(1) + ' mL（pH=7）', '#f87171', 'center', 11);
+    // 游标
+    const pHnow = chemTitration(ca, va, cb, V);
+    dashLine(X(V), pz0-0.10, X(V), pz1+0.10, '#facc15', 1.4);
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath(); ctx.arc(SX(X(V)), SY(Y(pHnow)), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.5; ctx.stroke();
+    // x 轴刻度
+    for (let k=0; k<=4; k++){
+        const v = vmax*k/4;
+        label(X(v), pz0-0.34, v.toFixed(0), '#64748b', 'center', 10);
+    }
+    label(px1+0.15, pz0-0.34, 'V(NaOH)/mL', '#64748b', 'end', 10);
+    label(9.85, 5.55, '当前 pH = ' + pHnow.toFixed(3), '#facc15', 'end', 12);
+    label(9.85, 5.15, '加碱体积 V = ' + V.toFixed(2) + ' mL', '#38bdf8', 'end', 12);
+}
+
+// ---- 5) 平衡三段式（初始 / 变化 / 平衡） ----
+function drawIce(S){
+    const K = S.K, c0 = S.c0;
+    const x = chemIce(K, c0);
+    const py0 = 0.95, py1 = 4.20;
+    const maxv = Math.max(c0, 2*x, 0.05);
+    const bw = 0.62;
+    const slots = [
+        {x: 1.55, label: '初始', vals: [c0, 0], cols: ['#475569', '#475569']},
+        {x: 3.55, label: '变化', vals: [-x, 2*x], cols: ['#f87171', '#34d399']},
+        {x: 5.55, label: '平衡', vals: [c0-x, 2*x], cols: ['#38bdf8', '#a78bfa']},
+    ];
+    groundLine(py0, 0.80, 6.60, '#334155');
+    slots.forEach(s=>{
+        s.vals.forEach((v, i)=>{
+            const bx = s.x + (i===0 ? -bw*0.58 : bw*0.58);
+            const h = Math.abs(v)/maxv*(py1-py0);
+            const col = s.cols[i];
+            if (v < 0){
+                // 负向变化：从基线向下画
+                rectBox(bx-bw/2, py0-Math.max(h,0.02), bw, Math.max(h,0.02), col);
+            } else {
+                rectBox(bx-bw/2, py0, bw, Math.max(h,0.02), col);
+            }
+            label(bx, (v<0 ? py0-h-0.26 : py0+h+0.26), v.toFixed(3), '#e2e8f0', 'center', 10);
+        });
+        label(s.x, py0-0.36, s.label, '#cbd5e1', 'center', 12);
+    });
+    label(0.95, 5.72, 'N₂O₄ ⇌ 2NO₂    三段式（ICE）', '#94a3b8', 'start', 11);
+    label(1.28, 1.06+4.14, 'N₂O₄', '#38bdf8', 'center', 11);
+    label(1.82, 1.06+4.14, 'NO₂', '#a78bfa', 'center', 11);
+    label(9.85, 5.60, 'K = ' + K.toFixed(3) + '（定值，只随温度变）', '#facc15', 'end', 12);
+    label(9.85, 5.20, '转化率 α = x/c₀ = ' + (x/c0*100).toFixed(2) + '%', '#34d399', 'end', 12);
+    label(9.85, 4.80, '平衡：[N₂O₄]=' + (c0-x).toFixed(3) + '  [NO₂]=' + (2*x).toFixed(3),
+          '#94a3b8', 'end', 11);
+}
+
+// ---- 6) 电解与法拉第定律 ----
+function drawCell(S){
+    const M = S.M, z = S.z, I = S.I, tmax = S.tmax, t = S.t;
+    const m = M*I*t/(z*CHEM_F);
+    // 左：电解池示意
+    const bx = 1.00, by = 1.35, bw = 4.10, bh = 2.95;
+    ctx.fillStyle = 'rgba(56,189,248,0.16)';
+    ctx.fillRect(SX(bx), SY(by+bh), bw*sc, bh*sc);
+    ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2.4;
+    ctx.strokeRect(SX(bx), SY(by+bh), bw*sc, bh*sc);
+    // 两极
+    const ex1 = bx+0.85, ex2 = bx+bw-0.85;
+    rectBox(ex1-0.13, by+0.25, 0.26, bh-0.50, '#f59e0b');
+    rectBox(ex2-0.13, by+0.25, 0.26, bh-0.50, '#22d3ee');
+    label(ex1, by+bh+0.34, '阴极（析出）', '#f59e0b', 'center', 10);
+    label(ex2, by+bh+0.34, '阳极', '#22d3ee', 'center', 10);
+    // 析出层厚度 ∝ m
+    const depo = Math.min(0.42, 0.42*m/Math.max(S.mmax || 1, 1e-9));
+    ctx.fillStyle = '#f87171';
+    ctx.fillRect(SX(ex1-0.13-depo), SY(by+0.25+bh-0.50), depo*sc, (bh-0.50)*sc);
+    label(bx+bw/2, by-0.34, '通电量 Q = I·t', '#94a3b8', 'center', 11);
+    // 右：m(t) 曲线
+    const px0 = 5.75, px1 = 9.30, pz0 = 1.35, pz1 = 4.30;
+    const X = tt => px0 + tt/tmax*(px1-px0);
+    const mmax = M*I*tmax/(z*CHEM_F);
+    const Y = mv => pz0 + (mv/Math.max(mmax,1e-12))*(pz1-pz0);
+    ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(SX(px0), SY(pz0)); ctx.lineTo(SX(px1), SY(pz0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(SX(px0), SY(pz0)); ctx.lineTo(SX(px0), SY(pz1)); ctx.stroke();
+    ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2.6; ctx.beginPath();
+    for (let i=0; i<=100; i++){
+        const tt = tmax*i/100;
+        const mv = M*I*tt/(z*CHEM_F);
+        i===0 ? ctx.moveTo(SX(X(tt)), SY(Y(mv))) : ctx.lineTo(SX(X(tt)), SY(Y(mv)));
+    }
+    ctx.stroke();
+    dashLine(X(t), pz0-0.10, X(t), pz1+0.10, '#facc15', 1.3);
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath(); ctx.arc(SX(X(t)), SY(Y(m)), 5.5, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.4; ctx.stroke();
+    label(px0-0.20, pz0-0.34, 'm/g', '#64748b', 'start', 10);
+    label(px1, pz0-0.34, 't/s', '#64748b', 'end', 10);
+    label(9.85, 5.60, '析出质量 m = ' + m.toFixed(4) + ' g', '#34d399', 'end', 12);
+    label(9.85, 5.20, 'n(e⁻) = It/F = ' + (I*t/CHEM_F).toExponential(3) + ' mol', '#38bdf8', 'end', 11);
+}
+
+// ---- 8) 溶度积判断（对数条：log₁₀(Q/Ksp) 跨过 0 就是临界） ----
+function drawKsp(S){
+    const Ksp = S.Ksp, cAg = S.c_ag, k = S.k;
+    const cCl = k*1e-5;
+    const Q = cAg*cCl;
+    const ratio = Q/Ksp;
+    const lgv = Math.log10(ratio);
+    const cx = 5.0, cy = 3.05, halfw = 4.10;
+    // 对数坐标：−3 .. +3
+    const lo = -3, hi = 3;
+    const X = v => cx + Math.max(lo, Math.min(hi, v))/(hi-lo)*(2*halfw);
+    ctx.strokeStyle = '#334155'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(SX(X(lo)), SY(cy)); ctx.lineTo(SX(X(hi)), SY(cy)); ctx.stroke();
+    for (let t=lo; t<=hi; t++){
+        dashLine(X(t), cy-0.34, X(t), cy+0.34, t===0 ? '#facc15' : '#1e293b', t===0 ? 2 : 1);
+        label(X(t), cy-0.58, (t>0?'+':'')+t, t===0 ? '#facc15' : '#64748b', 'center', 10);
+    }
+    label(X(0), cy+0.58, 'Q = Ksp（恰好饱和）', '#facc15', 'center', 11);
+    // 条形：从 0 到 lgv
+    const w = X(lgv) - X(0);
+    const y0 = cy - 0.24, hh = 0.48;
+    ctx.fillStyle = lgv > 0 ? '#f87171' : '#34d399';
+    ctx.fillRect(Math.min(SX(X(0)), SX(X(0))+w), SY(y0+hh), Math.abs(w), hh*sc);
+    label(X(lgv) + (lgv>=0 ? 0.22 : -0.22), cy, lgv.toFixed(3), '#0f172a', lgv>=0?'start':'end', 11);
+    label(0.20, 5.62, 'AgCl 的溶度积判断：Q = c(Ag⁺)·c(Cl⁻) 与 Ksp 比', '#94a3b8', 'start', 11);
+    label(9.85, 5.20, 'c(Ag⁺) = ' + cAg.toExponential(1) + ' mol/L（定值）', '#38bdf8', 'end', 11);
+    label(9.85, 4.82, 'c(Cl⁻) = ' + cCl.toExponential(3) + ' mol/L', '#a78bfa', 'end', 11);
+    label(9.85, 4.44, 'Q = ' + Q.toExponential(3) + '   Ksp = ' + Ksp.toExponential(2), '#e2e8f0', 'end', 11);
+    label(9.85, 4.06, Q > Ksp ? 'Q > Ksp → 生成沉淀' : (Q < Ksp ? 'Q < Ksp → 不沉淀' : 'Q = Ksp → 恰好饱和'),
+          Q > Ksp ? '#f87171' : '#34d399', 'end', 12);
+}
+
+// ---- 7) 一级反应速率与半衰期 ----
+function drawDecay(S){
+    const k = S.k, tmax = S.tmax, c0 = S.c0;
+    const px0 = 0.95, px1 = 9.20, pz0 = 1.05, pz1 = 4.90;
+    const X = t => px0 + t/tmax*(px1-px0);
+    const Y = c => pz0 + Math.max(0, Math.min(1, c/(S.cmax||2.0)))*(pz1-pz0);
+    // 坐标轴
+    ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(SX(px0), SY(pz0)); ctx.lineTo(SX(px1), SY(pz0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(SX(px0), SY(pz0)); ctx.lineTo(SX(px0), SY(pz1)); ctx.stroke();
+    // 半衰期标记（与 c₀ 无关 —— 一级反应的特征）
+    const th = Math.log(2)/k;
+    if (th < tmax){
+        [th, 2*th].forEach((tt, i)=>{
+            dashLine(X(tt), pz0, X(tt), pz1, '#f87171', 1.2);
+            label(X(tt), pz1+0.32, 't½' + (i? '×2':''), '#f87171', 'center', 10);
+        });
+    }
+    // c(t) 曲线
+    ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2.8; ctx.beginPath();
+    for (let i=0; i<=240; i++){
+        const t = tmax*i/240, c = c0*Math.exp(-k*t);
+        i===0 ? ctx.moveTo(SX(X(t)), SY(Y(c))) : ctx.lineTo(SX(X(t)), SY(Y(c)));
+    }
+    ctx.stroke();
+    // 半衰期处的水平辅助线
+    if (th < tmax){
+        dashLine(px0, Y(c0/2), X(th), Y(c0/2), '#94a3b8', 1);
+        label(px0+0.08, Y(c0/2)+0.24, 'c₀/2', '#94a3b8', 'start', 10);
+    }
+    label(px0-0.22, pz1+0.10, 'c/(mol/L)', '#64748b', 'start', 10);
+    label(px1, pz0-0.34, 't/min', '#64748b', 'end', 10);
+    label(9.85, 5.60, 'c₀ = ' + c0.toFixed(2) + ' mol/L', '#34d399', 'end', 12);
+    label(9.85, 5.20, '半衰期 t½ = ln2/k = ' + th.toFixed(3) + ' min（与 c₀ 无关）',
+          '#f87171', 'end', 11);
+    label(9.85, 4.80, '初始速率 v₀ = k·c₀ = ' + (k*c0).toFixed(4), '#38bdf8', 'end', 11);
+}
