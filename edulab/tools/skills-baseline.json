@@ -116,6 +116,16 @@
   "index.html": "638dcb68ad40914474397f47b2dbd8fa750375f286fe3b60a7c6d8cd91acc670",
   "probability.html": "9abc2f09099a16a39f59828e5d27811fd40ca2b007175c6d70ae4cf1f2b7481d"
  },
+ "edu-linear-algebra": {
+  "eigen.html": "8b50990307d3be6acdbb622eb9d3786e36a1bb73ec36ce3b212894dfe31a2db0",
+  "index.html": "aabcc28979159e43a6bd00e6a38a5566cd23df9e43f29e13de6c419f02d49eb8",
+  "orth.html": "34d4daf17b64d712939b9a5abdae8e8ac60c30938b9d3f35652817f45b84f3ec",
+  "power.html": "10614c2aabccb1f088ad25aa6e75120c3349c98d1a9285bebc92a7d27d2b2d5c",
+  "projection.html": "26170a236c4c2ea8cde40d5177f19f4212a610d95646b643fd1635af7b2a3ab9",
+  "rank.html": "54b3786d867cd633ce3c124cef58d20b1b8163df723741203bda39c28457d3bc",
+  "svd.html": "a4c81abc38dfef31201b2a463729b98128815b25174e15547c04fb4deb596cb4",
+  "transform.html": "d5a7d6c8d11a438654413b8d4869051a2afcdd203a7a94bef1f709fe2f7c2727"
+ },
  "edu-math-junior": {
   "discriminant.html": "160da16a977acc8179119b6c7ccd61561a80f7bc4e1a1b2e4ee7030f0d5d6db7",
   "factor.html": "0ca556bd3f2a7a15d319d9ba831bda5e3f010a2d357a63240250a6e850c45521",

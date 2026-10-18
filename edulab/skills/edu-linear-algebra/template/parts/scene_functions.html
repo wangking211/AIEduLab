@@ -1,0 +1,382 @@
+// ===================== 线性代数场景 =====================
+// 外壳 loop() 会给 animT 赋值；"use strict" 下未声明就赋值会 ReferenceError。
+let animT = 0;
+
+// ---- 通用防御：把文字锚点自动收进画布（同 edu-history 的做法） ----
+function labelIn(x, y, text, color, align, size){
+    size = size || 12;
+    ctx.font = 'bold ' + size + 'px system-ui';
+    const w = ctx.measureText(String(text)).width / (sc || 1);
+    const x0 = view.xRange[0], x1 = view.xRange[1];
+    const pad = 0.06;
+    let a = x;
+    if (align === 'end')         a = Math.max(x, x0 + w + pad);
+    else if (align === 'center') a = Math.max(x0 + w/2 + pad, Math.min(x, x1 - w/2 - pad));
+    else                         a = Math.min(x, x1 - w - pad);
+    label(a, y, text, color, align, size);
+}
+
+// ---- 数学坐标 → 世界坐标（以画布中心为原点） ----
+const LA_OX = 5.0, LA_OY = 3.0;
+function laX(x, s){ return LA_OX + x*s; }
+function laY(y, s){ return LA_OY + y*s; }
+// 可见的数学坐标范围（画布只显示这一段）
+function laMathView(s){
+    return {xmin: (view.xRange[0] - LA_OX)/s, xmax: (view.xRange[1] - LA_OX)/s,
+            ymin: (view.yRange[0] - LA_OY)/s, ymax: (view.yRange[1] - LA_OY)/s};
+}
+// 把线段裁剪到视窗（Liang–Barsky）。线性变换会把点推到很远（剪切 k=2 时能到 ±21），
+// 不裁剪就会顶出画布 —— 这正是「裁边」的根因。
+function laClipSeg(x1, y1, x2, y2, xmin, xmax, ymin, ymax){
+    let t0 = 0, t1 = 1;
+    const dx = x2 - x1, dy = y2 - y1;
+    const ok = (p, q)=>{
+        if (Math.abs(p) < 1e-12) return q >= 0;
+        const r = q/p;
+        if (p < 0){ if (r > t1) return false; if (r > t0) t0 = r; }
+        else      { if (r < t0) return false; if (r < t1) t1 = r; }
+        return true;
+    };
+    if (!ok(-dx, x1 - xmin)) return null;
+    if (!ok( dx, xmax - x1)) return null;
+    if (!ok(-dy, y1 - ymin)) return null;
+    if (!ok( dy, ymax - y1)) return null;
+    return [x1 + t0*dx, y1 + t0*dy, x1 + t1*dx, y1 + t1*dy];
+}
+// 裁剪后的线段绘制
+function laSegClip(x1, y1, x2, y2, col, lw, s){
+    const v = laMathView(s);
+    const c = laClipSeg(x1, y1, x2, y2, v.xmin, v.xmax, v.ymin, v.ymax);
+    if (c) laSeg(c[0], c[1], c[2], c[3], col, lw, s);
+}
+// 凸多边形裁剪（Sutherland–Hodgman）—— 单位正方形的像也是平行四边形，同样会越界
+function laClipPoly(pts, xmin, xmax, ymin, ymax){
+    const lerp = (a, b, t) => [a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t];
+    const pass = (poly, inside, inter)=>{
+        const out = [];
+        for (let i=0;i<poly.length;i++){
+            const a = poly[i], b = poly[(i+1) % poly.length];
+            const ia = inside(a), ib = inside(b);
+            if (ia) out.push(a);
+            if (ia !== ib) out.push(inter(a, b));
+        }
+        return out;
+    };
+    let p = pts;
+    p = pass(p, a=>a[0] >= xmin, (a,b)=>lerp(a,b,(xmin-a[0])/(b[0]-a[0])));
+    p = pass(p, a=>a[0] <= xmax, (a,b)=>lerp(a,b,(xmax-a[0])/(b[0]-a[0])));
+    p = pass(p, a=>a[1] >= ymin, (a,b)=>lerp(a,b,(ymin-a[1])/(b[1]-a[1])));
+    p = pass(p, a=>a[1] <= ymax, (a,b)=>lerp(a,b,(ymax-a[1])/(b[1]-a[1])));
+    return p;
+}
+function laSeg(x1, y1, x2, y2, col, lw, s){
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 1;
+    ctx.beginPath(); ctx.moveTo(SX(laX(x1,s)), SY(laY(y1,s)));
+    ctx.lineTo(SX(laX(x2,s)), SY(laY(y2,s))); ctx.stroke();
+}
+function laArrow(x1, y1, x2, y2, col, lw, s){
+    arrow(laX(x1,s), laY(y1,s), laX(x2,s), laY(y2,s), col, lw || 2.4, null);
+}
+// 坐标轴：长度按可见范围自适应，标签也放在视窗内（否则 'y' 会顶到上边缘）
+function laAxes(s){
+    const v = laMathView(s);
+    laSegClip(v.xmin, 0, v.xmax, 0, '#334155', 1.4, s);
+    laSegClip(0, v.ymin, 0, v.ymax, '#334155', 1.4, s);
+    labelIn(laX(v.xmax, s), laY(0, s)-0.28, 'x', '#64748b', 'end', 10);
+    labelIn(laX(0, s)+0.16, laY(v.ymax, s)-0.22, 'y', '#64748b', 'start', 10);
+}
+// 线性变换 A=[a,b;c,d] 作用在 (x,y) 上
+function laApply(a, b, c, d, x, y){ return [a*x + b*y, c*x + d*y]; }
+
+// ---- 1) 线性变换与行列式（剪切：面积不变） ----
+function drawGridmap(S){
+    const k = S.k, a = 1, b = k, c = 0, d = 1;
+    const s = 0.62;
+    laAxes(s);
+    // 原网格（经线性变换后的像网格）—— 逐条裁剪，避免被推到 ±21 后顶出画布
+    for (let t=-7; t<=7; t++){
+        const p1 = laApply(a,b,c,d, t, -7), p2 = laApply(a,b,c,d, t, 7);
+        laSegClip(p1[0], p1[1], p2[0], p2[1], 'rgba(99,102,241,0.55)', 1.1, s);
+        const q1 = laApply(a,b,c,d, -7, t), q2 = laApply(a,b,c,d, 7, t);
+        laSegClip(q1[0], q1[1], q2[0], q2[1], 'rgba(99,102,241,0.55)', 1.1, s);
+    }
+    // 单位正方形的像（平行四边形）—— 用凸多边形裁剪
+    const v = laMathView(s);
+    let P = [[0,0],[1,0],[1,1],[0,1]].map(p=> laApply(a,b,c,d, p[0], p[1]));
+    P = laClipPoly(P, v.xmin, v.xmax, v.ymin, v.ymax);
+    if (P.length >= 3){
+        ctx.beginPath();
+        P.forEach((p,i)=>{ const X=SX(laX(p[0],s)), Y=SY(laY(p[1],s));
+            i===0 ? ctx.moveTo(X,Y) : ctx.lineTo(X,Y); });
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(250,204,21,0.25)'; ctx.fill();
+        ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2.2; ctx.stroke();
+    }
+    // 两个列向量
+    laArrow(0,0, a, c, '#38bdf8', 2.8, s);
+    laArrow(0,0, b, d, '#f472b6', 2.8, s);
+    label(laX(a/2,s), laY(c/2,s)-0.30, 'Ae₁', '#38bdf8', 'center', 11);
+    label(laX(b/2,s)+0.34, laY(d/2,s), 'Ae₂', '#f472b6', 'start', 11);
+    // 特征方向（剪切只有一个：(1,0)）
+    laSegClip(-40, 0, 40, 0, 'rgba(52,211,153,0.75)', 1.6, s);
+    labelIn(laX(2.6,s), laY(0,s)+0.28, '唯一特征方向 (1,0)', '#34d399', 'center', 10);
+    labelIn(0.20, 5.74, '线性变换 A = [[1, k], [0, 1]]：把每一点送去 Av', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.26, 'det = ' + (a*d - b*c).toFixed(3) + '（面积缩放比）', '#facc15', 'end', 12);
+    labelIn(9.90, 4.86, '单位正方形 → 平行四边形，面积恒为 |det| = 1', '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.46, '形状被拉斜了，但面积没变 —— 这就是 det=1 的含义', '#64748b', 'end', 10);
+}
+
+// ---- 2) 特征值与特征向量（对称矩阵：方向与参数无关） ----
+function drawEigen(S){
+    const k = S.k, a = 1, b = k, c = k, d = 1;
+    const s = 0.62, R = 7.6;
+    laAxes(s, R, R);
+    // 两条**固定**的特征方向
+    const inv2 = 1/Math.sqrt(2);
+    laSeg(-6*inv2, -6*inv2, 6*inv2, 6*inv2, 'rgba(52,211,153,0.85)', 1.8, s);
+    laSeg(-6*inv2, 6*inv2, 6*inv2, -6*inv2, 'rgba(56,189,248,0.85)', 1.8, s);
+    label(laX(4.6*inv2,s), laY(4.6*inv2,s)+0.26, '方向 (1,1)/√2  (λ=1+k)', '#34d399', 'center', 10);
+    label(laX(4.6*inv2,s), laY(-4.6*inv2,s)-0.26, '方向 (1,−1)/√2  (λ=1−k)', '#38bdf8', 'center', 10);
+    // 单位圆 与 它的像（椭圆）
+    ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.6; ctx.beginPath();
+    for (let i=0;i<=180;i++){
+        const t = 2*Math.PI*i/180;
+        const X = SX(laX(Math.cos(t),s)), Y = SY(laY(Math.sin(t),s));
+        i===0 ? ctx.moveTo(X,Y) : ctx.lineTo(X,Y);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2.4; ctx.beginPath();
+    for (let i=0;i<=180;i++){
+        const t = 2*Math.PI*i/180;
+        const v = laApply(a,b,c,d, Math.cos(t), Math.sin(t));
+        const X = SX(laX(v[0],s)), Y = SY(laY(v[1],s));
+        i===0 ? ctx.moveTo(X,Y) : ctx.lineTo(X,Y);
+    }
+    ctx.stroke();
+    // 特征向量在像里的落点（方向不变，只被拉伸 λ 倍）
+    [[inv2, inv2, 1+k, '#34d399'], [inv2, -inv2, 1-k, '#38bdf8']].forEach(([x,y,lam,col])=>{
+        laArrow(0,0, x, y, col, 2.6, s);
+        laArrow(0,0, lam*x, lam*y, col, 1.6, s);
+        label(laX(lam*x,s), laY(lam*y,s), '×' + lam.toFixed(2), col, 'center', 10);
+    });
+    labelIn(0.20, 5.74, '对称矩阵 A = [[1, k], [k, 1]]：两条特征方向**与 k 无关**', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.26, 'λ₁ = 1+k = ' + (1+k).toFixed(3), '#34d399', 'end', 12);
+    labelIn(9.90, 4.86, 'λ₂ = 1−k = ' + (1-k).toFixed(3), '#38bdf8', 'end', 12);
+    labelIn(9.90, 4.46, 'λ₁+λ₂ = 迹 = 2，λ₁·λ₂ = det = 1−k²', '#64748b', 'end', 10);
+}
+
+// ---- 3) 矩阵幂与马尔可夫稳态 ----
+function drawPower(S){
+    const k = Math.round(S.k);
+    const A = [[0.8, 0.3], [0.2, 0.7]];
+    // A^k
+    let M = [[1,0],[0,1]];
+    for (let i=0;i<k;i++){
+        M = [[M[0][0]*A[0][0] + M[0][1]*A[1][0], M[0][0]*A[0][1] + M[0][1]*A[1][1]],
+             [M[1][0]*A[0][0] + M[1][1]*A[1][0], M[1][0]*A[0][1] + M[1][1]*A[1][1]]];
+    }
+    const pi = [0.6, 0.4];
+    // 左：A^k 的两列作为条形（各自和为 1）
+    const bx = 0.60, by = 0.95, bw = 1.05, bh = 4.05;
+    groundLine(by, bx-0.15, bx+2.45, '#334155');
+    [[0,'第 1 列'],[1,'第 2 列']].forEach(([j, nm])=>{
+        const x = bx + 0.65 + j*1.25;
+        groundLine(by, x-0.55, x+0.55, '#334155');
+        // 两个分量堆叠（和恒为 1）
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(SX(x-0.42), SY(by + M[0][j]*bh), 0.84*sc, M[0][j]*bh*sc);
+        ctx.fillStyle = '#f472b6';
+        ctx.fillRect(SX(x-0.42), SY(by), 0.84*sc, M[1][j]*bh*sc);
+        label(x, by+bh+0.30, nm, '#94a3b8', 'center', 10);
+        label(x, by + M[0][j]*bh - 0.26, M[0][j].toFixed(4), '#e2e8f0', 'center', 10);
+        label(x, by + M[1][j]*bh*0.45, M[1][j].toFixed(4), '#0f172a', 'center', 10);
+    });
+    // 右：收敛曲线（偏差随 k 衰减，比 0.5^k 还快的那个因子）
+    const px0 = 4.70, px1 = 9.20, py0 = 1.30, py1 = 4.30;
+    const KMAX = 20;
+    const X = kk => px0 + kk/KMAX*(px1-px0);
+    const Y = e => py0 + Math.min(1, e/0.4)*(py1-py0);
+    ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(SX(px0), SY(py0)); ctx.lineTo(SX(px1), SY(py0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(SX(px0), SY(py0)); ctx.lineTo(SX(px0), SY(py1)); ctx.stroke();
+    ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2.4; ctx.beginPath();
+    for (let kk=0; kk<=KMAX; kk++){
+        let Mk = [[1,0],[0,1]];
+        for (let i=0;i<kk;i++) Mk = [[Mk[0][0]*A[0][0]+Mk[0][1]*A[1][0], Mk[0][0]*A[0][1]+Mk[0][1]*A[1][1]],
+                                      [Mk[1][0]*A[0][0]+Mk[1][1]*A[1][0], Mk[1][0]*A[0][1]+Mk[1][1]*A[1][1]]];
+        const e = Math.abs(Mk[0][0] - pi[0]) + Math.abs(Mk[1][0] - pi[1]);
+        kk===0 ? ctx.moveTo(SX(X(kk)), SY(Y(e))) : ctx.lineTo(SX(X(kk)), SY(Y(e)));
+    }
+    ctx.stroke();
+    dashLine(X(k), py0, X(k), py1, '#f87171', 1.4);
+    label(X(k), py1+0.28, 'k = ' + k, '#f87171', 'center', 11);
+    label(px0-0.16, py1+0.12, '偏差', '#64748b', 'start', 10);
+    labelIn(0.20, 5.74, '马尔可夫矩阵 A 的幂 Aᵏ：两端列各自收敛到同一个稳态', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, '稳态 π = (' + pi[0] + ', ' + pi[1] + ')', '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, 'Aᵏ 第一列 = (' + M[0][0].toFixed(6) + ', ' + M[1][0].toFixed(6) + ')', '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.44, '特征值 1 与 0.5 → 0.5ᵏ 衰减，故收敛', '#64748b', 'end', 10);
+}
+
+// ---- 4) 正交投影与最小二乘 ----
+function drawProj(S){
+    const y2 = S.y2;
+    const pts = [[0,1],[1,3],[2,y2],[3,6]];
+    // 法方程闭式（n=4, Σx=6, Σx²=14, det=20）
+    const sy = pts.reduce((a,p)=>a+p[1], 0);
+    const sxy = pts.reduce((a,p)=>a+p[0]*p[1], 0);
+    const c = (14*sy - 6*sxy)/20;
+    const m = (4*sxy - 6*sy)/20;
+    const s = 0.48, R = 9.0;
+    laAxes(s, R, R);
+    // 数据点
+    pts.forEach((p,i)=>{
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath(); ctx.arc(SX(laX(p[0],s)), SY(laY(p[1],s)), 6, 0, 7); ctx.fill();
+        ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.4; ctx.stroke();
+    });
+    // 拟合直线
+    const xa=-1.0, xb=4.2;
+    laSeg(xa, m*xa+c, xb, m*xb+c, '#facc15', 2.6, s);
+    // 残差竖线
+    pts.forEach(p=>{
+        laSeg(p[0], p[1], p[0], m*p[0]+c, '#f87171', 2.0, s);
+    });
+    labelIn(0.20, 5.74, '最小二乘：让残差竖线的平方和最小', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, '斜率 m = ' + m.toFixed(4), '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, '截距 c = ' + c.toFixed(4), '#facc15', 'end', 12);
+    labelIn(9.90, 4.44, '第 3 个点的 y 值 = ' + y2.toFixed(2), '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.04, '残差竖线 ⊥ 拟合线（法方程的含义）', '#f87171', 'end', 10);
+}
+
+// ---- 5) 秩、列空间与零空间（退化映射） ----
+function drawSubspace(S){
+    const k = S.k, a = 1, b = 1, c = 1, d = k;
+    const s = 0.62;
+    laAxes(s);
+    // 变换后的网格：k=1 时整个平面塌到直线 y=x 上（逐条裁剪防越界）
+    for (let t=-7; t<=7; t++){
+        const p1 = laApply(a,b,c,d, t, -7), p2 = laApply(a,b,c,d, t, 7);
+        laSegClip(p1[0], p1[1], p2[0], p2[1], 'rgba(99,102,241,0.50)', 1.1, s);
+        const q1 = laApply(a,b,c,d, -7, t), q2 = laApply(a,b,c,d, 7, t);
+        laSegClip(q1[0], q1[1], q2[0], q2[1], 'rgba(99,102,241,0.50)', 1.1, s);
+    }
+    // 单位正方形的像
+    const v = laMathView(s);
+    let P = [[0,0],[1,0],[1,1],[0,1]].map(p=> laApply(a,b,c,d, p[0], p[1]));
+    P = laClipPoly(P, v.xmin, v.xmax, v.ymin, v.ymax);
+    if (P.length >= 3){
+        ctx.beginPath();
+        P.forEach((p,i)=>{ const X=SX(laX(p[0],s)), Y=SY(laY(p[1],s));
+            i===0 ? ctx.moveTo(X,Y) : ctx.lineTo(X,Y); });
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(250,204,21,0.28)'; ctx.fill();
+        ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2.2; ctx.stroke();
+    }
+    // 列空间方向 y=x（k=1 时整个像都在这条线上）
+    const v2 = laMathView(s);
+    laSegClip(v2.xmin, v2.xmin, v2.xmax, v2.xmax, 'rgba(248,113,113,0.9)', 1.8, s);
+    labelIn(laX(2.2,s), laY(2.2,s)+0.28, '列空间方向 y = x', '#f87171', 'center', 10);
+    const det = a*d - b*c;
+    const rk = Math.abs(det) < 1e-9 ? 1 : 2;
+    labelIn(0.20, 5.74, 'A = [[1, 1], [1, k]]：k=1 时两列相同，秩退化为 1', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, 'det = k − 1 = ' + det.toFixed(3), '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, 'rank = ' + rk + (rk === 1 ? '（平面塌成一条直线）' : '（满秩，映射可逆）'),
+            rk === 1 ? '#f87171' : '#34d399', 'end', 11);
+    labelIn(9.90, 4.44, '零空间维数 = 2 − rank = ' + (2-rk), '#38bdf8', 'end', 11);
+}
+
+// ---- 6) 奇异值分解（单位圆 → 椭圆的主轴） ----
+function drawSvd(S){
+    const k = S.k, a = 1, b = k, c = 0, d = 1;
+    const s = 0.78, R = 6.0;
+    laAxes(s, R, R);
+    const T = 2 + k*k;
+    const disc = Math.sqrt(Math.max(0, T*T - 4));
+    const sg1 = Math.sqrt((T + disc)/2), sg2 = Math.sqrt((T - disc)/2);
+    // 单位圆
+    ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.6; ctx.beginPath();
+    for (let i=0;i<=180;i++){
+        const t = 2*Math.PI*i/180;
+        const X = SX(laX(Math.cos(t),s)), Y = SY(laY(Math.sin(t),s));
+        i===0 ? ctx.moveTo(X,Y) : ctx.lineTo(X,Y);
+    }
+    ctx.stroke();
+    // 像椭圆
+    ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2.4; ctx.beginPath();
+    for (let i=0;i<=240;i++){
+        const t = 2*Math.PI*i/240;
+        const v = laApply(a,b,c,d, Math.cos(t), Math.sin(t));
+        const X = SX(laX(v[0],s)), Y = SY(laY(v[1],s));
+        i===0 ? ctx.moveTo(X,Y) : ctx.lineTo(X,Y);
+    }
+    ctx.stroke();
+    // 主轴：右奇异向量 vᵢ 被送到 σᵢ·uᵢ
+    // AᵀA = [[1, k],[k, 1+k²]]，其特征值有闭式，特征向量可解析求出
+    const tr = 1 + (1 + k*k), dd = 1*(1+k*k) - k*k;
+    const disc2 = Math.sqrt(Math.max(0, tr*tr - 4*dd));
+    const l1 = (tr + disc2)/2, l2 = (tr - disc2)/2;
+    const evec = (lam)=>{
+        if (Math.abs(k) < 1e-9) return lam > 1 ? [0,1] : [1,0];
+        const v = [k, lam - 1];
+        const n = Math.hypot(v[0], v[1]);
+        return [v[0]/n, v[1]/n];
+    };
+    [[l1, sg1, '#34d399'], [l2, sg2, '#38bdf8']].forEach(([lam, sg, col])=>{
+        const v = evec(lam);
+        // 输入方向（单位圆上的 v）
+        laArrow(0,0, v[0], v[1], col, 2.2, s);
+        // 输出方向 = A·v，长度 = σ
+        const av = laApply(a,b,c,d, v[0], v[1]);
+        laArrow(0,0, av[0], av[1], col, 1.4, s);
+        label(laX(av[0],s), laY(av[1],s), 'σ=' + sg.toFixed(3), col, 'center', 10);
+    });
+    labelIn(0.20, 5.74, '奇异值分解：单位圆 → 椭圆的半轴就是 σ₁ ≥ σ₂', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, 'σ₁ = ' + sg1.toFixed(4), '#34d399', 'end', 12);
+    labelIn(9.90, 4.84, 'σ₂ = ' + sg2.toFixed(4), '#38bdf8', 'end', 12);
+    labelIn(9.90, 4.44, 'σ₁·σ₂ = |det| = 1（面积不变）', '#facc15', 'end', 11);
+    labelIn(9.90, 4.04, '条件数 σ₁/σ₂ = ' + (sg1/sg2).toFixed(4), '#64748b', 'end', 10);
+}
+
+// ---- 7) Gram–Schmidt 正交化 ----
+function drawOrth(S){
+    const k = S.k;
+    const v1 = [3, 1], v2 = [k, 2];
+    const n1 = Math.hypot(v1[0], v1[1]);
+    const q1 = [v1[0]/n1, v1[1]/n1];
+    const coef = v2[0]*q1[0] + v2[1]*q1[1];          // v2 在 q1 上的投影系数
+    const w = [v2[0] - coef*q1[0], v2[1] - coef*q1[1]];
+    const nw = Math.hypot(w[0], w[1]);
+    const q2 = nw > 1e-12 ? [w[0]/nw, w[1]/nw] : [0,0];
+    const s = 0.62, R = 7.6;
+    laAxes(s, R, R);
+    // 原始向量
+    laArrow(0,0, v1[0], v1[1], '#38bdf8', 2.6, s);
+    laArrow(0,0, v2[0], v2[1], '#f472b6', 2.6, s);
+    // 投影分量与残差
+    laArrow(0,0, coef*q1[0], coef*q1[1], '#a78bfa', 2.0, s);
+    dashLine(laX(coef*q1[0],s), laY(coef*q1[1],s), laX(v2[0],s), laY(v2[1],s), '#f87171', 1.6);
+    // 正交组
+    laArrow(0,0, q1[0], q1[1], '#34d399', 3.0, s);
+    if (nw > 1e-12) laArrow(0,0, q2[0], q2[1], '#facc15', 3.0, s);
+    label(laX(v1[0],s), laY(v1[1],s)+0.26, 'v₁', '#38bdf8', 'center', 11);
+    label(laX(v2[0],s), laY(v2[1],s)+0.26, 'v₂', '#f472b6', 'center', 11);
+    label(laX(q1[0],s), laY(q1[1],s)-0.30, 'q₁', '#34d399', 'center', 11);
+    if (nw > 1e-12) label(laX(q2[0],s), laY(q2[1],s)+0.28, 'q₂', '#facc15', 'center', 11);
+    // 直角符号（q1 ⊥ q2）
+    if (nw > 1e-12){
+        const e = 0.34;
+        const p = [q1[0]*e, q1[1]*e], r = [p[0]+q2[0]*e, p[1]+q2[1]*e], t2 = [q2[0]*e, q2[1]*e];
+        ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(SX(laX(p[0],s)), SY(laY(p[1],s)));
+        ctx.lineTo(SX(laX(r[0],s)), SY(laY(r[1],s)));
+        ctx.lineTo(SX(laX(t2[0],s)), SY(laY(t2[1],s)));
+        ctx.stroke();
+    }
+    labelIn(0.20, 5.74, 'Gram–Schmidt：从 v₂ 减去它在 q₁ 上的投影，剩下的必 ⊥ q₁', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, 'q₁·q₂ = ' + (q1[0]*q2[0] + q1[1]*q2[1]).toFixed(6) + '（恒为 0）', '#34d399', 'end', 12);
+    labelIn(9.90, 4.84, 'v₂ 在 q₁ 上的投影系数 = ' + coef.toFixed(4), '#a78bfa', 'end', 11);
+    labelIn(9.90, 4.44, 'q₂ 方向恒定 ±(1, −3)/√10，与 k 无关', '#facc15', 'end', 10);
+    labelIn(9.90, 4.04, '|q₁| = ' + Math.hypot(q1[0],q1[1]).toFixed(4)
+            + '   |q₂| = ' + Math.hypot(q2[0],q2[1]).toFixed(4), '#64748b', 'end', 10);
+}
