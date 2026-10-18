@@ -1,0 +1,335 @@
+// ===================== 信号与系统场景 =====================
+let animT = 0;
+
+// ---- 通用防御：把文字锚点自动收进画布 ----
+function labelIn(x, y, text, color, align, size){
+    size = size || 12;
+    ctx.font = 'bold ' + size + 'px system-ui';
+    const w = ctx.measureText(String(text)).width / (sc || 1);
+    const x0 = view.xRange[0], x1 = view.xRange[1];
+    const pad = 0.06;
+    let a = x;
+    if (align === 'end')         a = Math.max(x, x0 + w + pad);
+    else if (align === 'center') a = Math.max(x0 + w/2 + pad, Math.min(x, x1 - w/2 - pad));
+    else                         a = Math.min(x, x1 - w - pad);
+    label(a, y, text, color, align, size);
+}
+
+function sgPlot(px0, px1, py0, py1, xr, yr){
+    const X = x => px0 + (x - xr[0])/(xr[1]-xr[0])*(px1-px0);
+    const Y = y => py0 + (y - yr[0])/(yr[1]-yr[0])*(py1-py0);
+    return {X, Y, px0, px1, py0, py1, xr, yr};
+}
+function sgSeg(P, x1, y1, x2, y2, col, lw){
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 1;
+    ctx.beginPath(); ctx.moveTo(SX(P.X(x1)), SY(P.Y(y1)));
+    ctx.lineTo(SX(P.X(x2)), SY(P.Y(y2))); ctx.stroke();
+}
+function sgPoly(P, pts, col, lw){
+    if (!pts.length) return;
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 2.2; ctx.beginPath();
+    pts.forEach((p,i)=>{ const X=SX(P.X(p[0])), Y=SY(P.Y(p[1]));
+        i===0 ? ctx.moveTo(X,Y) : ctx.lineTo(X,Y); });
+    ctx.stroke();
+}
+// 折线裁剪（Liang–Barsky，按绘图框）—— 防溢出
+function sgClip(P, x1, y1, x2, y2){
+    let t0 = 0, t1 = 1;
+    const dx = x2-x1, dy = y2-y1;
+    const ok = (p, q)=>{
+        if (Math.abs(p) < 1e-12) return q >= 0;
+        const r = q/p;
+        if (p < 0){ if (r > t1) return false; if (r > t0) t0 = r; }
+        else      { if (r < t0) return false; if (r < t1) t1 = r; }
+        return true;
+    };
+    if (!ok(-dx, P.px0-x1)) return null;
+    if (!ok( dx, P.px1-x1)) return null;
+    if (!ok(-dy, P.py0-y1)) return null;
+    if (!ok( dy, P.py1-y1)) return null;
+    return [x1+t0*dx, y1+t0*dy, x1+t1*dx, y1+t1*dy];
+}
+function sgPolyClipImpl(P, pts, col, lw){
+    // 注意：pts 是**数据坐标**。必须先经 P.X/P.Y 映射到世界坐标再裁剪
+    // （裁剪框 P.px0..P.px1 是世界坐标），最后再用 SX/SY 映射到像素。
+    // 少了这两步映射，裁剪框与输出会双双错位 —— 曲线会画到画布角落并贴边。
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 2;
+    for (let i=0;i<pts.length-1;i++){
+        const c = sgClip(P, P.X(pts[i][0]), P.Y(pts[i][1]),
+                            P.X(pts[i+1][0]), P.Y(pts[i+1][1]));
+        if (!c) continue;
+        ctx.beginPath(); ctx.moveTo(SX(c[0]), SY(c[1])); ctx.lineTo(SX(c[2]), SY(c[3])); ctx.stroke();
+    }
+}
+function sgFrame(P, xlab, ylab){
+    sgSeg(P, P.xr[0], 0, P.xr[1], 0, '#334155', 1.4);
+    sgSeg(P, 0, P.yr[0], 0, P.yr[1], '#334155', 1.4);
+    labelIn(P.X(P.xr[1]), P.Y(0)-0.26, xlab, '#64748b', 'end', 10);
+    labelIn(P.X(0)+0.14, P.Y(P.yr[1])-0.20, ylab, '#64748b', 'start', 10);
+}
+// 与内核同式
+const SG_RECT = (t, half) => Math.abs(t) <= (half === undefined ? 0.5 : half) ? 1 : 0;
+const SG_TRI = (t, half) => Math.abs(t) >= half ? 0 : 1 - Math.abs(t)/half;
+const SG_SINC = (u) => Math.abs(u) < 1e-9 ? 1 : Math.sin(Math.PI*u)/(Math.PI*u);
+function sgSquarePartial(t, N){
+    let s = 0;
+    for (let k=1; k<=N; k+=2) s += Math.sin(2*Math.PI*k*t)/k;
+    return 4/Math.PI*s;
+}
+function sgAlias(f0, fs){
+    const r = ((f0 % fs) + fs) % fs;
+    return Math.abs(((r + fs/2) % fs) - fs/2);
+}
+
+// ---- 1) 连续卷积：矩形 * 矩形 = 三角形 ----
+function drawConvolve(S){
+    const t = S.t;
+    // 上：x(τ) 与 g(t−τ) 的重叠（横轴 τ）
+    const A = sgPlot(0.90, 9.10, 2.45, 4.90, [-1.7, 1.7], [-0.25, 1.35]);
+    sgFrame(A, 'τ', '');
+    // x(τ) = rect(τ)
+    ctx.fillStyle = 'rgba(56,189,248,0.30)';
+    ctx.fillRect(SX(A.X(-0.5)), SY(A.Y(1)), (1.0)*(A.px1-A.px0)/(A.xr[1]-A.xr[0])*sc, 1*(A.py1-A.py0)/(A.yr[1]-A.yr[0])*sc);
+    sgPoly(A, [[-0.5,0],[-0.5,1],[0.5,1],[0.5,0]], '#38bdf8', 2.2);
+    // g(t−τ) = rect(t−τ) 关于 τ 是 [t−0.5, t+0.5]
+    sgPoly(A, [[t+0.5,0],[t+0.5,1],[t-0.5,1],[t-0.5,0]], '#f472b6', 2.2);
+    // 重叠区（乘积）
+    const lo = Math.max(-0.5, t-0.5), hi = Math.min(0.5, t+0.5);
+    if (hi > lo){
+        ctx.fillStyle = '#facc15';
+        ctx.fillRect(SX(A.X(lo)), SY(A.Y(1)), (hi-lo)*(A.px1-A.px0)/(A.xr[1]-A.xr[0])*sc, 1*(A.py1-A.py0)/(A.yr[1]-A.yr[0])*sc);
+    }
+    labelIn(A.X(-1.6), A.Y(1)-0.24, 'x(τ)', '#38bdf8', 'start', 10);
+    labelIn(A.X(1.6), A.Y(1)+0.22, 'g(t−τ)', '#f472b6', 'end', 10);
+    labelIn(0.20, 5.72, '卷积 = 两个函数的重叠面积随 t 的变化（黄色区）', '#94a3b8', 'start', 11);
+    // 下：结果曲线
+    const B = sgPlot(0.90, 9.10, 0.95, 2.20, [-1.7, 1.7], [-0.25, 1.35]);
+    sgFrame(B, 't', '');
+    const pts = [];
+    for (let i=0;i<=240;i++){ const x = -1.7 + 3.4*i/240; pts.push([x, SG_TRI(x, 1)]); }
+    sgPoly(B, pts, '#34d399', 2.4);
+    const area = SG_TRI(Math.max(Math.min(t,1),-1), 1);
+    sgSeg(B, t, 0, t, area, '#f87171', 1.6);
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath(); ctx.arc(SX(B.X(t)), SY(B.Y(area)), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.5; ctx.stroke();
+    const ov = Math.max(0, Math.min(1, hi-lo));
+    labelIn(9.90, 5.24, '(x*g)(t) = ' + SG_TRI(Math.max(Math.min(t,1),-1), 1).toFixed(5), '#34d399', 'end', 12);
+    labelIn(9.90, 4.84, '重叠长度 = ' + ov.toFixed(4), '#facc15', 'end', 11);
+    labelIn(9.90, 4.44, 't = ' + t.toFixed(3), '#f87171', 'end', 11);
+}
+
+// ---- 2) 离散卷积 ----
+function drawDconv(S){
+    const n = Math.round(S.n);
+    const x = [1,2,3,1], h = [1,1,1];
+    const y = (()=>{ const o=[]; for (let m=0;m<x.length+h.length-1;m++){
+        let s=0; for (let k=0;k<x.length;k++){ const j=m-k; if (j>=0&&j<h.length) s+=x[k]*h[j]; }
+        o.push(s); } return o; })();
+    // 上：x[k] 与 h[n−k]
+    const A = sgPlot(0.90, 9.10, 3.05, 4.90, [-1, 7], [-0.4, 4.2]);
+    sgFrame(A, 'k', '');
+    x.forEach((v,k)=>{
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(SX(A.X(k-0.28)), SY(A.Y(v)), 0.56*sc, v*(A.py1-A.py0)/(A.yr[1]-A.yr[0])*sc);
+        labelIn(A.X(k), A.Y(-0.26), String(k), '#64748b', 'center', 9);
+    });
+    // h[n−k] 画成另一个序列（以其下标 k 为横轴）
+    x.forEach((_v,k)=>{
+        const j = n - k;
+        if (j >= 0 && j < h.length){
+            const v = h[j];
+            ctx.fillStyle = 'rgba(244,114,182,0.85)';
+            ctx.fillRect(SX(A.X(k-0.12)), SY(A.Y(v)), 0.24*sc, v*(A.py1-A.py0)/(A.yr[1]-A.yr[0])*sc);
+        }
+    });
+    labelIn(A.X(6.6), A.Y(3.9), '蓝 = x[k]   粉 = h[n−k]', '#94a3b8', 'end', 10);
+    // 下：输出 y[m]
+    const B = sgPlot(0.90, 9.10, 0.95, 2.45, [-1, 7], [-0.4, 7.2]);
+    sgFrame(B, 'm', '');
+    y.forEach((v,m)=>{
+        ctx.fillStyle = m === n ? '#facc15' : '#34d399';
+        ctx.fillRect(SX(B.X(m-0.30)), SY(B.Y(v)), 0.60*sc, v*(B.py1-B.py0)/(B.yr[1]-B.yr[0])*sc);
+        labelIn(B.X(m), B.Y(-0.30), String(m), '#64748b', 'center', 9);
+    });
+    const prod = x.map((v,k)=>{ const j = n-k; return (j>=0&&j<h.length) ? v*h[j] : 0; });
+    labelIn(0.20, 5.72, 'y[n] = Σₖ x[k]·h[n−k]（逐项相乘再求和）', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, 'y[' + n + '] = ' + y[n], '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, '乘积累加：' + prod.join('+') + ' = ' + y[n], '#34d399', 'end', 11);
+}
+
+// ---- 3) 傅里叶级数逼近方波（Gibbs 现象） ----
+function drawFseries(S){
+    const N = Math.round(S.N);
+    const P = sgPlot(0.90, 9.10, 1.35, 4.90, [-0.1, 1.1], [-1.45, 1.45]);
+    sgFrame(P, 't', '');
+    // 理想方波（虚线）
+    ctx.setLineDash([6,4]);
+    sgSeg(P, 0, 1, 0.5, 1, '#64748b', 1.6);
+    sgSeg(P, 0.5, 1, 0.5, -1, '#64748b', 1.6);
+    sgSeg(P, 0.5, -1, 1.0, -1, '#64748b', 1.6);
+    sgSeg(P, 0, -1, 0, 1, '#64748b', 1.6);
+    ctx.setLineDash([]);
+    // Gibbs 极限线
+    sgSeg(P, 0, 1.17898, 1.0, 1.17898, 'rgba(248,113,113,0.8)', 1.4);
+    labelIn(P.X(0.98), P.Y(1.17898)+0.20, 'Gibbs 极限 1.17898', '#f87171', 'end', 9);
+    // 部分和
+    const pts = [];
+    for (let i=0;i<=800;i++){ const t = -0.1 + 1.2*i/800; pts.push([t, sgSquarePartial(t, N)]); }
+    sgPolyClipImpl(P, pts, '#facc15', 2.6);
+    // 峰值（数值扫 [0,0.5]）
+    let peak = -9, pt = 0;
+    for (let i=0;i<=4000;i++){ const t = 0.5*i/4000; const v = sgSquarePartial(t, N);
+        if (v > peak){ peak = v; pt = t; } }
+    ctx.fillStyle = '#f87171';
+    ctx.beginPath(); ctx.arc(SX(P.X(pt)), SY(P.Y(peak)), 5.5, 0, 7); ctx.fill();
+    labelIn(0.20, 5.72, '方波的傅里叶部分和：谐波越多越方，但过冲不消失', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, '谐波数 N = ' + N + '（只取奇数）', '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, '当前峰值 = ' + peak.toFixed(6), '#f87171', 'end', 11);
+    labelIn(9.90, 4.44, '过冲极限 = 2Si(π)/π = 1.178980（N→∞ 也不降到 1）', '#64748b', 'end', 10);
+}
+
+// ---- 4) 采样与混叠 ----
+function drawAlias(S){
+    const fs = S.fs, f0 = 1.2;
+    const fapp = sgAlias(f0, fs);
+    const total = 3.0;
+    // 上：真实信号 + 采样点
+    const P = sgPlot(0.90, 9.10, 2.85, 4.90, [0, total], [-1.4, 1.4]);
+    sgFrame(P, 't', '');
+    const pts = [];
+    for (let i=0;i<=600;i++){ const t = total*i/600; pts.push([t, Math.cos(2*Math.PI*f0*t)]); }
+    sgPoly(P, pts, '#38bdf8', 2.2);
+    for (let k=0; k*1/fs <= total; k++){
+        const t = k/fs;
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath(); ctx.arc(SX(P.X(t)), SY(P.Y(Math.cos(2*Math.PI*f0*t))), 4.5, 0, 7); ctx.fill();
+    }
+    labelIn(0.24, 4.72, '真实信号 f₀ = 1.2，黄点 = 采样点', '#38bdf8', 'start', 10);
+    // 下：表观（折叠）信号
+    const Q = sgPlot(0.90, 9.10, 0.95, 2.40, [0, total], [-1.4, 1.4]);
+    sgFrame(Q, 't', '');
+    const pts2 = [];
+    for (let i=0;i<=600;i++){ const t = total*i/600; pts2.push([t, Math.cos(2*Math.PI*fapp*t)]); }
+    sgPoly(Q, pts2, fapp === f0 ? '#34d399' : '#f87171', 2.4);
+    labelIn(0.24, 2.22, '看到（表观）的信号', '#94a3b8', 'start', 10);
+    const ok = fs > 2*f0;
+    labelIn(0.20, 5.72, '采样定理：只有 f_s > 2f₀ 才能还原原信号', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, '采样率 f_s = ' + fs.toFixed(3), '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, '表观频率 = ' + fapp.toFixed(4)
+            + (Math.abs(fapp-f0) < 1e-9 ? '（未混叠）' : '（已混叠！）'),
+            Math.abs(fapp-f0) < 1e-9 ? '#34d399' : '#f87171', 'end', 11);
+    labelIn(9.90, 4.44, ok ? '满足奈奎斯特（f_s > 2.4）' : '不满足奈奎斯特（f_s ≤ 2.4）',
+            ok ? '#34d399' : '#f87171', 'end', 10);
+}
+
+// ---- 5) 时宽频宽积 ----
+function drawFdomain(S){
+    const tau = S.tau;
+    // 上：时域矩形
+    const P = sgPlot(0.90, 9.10, 3.20, 4.90, [-2.6, 2.6], [-0.25, 1.35]);
+    sgFrame(P, 't', '');
+    ctx.fillStyle = 'rgba(56,189,248,0.30)';
+    ctx.fillRect(SX(P.X(-tau/2)), SY(P.Y(1)),
+                 tau*(P.px1-P.px0)/(P.xr[1]-P.xr[0])*sc, 1*(P.py1-P.py0)/(P.yr[1]-P.yr[0])*sc);
+    sgPoly(P, [[-tau/2,0],[-tau/2,1],[tau/2,1],[tau/2,0]], '#38bdf8', 2.2);
+    labelIn(P.X(2.5), P.Y(1.0)+0.22, 'τ = ' + tau.toFixed(2), '#38bdf8', 'end', 10);
+    // 下：频谱 τ·sinc(τf)
+    const Q = sgPlot(0.90, 9.10, 0.95, 2.85, [-2.6, 2.6], [-0.75, tau*1.25]);
+    sgFrame(Q, 'f', 'X(f)');
+    const pts = [];
+    for (let i=0;i<=700;i++){ const fq = -2.6 + 5.2*i/700; pts.push([fq, tau*SG_SINC(tau*fq)]); }
+    sgPolyClipImpl(Q, pts, '#facc15', 2.4);
+    // 第一零点
+    const fz = 1/tau;
+    if (fz <= 2.6){
+        sgSeg(Q, fz, Q.yr[0], fz, 0, 'rgba(248,113,113,0.85)', 1.5);
+        sgSeg(Q, -fz, Q.yr[0], -fz, 0, 'rgba(248,113,113,0.85)', 1.5);
+        labelIn(Q.X(fz), Q.Y(0)-0.26, '第一零点 1/τ = ' + fz.toFixed(3), '#f87171', 'center', 9);
+    }
+    labelIn(0.20, 5.72, '矩形脉冲与其频谱：时域越窄，频域越宽', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, '直流分量 X(0) = τ = ' + tau.toFixed(4), '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.84, '第一零点 = 1/τ = ' + fz.toFixed(4), '#f87171', 'end', 11);
+    labelIn(9.90, 4.44, '时宽 × 第一零点 = ' + (tau*fz).toFixed(6) + '（恒为 1）', '#34d399', 'end', 11);
+}
+
+// ---- 6) RC 低通的频率响应 ----
+function drawFreqresp(S){
+    const RC = S.RC;
+    const fc = 1/(2*Math.PI*RC);
+    const fmin = 0.1, fmax = 1e3;
+    const lx = fq => Math.log10(fq);
+    const P = sgPlot(0.95, 8.30, 0.95, 4.90, [lx(fmin), lx(fmax)], [-0.05, 1.08]);
+    sgSeg(P, lx(fmin), 0, lx(fmax), 0, '#334155', 1.4);
+    sgSeg(P, lx(fmin), 0, lx(fmin), 1.08, '#334155', 1.4);
+    labelIn(P.X(lx(fmax)), P.Y(0)-0.26, 'f（对数轴）', '#64748b', 'end', 10);
+    labelIn(P.X(lx(fmin))+0.14, P.Y(1.02), '|H|', '#64748b', 'start', 10);
+    // 十倍频刻度
+    for (let e=-1; e<=3; e++){
+        const fq = Math.pow(10, e);
+        if (fq < fmin || fq > fmax) continue;
+        sgSeg(P, lx(fq), 0, lx(fq), 0.03, '#475569', 1.2);
+        labelIn(P.X(lx(fq)), P.Y(0)-0.26, '10^' + e, '#64748b', 'center', 9);
+    }
+    // −3dB 线与 |H| 曲线
+    sgSeg(P, lx(fmin), 1/Math.SQRT2, lx(fmax), 1/Math.SQRT2, 'rgba(248,113,113,0.7)', 1.3);
+    labelIn(P.X(lx(fmax)), P.Y(1/Math.SQRT2)+0.18, '−3dB（0.707）', '#f87171', 'end', 9);
+    sgSeg(P, lx(fc), 0, lx(fc), 0.05, '#a78bfa', 1.6);
+    const pts = [];
+    for (let i=0;i<=400;i++){
+        const e = lx(fmin) + (lx(fmax)-lx(fmin))*i/400;
+        const fq = Math.pow(10, e);
+        pts.push([e, 1/Math.sqrt(1 + Math.pow(2*Math.PI*fq*RC, 2))]);
+    }
+    sgPoly(P, pts, '#facc15', 2.6);
+    // 截止点
+    ctx.fillStyle = '#a78bfa';
+    ctx.beginPath(); ctx.arc(SX(P.X(lx(fc))), SY(P.Y(1/Math.SQRT2)), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.5; ctx.stroke();
+    labelIn(P.X(lx(fc)), P.Y(1/Math.SQRT2)-0.30, 'f_c = ' + fc.toFixed(3), '#a78bfa', 'center', 10);
+    labelIn(0.20, 5.72, 'RC 低通：|H(f)| = 1/√(1+(2πfRC)²)（对数频率轴）', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, '截止频率 f_c = ' + fc.toFixed(4) + ' Hz', '#a78bfa', 'end', 12);
+    labelIn(9.90, 4.84, '|H(f_c)| = ' + (1/Math.SQRT2).toFixed(6) + '（恒为 1/√2）', '#34d399', 'end', 11);
+    labelIn(9.90, 4.44, '相位 ∠H(f_c) = −45°（恒成立）', '#64748b', 'end', 10);
+}
+
+// ---- 7) 离散系统：极点与稳定性 ----
+function drawZplane(S){
+    const a = S.a;
+    // 左：z 平面
+    const P = sgPlot(0.95, 5.30, 0.95, 4.90, [-1.5, 1.5], [-1.5, 1.5]);
+    sgSeg(P, -1.5, 0, 1.5, 0, '#334155', 1.3);
+    sgSeg(P, 0, -1.5, 0, 1.5, '#334155', 1.3);
+    // 单位圆
+    ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.8; ctx.beginPath();
+    for (let i=0;i<=180;i++){ const th = 2*Math.PI*i/180;
+        const X = SX(P.X(Math.cos(th))), Y = SY(P.Y(Math.sin(th)));
+        i===0 ? ctx.moveTo(X,Y) : ctx.lineTo(X,Y); }
+    ctx.stroke();
+    labelIn(P.X(1.0), P.Y(1.0)+0.16, '单位圆', '#475569', 'center', 9);
+    // 极点
+    const px = a, py = 0;
+    ctx.fillStyle = a >= -1 && a <= 1 ? '#facc15' : '#f87171';
+    ctx.beginPath(); ctx.arc(SX(P.X(px)), SY(P.Y(py)), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.5; ctx.stroke();
+    labelIn(P.X(px), P.Y(py)+0.26, 'z=' + a.toFixed(2), '#facc15', 'center', 10);
+    // 右：脉冲响应 h[n] = aⁿ
+    const Q = sgPlot(5.70, 9.30, 0.95, 4.90, [-1, 16], [-1.6, 1.6]);
+    sgSeg(Q, -1, 0, 16, 0, '#334155', 1.3);
+    sgSeg(Q, 0, -1.6, 0, 1.6, '#334155', 1.3);
+    for (let n=0; n<=15; n++){
+        const v = Math.pow(a, n);
+        const vc = Math.max(-1.6, Math.min(1.6, v));
+        ctx.fillStyle = n % 2 === 0 ? '#38bdf8' : '#a78bfa';
+        ctx.fillRect(SX(Q.X(n-0.28)), SY(Q.Y(Math.max(0, vc))), 0.56*sc,
+                     Math.abs(vc)*(Q.py1-Q.py0)/(Q.yr[1]-Q.yr[0])*sc);
+    }
+    labelIn(Q.X(15), Q.Y(1.4), 'h[n] = aⁿ', '#38bdf8', 'end', 10);
+    const stable = Math.abs(a) < 1;
+    labelIn(0.20, 5.72, '一阶离散系统 y[n] = a·y[n−1] + x[n]，脉冲响应 h[n] = aⁿ', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, '极点 a = ' + a.toFixed(3) + '，|a| = ' + Math.abs(a).toFixed(3),
+            '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, stable ? '|a| < 1 → 稳定（h[n] 衰减）' : '|a| ≥ 1 → 不稳定（h[n] 不衰减）',
+            stable ? '#34d399' : '#f87171', 'end', 11);
+    labelIn(9.90, 4.44, 'h[8] = a⁸ = ' + Math.pow(a, 8).toFixed(6), '#64748b', 'end', 10);
+}

@@ -214,6 +214,16 @@
   "lln.html": "b96e7b32d002aee3f3dca965d81e2787b634c378499c7340bc75b37e14c2b418",
   "normal.html": "6dddfab369ce55c37467a75870f6c07c53960c816c4244a3836081ed428b8ff3"
  },
+ "edu-signals": {
+  "convolution.html": "9883774798a27d9038a5504322eba512a16afaed4f01a58feacbe9226c651e39",
+  "discrete.html": "76082471d4bf8857c4bb88ae563fabd33c5fc5b59cbd57a9def4c171b349b82f",
+  "discrete_sys.html": "82594aa7f15d8fe455f3090343155676e2d56bc2ce85681278202a7f88669df3",
+  "filter.html": "e6e8cd6730ef70ea240f531843d8508ec69c1dd3cc30140b29eb2fe792ef757a",
+  "fourier.html": "40c895bb8ad379c921efb001085d6917cbc13cd3bd27fc8decfa2792bd1daa91",
+  "index.html": "18e22e21db215db8ec58fa7c897209bcdfc5da3dbd7e0b0a7e27d90ee57b65b5",
+  "sampling.html": "367c1f4c94be1073fb9e448e6c0d3f432bb65b6444f905c2c8c1c2d1e5db0a1f",
+  "spectrum.html": "6580b0134a7d27297ab116742046fd9da14225d4e47baf670f9eed716996b1b3"
+ },
  "edu-solid-geometry": {
   "box.html": "2bd0ae46b71ea14fed642a93c43cec29e2509fa796c51801b3b536f888342c32",
   "cube.html": "2ccc3bfd2a0a8f5fbd29ec62d02ecbc5da08b623ed69d820cb72ed412295a718",

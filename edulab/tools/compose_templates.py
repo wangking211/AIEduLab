@@ -60,11 +60,11 @@ FAMILIES = {
                   "edu-math-junior"],
     },
     "seq-phys": {
-        "desc": "数列与三角 / 初中物理 / 高中物理 / 高中电磁学 / 概率与统计 / 化学计算 / 自然地理 / 可算的历史 / 线性代数 / 微分方程",
+        "desc": "数列与三角 / 初中物理 / 高中物理 / 高中电磁学 / 概率与统计 / 化学计算 / 自然地理 / 可算的历史 / 线性代数 / 微分方程 / 信号与系统",
         "users": ["edu-math-sequences", "edu-physics-junior", "edu-physics-senior",
                   "edu-physics-em", "edu-probability", "edu-chem-calc",
                   "edu-geography", "edu-history", "edu-linear-algebra",
-                  "edu-ode-dynamics"],
+                  "edu-ode-dynamics", "edu-signals"],
     },
 }
 
