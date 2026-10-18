@@ -1,0 +1,13 @@
+const MATHENV = {sqrt:Math.sqrt, abs:Math.abs, min:Math.min, max:Math.max,
+    pow:Math.pow, sign:Math.sign, floor:Math.floor, ceil:Math.ceil, PI:Math.PI, E:Math.E,
+    sin:Math.sin, cos:Math.cos, tan:Math.tan, asin:Math.asin, acos:Math.acos, atan:Math.atan, exp:Math.exp, log:Math.log,
+    // 概率技能新增：读数要显示组合数、排列数与正态覆盖率，基础 MATHENV 里没有。
+    // 实现与 lib/prob_kernel.py 的 comb / perm / normal_cdf 语义一致（见内核自检）。
+    fact:(n)=>{n=Math.round(n); let r=1; for(let i=2;i<=n;i++) r*=i; return r;},
+    comb:(n,k)=>{n=Math.round(n); k=Math.round(k); if(k<0||k>n) return 0;
+        let r=1; for(let i=0;i<k;i++) r=r*(n-i)/(i+1); return Math.round(r);},
+    normcdf:(z)=>{ // Φ(z)=½(1+erf(z/√2))，erf 用 A&S 7.1.26 有理逼近。
+        // 自变量必须是 z/√2（不是 z）—— 漏了这一步误差会到 3e-3，肉眼可见。
+        const s=Math.sign(z), x=Math.abs(z)/Math.SQRT2, t=1/(1+0.3275911*x);
+        const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);
+        return 0.5*(1+s*y); }};

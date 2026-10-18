@@ -152,6 +152,17 @@
   "similar_A.html": "fbda41ee6e53eed34a7e59fca8c6f7e09fc2a60ddf64536e5077fd92bebee557",
   "tangent_secant.html": "d5e06b313850458a060a25cae9380dac8f1e3f4b5cfd19b63c2fb8e06592784f"
  },
+ "edu-probability": {
+  "bayes.html": "e0e506d028e8f6ed757a5bdc61e6741f6a896b99e8e96b159ed0f6e47c4a5248",
+  "binom.html": "20d441bc3b25c192a09502639ad5b259dfd7c5b82b887bd9ad9d604a4f16ace8",
+  "classic.html": "048a7260b65c1ad861eb8950f6bf6dec4bd19b32659548204ad9fb047ae61a35",
+  "clt.html": "41ae6cc472a7775f38ede831d0070b7eb628bcf65e4ecda46e70938a3f483f0d",
+  "combo.html": "65dfc66c67558520357849be6f596de5737dff740c43ad34b093c6fc090a250f",
+  "hyper.html": "ed7c38b8724265583595ea329d285569894b0c9b2fcdff77606df64d77440b39",
+  "index.html": "8c5ef2d4511a83f3804d5a6205660a62af1284dfbcac89bc226fbf41f3dfc5bd",
+  "lln.html": "b96e7b32d002aee3f3dca965d81e2787b634c378499c7340bc75b37e14c2b418",
+  "normal.html": "6dddfab369ce55c37467a75870f6c07c53960c816c4244a3836081ed428b8ff3"
+ },
  "edu-solid-geometry": {
   "box.html": "2bd0ae46b71ea14fed642a93c43cec29e2509fa796c51801b3b536f888342c32",
   "cube.html": "2ccc3bfd2a0a8f5fbd29ec62d02ecbc5da08b623ed69d820cb72ed412295a718",
