@@ -1,0 +1,292 @@
+// ===================== 复数场景 =====================
+let animT = 0;
+
+function labelIn(x, y, text, color, align, size){
+    size = size || 12;
+    const x0 = view.xRange[0], x1 = view.xRange[1];
+    const pad = 0.06;
+    const avail = (x1 - x0) - 2 * pad;
+    let s = size;
+    const meas = () => { ctx.font = 'bold ' + s + 'px system-ui';
+                         return ctx.measureText(String(text)).width / (sc || 1); };
+    let w = meas();
+    while (w > avail && s > 7){ s -= 0.5; w = meas(); }
+    let a = x;
+    if (align === 'end')         a = Math.max(x, x0 + w + pad);
+    else if (align === 'center') a = Math.max(x0 + w/2 + pad, Math.min(x, x1 - w/2 - pad));
+    else                         a = Math.max(x0 + pad, Math.min(x, x1 - w - pad));
+    label(a, y, text, color, align, s);
+}
+function ws(x, y){ return [SX(x), SY(y)]; }
+function wSeg(x1, y1, x2, y2, col, lw, dash){
+    if (dash) ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 1.4;
+    const a = ws(x1, y1), b = ws(x2, y2);
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    if (dash) ctx.setLineDash([]);
+}
+function wPoly(pts, col, lw, fill){
+    if (pts.length < 2) return;
+    if (fill){ ctx.fillStyle = fill; ctx.beginPath();
+        pts.forEach((p,i)=>{ const q = ws(p[0], p[1]); i===0?ctx.moveTo(q[0],q[1]):ctx.lineTo(q[0],q[1]); });
+        if (pts.length > 2) ctx.closePath(); ctx.fill(); }
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 2;
+    ctx.beginPath();
+    pts.forEach((p,i)=>{ const q = ws(p[0], p[1]); i===0?ctx.moveTo(q[0],q[1]):ctx.lineTo(q[0],q[1]); });
+    ctx.stroke();
+}
+function wDot(x, y, col, r){
+    const q = ws(x, y);
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(q[0], q[1], r || 5.5, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.4; ctx.stroke();
+}
+function wArrow(x1, y1, x2, y2, col, lw){
+    const a = ws(x1, y1), b = ws(x2, y2);
+    arrow(a[0], a[1], b[0], b[1], col, lw || 2.4, null);
+}
+function wCircle(cx, cy, R, col, lw, dash){
+    if (dash) ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 1.6;
+    ctx.beginPath(); ctx.arc(SX(cx), SY(cy), R * (sc || 1), 0, 7); ctx.stroke();
+    if (dash) ctx.setLineDash([]);
+}
+function roText(lines){
+    const y0 = 5.72;
+    lines.forEach((l, i) => labelIn(0.20 + (l[3] || 0), y0 - i * 0.40,
+                                   l[0], l[1], l[2] || 'start', l[4] || 11));
+}
+// 复平面助手：世界坐标 = 原点 + K × (实部, 虚部)
+const CP_OX = 5.0, CP_OY = 2.35;
+function cX(re, K){ return CP_OX + re * (K === undefined ? 0.55 : K); }
+function cY(im, K){ return CP_OY + im * (K === undefined ? 0.55 : K); }
+function cAxes(R, K){
+    K = K === undefined ? 0.55 : K;
+    wSeg(cX(-R, K), CP_OY, cX(R, K), CP_OY, 'rgba(148,163,184,0.85)', 1.6);
+    wSeg(CP_OX, cY(-R, K), CP_OX, cY(R, K), 'rgba(148,163,184,0.85)', 1.6);
+    labelIn(cX(R, K) - 0.12, CP_OY - 0.26, '实轴', '#64748b', 'end', 9);
+    labelIn(CP_OX + 0.14, cY(R, K) - 0.14, '虚轴', '#64748b', 'start', 9);
+}
+function cGauss(re0, im0, K){ wDot(cX(re0, K), cY(im0, K), '#f472b6', 4.5); }
+// 辐角弧（从正实轴逆时针到该复数）
+function cArc(re0, im0, K, col, labelTxt){
+    const a0 = Math.atan2(im0, re0);
+    const R = Math.hypot(re0, im0) * K * 0.42;
+    ctx.strokeStyle = col; ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(SX(CP_OX), SY(CP_OY), R * (sc || 1), -Math.max(0, a0), -Math.min(0, a0));
+    ctx.stroke();
+    if (labelTxt) labelIn(CP_OX + R * 1.25 * Math.cos(a0 / 2), CP_OY + R * 1.25 * Math.sin(a0 / 2),
+                          labelTxt, col, 'center', 9);
+}
+function zLabel(re0, im0, K, txt, col){
+    labelIn(cX(re0, K) + 0.14, cY(im0, K) + 0.20, txt, col, 'start', 10);
+}
+
+// ---- 1) 复数的加法：平行四边形 ----
+function drawCAdd(S){
+    const th = S.thdeg, K = 0.55;
+    const z1 = [2.0, 1.0], r2 = 1.5;
+    const z2 = [r2 * Math.cos(th * Math.PI / 180), r2 * Math.sin(th * Math.PI / 180)];
+    const sm = [z1[0] + z2[0], z1[1] + z2[1]];
+    cAxes(3.6, K);
+    // 平行四边形
+    wPoly([[cX(0), cY(0)], [cX(z1[0], K), cY(z1[1], K)],
+           [cX(sm[0], K), cY(sm[1], K)], [cX(z2[0], K), cY(z2[1], K)]],
+          'rgba(148,163,184,0.5)', 1.3, 'rgba(99,102,241,0.10)');
+    wArrow(cX(0), cY(0), cX(z1[0], K), cY(z1[1], K), '#38bdf8', 2.6);
+    wArrow(cX(0), cY(0), cX(z2[0], K), cY(z2[1], K), '#f472b6', 2.6);
+    wArrow(cX(0), cY(0), cX(sm[0], K), cY(sm[1], K), '#facc15', 3.0);
+    zLabel(z1[0], z1[1], K, 'z₁', '#38bdf8');
+    zLabel(z2[0], z2[1], K, 'z₂', '#f472b6');
+    zLabel(sm[0], sm[1], K, 'z₁+z₂', '#facc15');
+    cArc(sm[0], sm[1], K, '#facc15', null);
+    const mag = Math.hypot(sm[0], sm[1]);
+    roText([
+        ['复数的加减法就是**向量**的加减法：z₁+z₂ 落在平行四边形的对角线上',
+         '#94a3b8', 'start', 0, 10],
+        ['z₁ = 2 + i（定值）      z₂ = ' + z2[0].toFixed(3) + ' + ' + z2[1].toFixed(3) + 'i',
+         '#38bdf8', 'start', 0, 12],
+        ['z₁+z₂ = ' + sm[0].toFixed(3) + ' + ' + sm[1].toFixed(3) + 'i      |z₁+z₂| = '
+         + mag.toFixed(4), '#facc15', 'start', 0, 11],
+        ['三角不等式：| |z₁| − |z₂| | ≤ |z₁+z₂| ≤ |z₁| + |z₂| = '
+         + (Math.hypot(z1[0], z1[1]) + r2).toFixed(4) + '（拖滑块看两端）', '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 2) 共轭与模 ----
+function drawCMod(S){
+    const a = S.aa, b = S.bb, K = 0.55;
+    const z = [a, b];
+    cAxes(3.6, K);
+    // |z| 圆
+    wCircle(cX(0), cY(0), Math.hypot(a, b) * K, 'rgba(52,211,153,0.6)', 1.4, true);
+    // 共轭关于实轴对称
+    wSeg(cX(a, K), cY(-3.2, K), cX(a, K), cY(3.2, K), 'rgba(148,163,184,0.35)', 1.0, true);
+    wArrow(cX(0), cY(0), cX(z[0], K), cY(z[1], K), '#38bdf8', 2.6);
+    wArrow(cX(0), cY(0), cX(z[0], K), cY(-z[1], K), '#a78bfa', 2.6);
+    zLabel(z[0], z[1], K, 'z', '#38bdf8');
+    zLabel(z[0], -z[1], K, 'z̄', '#a78bfa');
+    cGauss(a, b, K); cGauss(a, -b, K);
+    // z·z̄ 落在实轴上
+    const m2 = a * a + b * b;
+    wDot(cX(m2, K), cY(0), '#facc15', 6.0);
+    zLabel(m2, 0, K, 'z·z̄ = ' + m2.toFixed(2), '#facc15');
+    labelIn(cX(-3.4, K), cY(3.1, K), '绿色虚线圆：|z| 的轨迹', '#34d399', 'start', 9);
+    roText([
+        ['共轭 z̄ 就是把虚部变号 —— 图上关于**实轴**的镜像', '#94a3b8', 'start', 0, 10],
+        ['z = ' + a.toFixed(2) + ' + ' + b.toFixed(2) + 'i，z̄ = ' + a.toFixed(2)
+         + ' − ' + b.toFixed(2) + 'i', '#38bdf8', 'start', 0, 12],
+        ['z·z̄ = a² + b² = ' + m2.toFixed(4) + '（恒为**实数**，就是 |z|²）', '#facc15', 'start', 0, 11],
+        ['于是 |z| = √(a²+b²) = ' + Math.hypot(a, b).toFixed(4)
+         + '；共轭的模相等、辐角相反', '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 3) 乘法的几何意义：旋转 + 伸缩 ----
+function drawCMul(S){
+    const th2 = S.th2, K = 0.42;
+    const z1 = [2.0, 1.0];
+    const r2 = 1.6, th1 = Math.atan2(1, 2) * 180 / Math.PI;
+    const z2 = [r2 * Math.cos(th2 * Math.PI / 180), r2 * Math.sin(th2 * Math.PI / 180)];
+    const m1 = Math.hypot(z1[0], z1[1]);
+    const pr = m1 * r2, pth = (th1 + th2) * Math.PI / 180;
+    const pd = [pr * Math.cos(pth), pr * Math.sin(pth)];
+    cAxes(4.2, K);
+    wArrow(cX(0), cY(0), cX(z1[0], K), cY(z1[1], K), '#38bdf8', 2.4);
+    wArrow(cX(0), cY(0), cX(z2[0], K), cY(z2[1], K), '#f472b6', 2.4);
+    wArrow(cX(0), cY(0), cX(pd[0], K), cY(pd[1], K), '#facc15', 3.0);
+    zLabel(z1[0], z1[1], K, 'z₁', '#38bdf8');
+    zLabel(z2[0], z2[1], K, 'z₂', '#f472b6');
+    zLabel(pd[0], pd[1], K, 'z₁z₂', '#facc15');
+    cArc(z1[0], z1[1], K, 'rgba(56,189,248,0.8)', null);
+    cArc(pd[0], pd[1], K, '#facc15', 'θ₁+θ₂');
+    labelIn(cX(-4.0, K), cY(4.0, K), '黄弧张角 = 蓝弧 + 粉弧（辐角相加）',
+            '#94a3b8', 'start', 9);
+    roText([
+        ['乘法的几何意义：**模相乘、辐角相加** —— 一次「旋转 + 伸缩」', '#94a3b8', 'start', 0, 10],
+        ['|z₁| = ' + m1.toFixed(4) + '，arg z₁ = ' + th1.toFixed(2) + '°（定值）', '#38bdf8', 'start', 0, 11],
+        ['|z₂| = ' + r2.toFixed(2) + '，arg z₂ = ' + th2.toFixed(0) + '°（滑块）'
+         + '      ⇒ arg(z₁z₂) = ' + (th1 + th2).toFixed(2) + '°', '#f472b6', 'start', 0, 11],
+        ['|z₁z₂| = ' + m1.toFixed(4) + ' × ' + r2.toFixed(2) + ' = ' + pr.toFixed(4)
+         + '      |z₁z₂| = |z₁|·|z₂| 恒成立', '#facc15', 'start', 0, 10],
+    ]);
+}
+
+// ---- 4) 三角形式与棣莫弗定理 ----
+function drawCPolar(S){
+    const n = S.nn, K = 0.95;
+    const r = 1.0, th = 45.0;
+    const m = Math.pow(r, n), ang = th * n;
+    const pth = (ang % 360) * Math.PI / 180;
+    cAxes(2.1, K);
+    wCircle(cX(0), cY(0), r * K, 'rgba(148,163,184,0.5)', 1.3, true);
+    wArrow(cX(0), cY(0), cX(r * Math.cos(th * Math.PI / 180), K),
+           cY(r * Math.sin(th * Math.PI / 180), K), '#38bdf8', 2.6);
+    zLabel(r * Math.cos(th * Math.PI / 180), r * Math.sin(th * Math.PI / 180), K, 'z', '#38bdf8');
+    cArc(r * Math.cos(th * Math.PI / 180), r * Math.sin(th * Math.PI / 180), K, '#38bdf8', '45°');
+    if (n > 1){
+        wArrow(cX(0), cY(0), cX(m * Math.cos(pth), K), cY(m * Math.sin(pth), K), '#facc15', 3.0);
+        zLabel(m * Math.cos(pth), m * Math.sin(pth), K, 'z^' + n, '#facc15');
+        labelIn(cX(-2.0, K), cY(2.0, K), 'z 是单位复数 ⇒ zⁿ 仍在单位圆上',
+                '#34d399', 'start', 9);
+    }
+    const pdeg = ((ang % 360) + 360) % 360;
+    roText([
+        ['三角形式 z = r(cosθ + i sinθ)；棣莫弗定理 zⁿ = rⁿ(cos nθ + i sin nθ)',
+         '#94a3b8', 'start', 0, 10],
+        ['z = cos45° + i sin45°（|z| = 1）      n = ' + n + '（滑块）', '#38bdf8', 'start', 0, 11],
+        ['z^' + n + ' 的模 = 1^' + n + ' = ' + m.toFixed(4) + '      辐角 = 45°×' + n
+         + ' = ' + ang.toFixed(0) + '° ≡ ' + pdeg.toFixed(1) + '°', '#facc15', 'start', 0, 12],
+        ['模只管伸缩、辐角只管旋转 —— 两者互不干扰，这就是三角形式好用之处',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 5) n 次单位根 ----
+function drawUnitRoots(S){
+    const n = S.n, K = 1.30;
+    cAxes(1.7, K);
+    wCircle(cX(0), cY(0), K, 'rgba(56,189,248,0.75)', 2.0);
+    const pts = [];
+    for (let k = 0; k < n; k++){
+        const th = 2 * Math.PI * k / n;
+        pts.push([Math.cos(th), Math.sin(th)]);
+    }
+    // 正多边形
+    wPoly(pts.map(p => [cX(p[0], K), cY(p[1], K)]), 'rgba(250,204,21,0.65)', 1.6,
+          'rgba(250,204,21,0.10)');
+    pts.forEach((p, k) => {
+        wDot(cX(p[0], K), cY(p[1], K), k === 0 ? '#34d399' : '#facc15', 5.5);
+        if (n <= 8) labelIn(cX(p[0], K) * 0 + cX(p[0], K) + 0.14, cY(p[1], K) + 0.16,
+                            'ω' + (k === 1 ? '' : (k === 0 ? '⁰' : k)), '#facc15', 'start', 9);
+    });
+    labelIn(cX(-1.6, K), cY(1.6, K), 'n = ' + n + ' 个根把单位圆 n 等分', '#94a3b8', 'start', 9);
+    roText([
+        ['n 次单位根：单位圆上均匀分布的 n 个点（正 n 边形的顶点）', '#94a3b8', 'start', 0, 10],
+        ['n = ' + n + '（滑块）      每个根的模都是 1，相邻辐角差 360°/' + n
+         + ' = ' + (360 / n).toFixed(2) + '°', '#38bdf8', 'start', 0, 11],
+        ['全部 n 个根之和恒为 0（定值），之积恒为 (−1)^(n−1)', '#facc15', 'start', 0, 11],
+        ['n=2 是 ±1；n=3 是 1, ω, ω²（且 1+ω+ω²=0）；n=4 是 ±1、±i', '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 6) 一元二次方程的复根 ----
+function drawQRoots(S){
+    const p = S.pp, K = 0.62;
+    // x² + p x + q = 0，q 固定为 1 ⇒ 判别式 p² − 4
+    const q = 1.0, D = p * p - 4 * q;
+    cAxes(2.6, K);
+    if (D >= 0){
+        const s = Math.sqrt(D);
+        const r1 = (-p + s) / 2, r2 = (-p - s) / 2;
+        [[r1, '#34d399'], [r2, '#34d399']].forEach(rv => {
+            wDot(cX(rv[0], K), cY(0), rv[1], 6.0);
+        });
+        labelIn(cX(0), cY(1.6, K), '判别式 ≥ 0 ⇒ 两个**实根**（都落在实轴上）',
+                '#34d399', 'center', 11);
+    } else {
+        const s = Math.sqrt(-D) / 2;
+        const reP = -p / 2;
+        wSeg(cX(reP, K), cY(-2.4, K), cX(reP, K), cY(2.4, K), 'rgba(148,163,184,0.4)', 1.0, true);
+        wArrow(cX(0), cY(0), cX(reP, K), cY(s, K), '#38bdf8', 2.6);
+        wArrow(cX(0), cY(0), cX(reP, K), cY(-s, K), '#a78bfa', 2.6);
+        wDot(cX(reP, K), cY(s, K), '#38bdf8', 6.0);
+        wDot(cX(reP, K), cY(-s, K), '#a78bfa', 6.0);
+        labelIn(cX(0), cY(2.2, K), '判别式 < 0 ⇒ 一对**共轭复根**（关于实轴对称）',
+                '#38bdf8', 'center', 11);
+    }
+    roText([
+        ['实系数一元二次方程：判别式 < 0 时出现一对共轭复根', '#94a3b8', 'start', 0, 10],
+        ['x² + ' + p.toFixed(1) + 'x + 1 = 0      判别式 = p² − 4 = '
+         + D.toFixed(4), '#38bdf8', 'start', 0, 12],
+        [D >= 0 ? '两根都是实数' : '两根为 ' + (-p / 2).toFixed(4) + ' ± '
+         + (Math.sqrt(-D) / 2).toFixed(4) + 'i（共轭）', '#facc15', 'start', 0, 11],
+        ['韦达定理对复根同样成立：两根之和 = −p、两根之积 = 1（拖滑块验证）',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 7) 复数的几何轨迹 ----
+function drawLocus(S){
+    const r = S.rr, K = 0.62;
+    const z0 = [1.0, 1.0];
+    cAxes(3.0, K);
+    wCircle(cX(z0[0], K), cY(z0[1], K), r * K, '#38bdf8', 2.4);
+    wDot(cX(z0[0], K), cY(z0[1], K), '#facc15', 6.0);
+    zLabel(z0[0], z0[1], K, 'z₀', '#facc15');
+    // 圆上的动点（θ 固定为 40°，用 r 做滑块）
+    const th = 40 * Math.PI / 180;
+    const pz = [z0[0] + r * Math.cos(th), z0[1] + r * Math.sin(th)];
+    wSeg(cX(z0[0], K), cY(z0[1], K), cX(pz[0], K), cY(pz[1], K), '#f472b6', 2.0);
+    wDot(cX(pz[0], K), cY(pz[1], K), '#f472b6', 6.0);
+    zLabel(pz[0], pz[1], K, 'z', '#f472b6');
+    labelIn(cX(-2.8, K), cY(2.8, K), '|z − z₀| = r 就是「到 z₀ 的距离为 r」',
+            '#94a3b8', 'start', 9);
+    roText([
+        ['复数的几何轨迹：把 |z − z₀| 读成「z 到 z₀ 的距离」', '#94a3b8', 'start', 0, 10],
+        ['z₀ = 1 + i（定值）      r = ' + r.toFixed(2) + '（滑块）', '#38bdf8', 'start', 0, 11],
+        ['|z − z₀| = r 的轨迹是一个**圆**（圆心 z₀、半径 r）', '#facc15', 'start', 0, 11],
+        ['类似地 |z−A| = |z−B| 是 A、B 的垂直平分线；|z−z₀| ≤ r 是圆盘',
+         '#64748b', 'start', 0, 10],
+    ]);
+}

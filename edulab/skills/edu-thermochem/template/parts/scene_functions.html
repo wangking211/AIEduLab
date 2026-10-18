@@ -1,0 +1,276 @@
+// ===================== 热化学场景 =====================
+let animT = 0;
+
+function labelIn(x, y, text, color, align, size){
+    size = size || 12;
+    const x0 = view.xRange[0], x1 = view.xRange[1];
+    const pad = 0.06;
+    const avail = (x1 - x0) - 2 * pad;
+    let s = size;
+    const meas = () => { ctx.font = 'bold ' + s + 'px system-ui';
+                         return ctx.measureText(String(text)).width / (sc || 1); };
+    let w = meas();
+    while (w > avail && s > 7){ s -= 0.5; w = meas(); }
+    let a = x;
+    if (align === 'end')         a = Math.max(x, x0 + w + pad);
+    else if (align === 'center') a = Math.max(x0 + w/2 + pad, Math.min(x, x1 - w/2 - pad));
+    else                         a = Math.max(x0 + pad, Math.min(x, x1 - w - pad));
+    label(a, y, text, color, align, s);
+}
+function ws(x, y){ return [SX(x), SY(y)]; }
+function wSeg(x1, y1, x2, y2, col, lw, dash){
+    if (dash) ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 1.4;
+    const a = ws(x1, y1), b = ws(x2, y2);
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    if (dash) ctx.setLineDash([]);
+}
+function wPoly(pts, col, lw, fill){
+    if (pts.length < 2) return;
+    if (fill){ ctx.fillStyle = fill; ctx.beginPath();
+        pts.forEach((p,i)=>{ const q = ws(p[0], p[1]); i===0?ctx.moveTo(q[0],q[1]):ctx.lineTo(q[0],q[1]); });
+        if (pts.length > 2) ctx.closePath(); ctx.fill(); }
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 2;
+    ctx.beginPath();
+    pts.forEach((p,i)=>{ const q = ws(p[0], p[1]); i===0?ctx.moveTo(q[0],q[1]):ctx.lineTo(q[0],q[1]); });
+    ctx.stroke();
+}
+function wDot(x, y, col, r){
+    const q = ws(x, y);
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(q[0], q[1], r || 5.5, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.4; ctx.stroke();
+}
+function wArrow(x1, y1, x2, y2, col, lw){
+    const a = ws(x1, y1), b = ws(x2, y2);
+    arrow(a[0], a[1], b[0], b[1], col, lw || 2.4, null);
+}
+function roText(lines){
+    const y0 = 5.72;
+    lines.forEach((l, i) => labelIn(0.20 + (l[3] || 0), y0 - i * 0.40,
+                                   l[0], l[1], l[2] || 'start', l[4] || 11));
+}
+// 能量-反应进程曲线：从 (x0,y1) 经峰 (中点,ypeak) 到 (x1,y2)
+function energyCurve(x0, x1, y1, y2, ypeak, col, lw){
+    const pts = [];
+    for (let i = 0; i <= 120; i++){
+        const s = i / 120;
+        const E = s <= 0.5 ? y1 + (ypeak - y1) * Math.sin(Math.PI * s)
+                           : y2 + (ypeak - y2) * Math.sin(Math.PI * s);
+        pts.push([x0 + (x1 - x0) * s, E]);
+    }
+    wPoly(pts, col, lw || 2.6, null);
+    return pts;
+}
+// 能级横线 + 标签
+function levelLine(x0, x1, y, col, txt, align){
+    wSeg(x0, y, x1, y, col, 2.2, true);
+    if (txt) labelIn(x1 + 0.06, y + 0.04, txt, col, align || 'start', 10);
+}
+// 双向箭头（标注能量差）
+function diffArrow(x, y1, y2, col, txt){
+    wArrow(x, y1, x, y2, col, 2.2);
+    labelIn(x + 0.10, (y1 + y2) / 2, txt, col, 'start', 10);
+}
+function hBar(y, value, maxv, col, text, x0, w){
+    x0 = x0 === undefined ? 1.5 : x0;
+    w = w === undefined ? 7.6 : w;
+    const len = Math.max(0.05, Math.min(w, w * Math.abs(value) / (maxv || 1)));
+    wPoly([[x0, y - 0.15], [x0 + len, y - 0.15], [x0 + len, y + 0.15], [x0, y + 0.15]],
+          col, 1.4, col.replace('rgb', 'rgba').replace(')', ',0.20)'));
+    labelIn(x0 + 0.10, y, text, '#0f172a', 'start', 10);
+}
+
+// ---- 1) 反应热的符号与能量图 ----
+function drawSign(S){
+    const dh = S.dh;
+    const yR = 2.75, yP = 2.75 + dh / 100.0;       // ΔH 每 100 kJ 挪 1 个世界单位
+    const yPeak = yR + Math.max(1.5, (dh + 40) / 100.0);
+    energyCurve(1.6, 8.4, yR, yP, yPeak, dh < 0 ? '#f472b6' : '#38bdf8', 2.8);
+    levelLine(1.6, 3.0, yR, '#94a3b8', '反应物', 'end');
+    levelLine(7.0, 8.4, yP, '#facc15', '生成物', 'start');
+    diffArrow(8.9, yR, yP, dh < 0 ? '#34d399' : '#f87171', '');
+    labelIn(9.0, (yR + yP) / 2, 'ΔH = ' + dh.toFixed(1), dh < 0 ? '#34d399' : '#f87171', 'end', 10);
+    labelIn(1.6, yPeak + 0.24, '活化能 Ea（要翻过这个山头）', '#a78bfa', 'start', 9);
+    const eaF = yPeak - yR, eaR = yPeak - yP;
+    roText([
+        ['反应热 ΔH = 生成物总能量 − 反应物总能量（放热为负）', '#94a3b8', 'start', 0, 10],
+        ['ΔH = ' + dh.toFixed(1) + ' kJ/mol      ' + (dh < 0 ? '放热：生成物能量更低'
+         : (dh > 0 ? '吸热：生成物能量更高' : '热量不变化')), dh < 0 ? '#34d399' : '#f87171', 'start', 0, 12],
+        ['正反应活化能 Ea(正) = ' + (eaF * 100).toFixed(0) + ' kJ/mol，逆反应 Ea(逆) = '
+         + (eaR * 100).toFixed(0) + ' kJ/mol', '#a78bfa', 'start', 0, 11],
+        ['恒有关系：ΔH = Ea(正) − Ea(逆)。拖滑块改 ΔH，看两条能量线的相对高低',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 2) 盖斯定律：路径无关 ----
+function drawHess(S){
+    const frac = S.frac;                            // 中间体 C 的相对高度
+    const yA = 2.10, yDirect = 3.55, EA = 0.95, EA2 = 0.75;
+    const yC = yA + (yDirect - yA) * frac;
+    const yPeak1 = Math.max(yA, yC) + EA;
+    const yPeak2 = Math.max(yC, yDirect) + EA2;
+    // 路径二：A → C → B
+    energyCurve(1.5, 4.6, yA, yC, yPeak1, '#38bdf8', 2.4);
+    energyCurve(4.6, 8.2, yC, yDirect, yPeak2, '#38bdf8', 2.4);
+    // 路径一：A → B（虚线直连）
+    wSeg(1.5, yA, 8.2, yDirect, 'rgba(52,211,153,0.85)', 2.0, true);
+    wDot(1.5, yA, '#facc15', 6.0); wDot(8.2, yDirect, '#facc15', 6.0);
+    wDot(4.6, yC, '#f472b6', 6.0);
+    labelIn(1.5, yA - 0.28, 'A', '#facc15', 'center', 12);
+    labelIn(8.2, yDirect + 0.26, 'B', '#facc15', 'center', 12);
+    labelIn(4.6, yC - 0.28, 'C', '#f472b6', 'center', 12);
+    labelIn(5.0, yDirect + 0.72, '绿虚线：A→B 一步到位', '#34d399', 'start', 10);
+    const d1 = (yC - yA) * -100, d2 = (yDirect - yC) * -100, dt = (yDirect - yA) * -100;
+    roText([
+        ['盖斯定律：反应热只由始末状态决定，与经过的路径**无关**', '#94a3b8', 'start', 0, 10],
+        ['分两步：A→C 的 ΔH₁ = ' + d1.toFixed(1) + '，C→B 的 ΔH₂ = '
+         + d2.toFixed(1) + ' kJ/mol', '#38bdf8', 'start', 0, 12],
+        ['一步到位：ΔH = ' + dt.toFixed(1) + ' kJ/mol（定值 —— 与中间体 C 的高低无关）',
+         '#34d399', 'start', 0, 11],
+        ['于是热化学方程式可以像代数式一样相加、相减、乘系数 —— 拖动滑块只改变路径',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 3) 由标准生成焓计算 ----
+function drawBarH(S){
+    const idx = Math.round(S.ridx) - 1;
+    const RA = [
+        { n: 'CH₄ + 2O₂ → CO₂ + 2H₂O', r: [[1, -74.8], [2, 0.0]], p: [[1, -393.5], [2, -285.8]] },
+        { n: 'C + O₂ → CO₂', r: [[1, 0.0], [1, 0.0]], p: [[1, -393.5]] },
+        { n: 'C + 2H₂ → CH₄', r: [[1, 0.0], [2, 0.0]], p: [[1, -74.8]] },
+        { n: 'CaCO₃ → CaO + CO₂', r: [[1, -1207.0]], p: [[1, -635.5], [1, -393.5]] },
+        { n: '2H₂ + O₂ → 2H₂O', r: [[2, 0.0], [1, 0.0]], p: [[2, -285.8]] },
+    ];
+    const R = RA[Math.max(0, Math.min(RA.length - 1, idx))];
+    const sr = R.r.reduce((s, x) => s + x[0] * x[1], 0);
+    const sp = R.p.reduce((s, x) => s + x[0] * x[1], 0);
+    const mx = Math.max(Math.abs(sr), Math.abs(sp), 1);
+    labelIn(0.30, 4.30, R.n, '#facc15', 'start', 12);
+    hBar(3.55, sr, mx, '#38bdf8', 'ΣνΔHf(反应物) = ' + sr.toFixed(1) + ' kJ/mol', 3.6, 5.4);
+    hBar(2.85, sp, mx, '#f472b6', 'ΣνΔHf(生成物) = ' + sp.toFixed(1) + ' kJ/mol', 3.6, 5.4);
+    hBar(2.15, sp - sr, mx, '#34d399', 'ΔH = ' + (sp - sr).toFixed(1) + ' kJ/mol', 3.6, 5.4);
+    labelIn(1.50, 1.62, '三条按同一比例（满格 = ' + mx.toFixed(0) + ' kJ/mol）', '#94a3b8', 'start', 10);
+    roText([
+        ['ΔH = Σν·ΔHf(生成物) − Σν·ΔHf(反应物)（单质的 ΔHf 规定为 0）',
+         '#94a3b8', 'start', 0, 10],
+        [R.n + '      ΔH = ' + sp.toFixed(1) + ' − (' + sr.toFixed(1) + ') = '
+         + (sp - sr).toFixed(1) + ' kJ/mol', '#38bdf8', 'start', 0, 12],
+        ['判定：' + ((sp - sr) < 0 ? 'ΔH < 0，放热反应' : 'ΔH > 0，吸热反应'),
+         (sp - sr) < 0 ? '#34d399' : '#f87171', 'start', 0, 11],
+        ['注意：ΔHf 是「由单质生成 1 mol 该物质」的热效应，所以单质的 ΔHf ≡ 0',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 4) 由键能估算 ----
+function drawBond(S){
+    const ehcl = S.ehcl;
+    const broken = 436.0 + 243.0;          // H−H + Cl−Cl
+    const formed = 2 * ehcl;               // 2 个 H−Cl
+    const dh = broken - formed;
+    const mx = Math.max(broken, formed, 1);
+    labelIn(0.30, 4.30, 'H₂ + Cl₂ → 2HCl（断 1 个 H−H 与 1 个 Cl−Cl，成 2 个 H−Cl）',
+            '#facc15', 'start', 11);
+    hBar(3.50, broken, mx, '#f87171', '断键吸收 = 436 + 243 = ' + broken.toFixed(0) + ' kJ/mol', 3.9, 5.1);
+    hBar(2.80, formed, mx, '#38bdf8', '成键放出 = 2 × ' + ehcl.toFixed(0) + ' = '
+         + formed.toFixed(0) + ' kJ/mol', 3.9, 5.1);
+    hBar(2.10, dh, mx, dh < 0 ? '#34d399' : '#a78bfa', 'ΔH = 断 − 成 = ' + dh.toFixed(0) + ' kJ/mol', 3.9, 5.1);
+    labelIn(1.48, 1.60, '断键吸热（正贡献）、成键放热（负贡献）', '#94a3b8', 'start', 10);
+    roText([
+        ['ΔH = ΣE(断裂的键) − ΣE(形成的键)：断键要吸能、成键要放能', '#94a3b8', 'start', 0, 10],
+        ['取 E(H−Cl) = ' + ehcl.toFixed(0) + ' kJ/mol（滑块）      断 = ' + broken.toFixed(0)
+         + '，成 = ' + formed.toFixed(0), '#38bdf8', 'start', 0, 12],
+        ['ΔH = ' + dh.toFixed(1) + ' kJ/mol      ' + (dh < 0 ? '放热（原子重新成键更「划算」）'
+         : '吸热（新键不够强）'), dh < 0 ? '#34d399' : '#a78bfa', 'start', 0, 11],
+        ['已知 E(H−H)=436、E(Cl−Cl)=243、E(H−Cl)≈431，代入得 ≈ −183 —— 与实测 −184.6 很接近',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 5) 燃烧热与热量计算 ----
+function drawHeat(S){
+    const n = S.nn, dh = -890.3;
+    const Q = n * Math.abs(dh);
+    const mx = 5 * Math.abs(dh);
+    labelIn(0.30, 4.30, 'CH₄(g) + 2O₂(g) → CO₂(g) + 2H₂O(l)      ΔH = −890.3 kJ/mol（定值）',
+            '#facc15', 'start', 11);
+    hBar(3.45, Q, mx, '#f472b6', '燃烧 ' + n.toFixed(2) + ' mol 放出 ' + Q.toFixed(1) + ' kJ', 3.4, 5.6);
+    hBar(2.75, 890.3, mx, '#38bdf8', '参考：1 mol 的燃烧热 = 890.3 kJ', 3.4, 5.6);
+    labelIn(1.50, 1.68, '相当于把 ' + (Q * 1000 / (4.18 * 50)).toFixed(1)
+            + ' g 的水升温 50 K（c = 4.18 J/(g·K)）', '#34d399', 'start', 10);
+    roText([
+        ['燃烧热：1 mol 可燃物完全燃烧生成稳定氧化物时放出的热量', '#94a3b8', 'start', 0, 10],
+        ['n(CH₄) = ' + n.toFixed(2) + ' mol      Q = n × 890.3 = ' + Q.toFixed(2) + ' kJ',
+         '#f472b6', 'start', 0, 12],
+        ['注意：燃烧热是**正值** 890.3 kJ/mol，而 ΔH = **−890.3** kJ/mol（差一个符号）',
+         '#38bdf8', 'start', 0, 11],
+        ['稳定产物指 H₂O 必须是**液态**、C 必须是 CO₂；若生成气态水，放热会少一些',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 6) 中和热与量热法 ----
+function drawNeutral(S){
+    const nw = S.nw;
+    const Q = 57.3 * nw;
+    const mSol = 100.0, c = 4.18;
+    const dT = Q * 1000 / (mSol * c);
+    // 量热计
+    wPoly([[2.0, 1.30], [5.0, 1.30], [5.0, 3.30], [2.0, 3.30]], '#38bdf8', 2.0, 'rgba(56,189,248,0.12)');
+    wPoly([[2.0, 1.30], [5.0, 1.30], [5.0, 2.30], [2.0, 2.30]], '#a78bfa', 1.6, 'rgba(167,139,250,0.20)');
+    labelIn(3.5, 1.80, '稀盐酸 + 稀 NaOH', '#a78bfa', 'center', 9);
+    labelIn(3.5, 2.80, '保温杯（量热计）', '#38bdf8', 'center', 10);
+    // 温度计
+    wSeg(4.4, 3.30, 4.4, 4.05, 'rgba(148,163,184,0.9)', 2.6);
+    const tx = 4.4, ty0 = 3.40, ty1 = 3.95;
+    const frac = Math.min(1, dT / 15);
+    wSeg(tx, ty0, tx, ty0 + (ty1 - ty0) * frac, '#f87171', 2.4);
+    labelIn(tx + 0.14, ty1 + 0.10, '温度计', '#94a3b8', 'start', 9);
+    // 温度刻度
+    wSeg(6.2, 1.40, 6.2, 4.00, '#94a3b8', 1.8);
+    for (let k = 0; k <= 5; k++){
+        const y = 1.40 + (4.00 - 1.40) * k / 5;
+        wSeg(6.2, y, 6.45, y, '#94a3b8', 1.4);
+    }
+    wSeg(6.2, 1.40, 6.2, 1.40 + (4.00 - 1.40) * frac, '#f87171', 3.0);
+    labelIn(6.6, 1.40 + (4.00 - 1.40) * frac, 'ΔT = ' + dT.toFixed(2) + ' K',
+            '#f87171', 'start', 12);
+    labelIn(6.6, 1.10, '（0 → 15 K 的刻度）', '#64748b', 'start', 9);
+    roText([
+        ['中和热：强酸与强碱的稀溶液反应生成 1 mol 水时放出的热量', '#94a3b8', 'start', 0, 10],
+        ['n(H₂O) = ' + nw.toFixed(3) + ' mol      Q = 57.3 × n = ' + Q.toFixed(3) + ' kJ',
+         '#f472b6', 'start', 0, 12],
+        ['溶液的比热容按水算：ΔT = Q/(m·c) = ' + dT.toFixed(3) + ' K（m = 100 g、'
+         + 'c = 4.18 J/(g·K)）', '#38bdf8', 'start', 0, 11],
+        ['ΔH = −Q/n = −57.3 kJ/mol 是**定值** —— 与酸碱的种类、浓度都无关（只要完全电离）',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 7) 活化能与催化剂 ----
+function drawCatalyst(S){
+    const drop = S.drop;
+    const yR = 2.20, dh = -40.0, yP = yR + dh / 100.0;
+    const ea0 = 1.30;
+    const yPeak0 = yR + ea0;
+    const yPeakC = yPeak0 - drop / 100.0;
+    energyCurve(1.5, 8.4, yR, yP, yPeak0, 'rgba(148,163,184,0.9)', 2.4);
+    energyCurve(1.5, 8.4, yR, yP, yPeakC, '#34d399', 3.0);
+    levelLine(1.5, 3.0, yR, '#94a3b8', '反应物', 'end');
+    levelLine(7.0, 8.4, yP, '#facc15', '生成物', 'start');
+    diffArrow(8.9, yR, yP, '#f87171', '');
+    labelIn(9.0, (yR + yP) / 2, 'ΔH = ' + dh.toFixed(0), '#f87171', 'end', 10);
+    labelIn(4.9, yPeak0 + 0.20, '无催化剂', '#94a3b8', 'center', 9);
+    labelIn(4.9, yPeakC - 0.34, '有催化剂', '#34d399', 'center', 9);
+    roText([
+        ['催化剂通过改变反应路径降低活化能，从而加快反应速率', '#94a3b8', 'start', 0, 10],
+        ['催化剂降低的活化能 = ' + drop.toFixed(1) + ' kJ/mol（滑块）', '#34d399', 'start', 0, 12],
+        ['Ea(正)：' + (ea0 * 100).toFixed(0) + ' → ' + (ea0 * 100 - drop).toFixed(0)
+         + ' kJ/mol；Ea(逆)：' + (ea0 * 100 - dh).toFixed(0) + ' → '
+         + (ea0 * 100 - dh - drop).toFixed(0) + ' kJ/mol', '#38bdf8', 'start', 0, 11],
+        ['ΔH 始终是 ' + dh.toFixed(0) + ' kJ/mol（**不变**）—— 因为正逆活化能同步下降相同的量',
+         '#facc15', 'start', 0, 10],
+    ]);
+}

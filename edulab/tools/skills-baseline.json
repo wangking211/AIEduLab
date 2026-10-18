@@ -52,6 +52,16 @@
   "solution_dilution.html": "a48e932041684faaa6de70a4217b9baf32559650d53ae4e058ba5dc44e8da865",
   "solution_mass_fraction.html": "7d43babd154fe00448fbefc1f9aeeace2b5fa5ec9797416e5d45fddb5f7eab4b"
  },
+ "edu-complex": {
+  "algebra.html": "5f5f7de44c7c4d83960372a3b0e2c400ba7caa4f9e807fb66e898b60ba3f2ba9",
+  "index.html": "9ce937b21006889caafb6a1a6c93c660b13bc29e529aca711e5a138d31341bc4",
+  "locus.html": "430847aa9fdeec002801ef95b89bc192c3e008f5adeb203cdfdac3d5be807840",
+  "modulus.html": "83ed996ae9ffc3fd57797a4800861f58b9e972e1bdce80994c0cad6b52891e67",
+  "multiply.html": "89d12d72c5e845f4dc19568cea630f6076d1eb170c61687b4082981c48764331",
+  "polar.html": "82c86b66ddbf632e9019ac3c60ecb3384b116247f77eae8340ea7143f794cb59",
+  "quadratic.html": "ad4f484eb3992336b4e8fbb0f23d09fa38bc208b09bd0361d316ceaa9bd04ee1",
+  "roots.html": "d52fc09497b38e320d52d90ea6366252200b8ed9e05d7a982ae04f5695dc1a85"
+ },
  "edu-cs": {
   "base_convert.html": "e7e8a46599abf40439f24444f724896139d620994be74f9871adea322887ff4f",
   "bfs.html": "11682fdb2d00d49faebe14e9187b1be9e50a7272e4947d8e5ebd7f5d31856338",
@@ -294,6 +304,16 @@
   "pyramid.html": "e6abace0e91f2463900610d50eee3c386e553451c652b866742082e5995f1e1a",
   "skew.html": "91b359258acc7ef792e2d146dd48ea207530aedc45389f00c3274641a69805c5",
   "tetra.html": "65099c6e776c0ef50170ce0ea2d8f46387b1d5d15dcc21924fb5944b510942fa"
+ },
+ "edu-thermochem": {
+  "bond.html": "73ff6201a5c06da2e146e5b49a9a363f18ba220fafdf984008b143463c430433",
+  "catalyst.html": "50947753af9d770d01e30e1a78f34dcec2aa57f142944b1146aec0c28d5735ea",
+  "combustion.html": "08fc3e58bec9d994941c35da123321062782bad4194564ba0e2e3e8011e8abf5",
+  "formation.html": "123f5ae118ae2af1aab9b082130edb3f742e367a5621d90707252d87c799a966",
+  "hess.html": "894fac5740bc28229a035a4e2539f29569af24b9e1a8eb9f2bd8da6c1544ce99",
+  "index.html": "1a0316de4e97e98fe9073808135da06649072b08e34cdb8551301036bb827531",
+  "neutralization.html": "5e890be460e8ded9de3e60b69d68cfa0c0b64688097a08740c76488a7244e7cb",
+  "sign.html": "83e02c777e30c9627561e69499a1e042294a1de52173fea289d65d41e1e5ed2a"
  },
  "edu-vector": {
   "add.html": "56276bd9c20ff882b9f18d47ac95893d59b5847f22fdb4bf85be9f17203af423",
