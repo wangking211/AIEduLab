@@ -237,8 +237,13 @@
  "edu-solid-geometry": {
   "box.html": "2bd0ae46b71ea14fed642a93c43cec29e2509fa796c51801b3b536f888342c32",
   "cube.html": "2ccc3bfd2a0a8f5fbd29ec62d02ecbc5da08b623ed69d820cb72ed412295a718",
-  "index.html": "72dba76aec92df2f729b4acabd60dfbad46fd1dc43a56d6c15e6ba9d9f52b4c2",
-  "pyramid.html": "e6abace0e91f2463900610d50eee3c386e553451c652b866742082e5995f1e1a"
+  "dihedral.html": "ef4c705e42bf790d16e2a2752effbb346aeeb3d858fd992a932be5de0d40ac57",
+  "distance.html": "83c8776e632f1267c921a23158d2c2291f0f1ea4f54cb81b14f81611ce35c8b3",
+  "index.html": "a867be145eff60f124611d6febe4f624fae6d0b0de20ad92c52ace82709a9de6",
+  "prism.html": "77c0508a67872859812e8bb8057bfa95e4cc1c03a858654054679616d2038155",
+  "pyramid.html": "e6abace0e91f2463900610d50eee3c386e553451c652b866742082e5995f1e1a",
+  "skew.html": "91b359258acc7ef792e2d146dd48ea207530aedc45389f00c3274641a69805c5",
+  "tetra.html": "65099c6e776c0ef50170ce0ea2d8f46387b1d5d15dcc21924fb5944b510942fa"
  },
  "mental-models": {
   "bayes.html": "ff9fd216dc2c3e3bea8d2df94f7409c580ad41e0c5de7f543aae18baa6814846",

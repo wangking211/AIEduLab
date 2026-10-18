@@ -18,6 +18,23 @@ description: >-
 右侧是题目对应的 3D 模型（Three.js，可旋转缩放，分步高亮关键元素并切换镜头）。
 形态与 `template/lesson.html` 一致。
 
+### 已注册的 8 个题型
+
+| key | 几何体 | 所求 |
+| --- | --- | --- |
+| `pyramid` | 正四棱锥 P-ABCD | 线面角（$BE$ 与平面 $PAC$） |
+| `cube` | 正方体 | 线面角（$A_1C$ 与底面） |
+| `box` | 长方体 | 体积 |
+| `distance` | 正方体 | 点到平面距离（$A$ 到平面 $A_1BD$） |
+| `dihedral` | 正方体 | 二面角（$A_1$-$BD$-$A$） |
+| `skew` | 正方体 | 异面直线夹角（$A_1B$ 与 $B_1C$） |
+| `tetra` | 正四面体 | 体积 / 高 / 外接球 / 内切球半径 |
+| `prism` | 正三棱柱 | 底面积 / 体积 / 侧面积 |
+
+后 5 个题型是「内核里早就有求解器、只是没接出来」的部分 ——
+`point_plane_distance`、`dihedral_cos`、`line_line_angle_cos`、`volume_tetra`、
+`volume_prism` 都已在 `geometry_kernel.py` 中，接成题型即可，无需新数学。
+
 ## 依赖（重要）
 计算核心 `lib/geometry_kernel.py` 依赖 **sympy**。运行脚本前先确认有一个能 import sympy 的
 `python3`：跑 `python3 -c "import sympy"`。
@@ -72,13 +89,18 @@ generate.render_html(data, out)
 - 英文输出时填 `lesson.ui` 英文文案并设 `lesson.language="en"`。
 
 **可直接参考的范例**：`scripts/generate.py` 里的 `build_data()`（正四棱锥·线面角）、
-`build_cube_data()`（正方体·线面角）、`build_box_volume_data()`（长方体·体积）都是完整范本，照着改即可。
+`build_cube_data()`（正方体·线面角）、`build_box_volume_data()`（长方体·体积）、
+`build_distance_data()`（点到平面距离）、`build_dihedral_data()`（二面角）、
+`build_skew_data()`（异面直线夹角）、`build_tetra_data()`（正四面体）、
+`build_prism_data()`（正三棱柱）都是完整范本，照着改即可。
 
 `generate.py` 可直接出已注册的题；**不传路径时默认写到当前工作目录（cwd）**，也可显式给 cwd 下的文件名
 （用技能目录里的 `scripts/generate.py`，输出落在 cwd）：
 ```bash
-python3 <技能目录>/scripts/generate.py cube ./cube.html
-python3 <技能目录>/scripts/generate.py box  ./box.html
+python3 <技能目录>/scripts/generate.py cube     ./cube.html
+python3 <技能目录>/scripts/generate.py box      ./box.html
+python3 <技能目录>/scripts/generate.py dihedral ./dihedral.html
+python3 <技能目录>/scripts/generate.py tetra    ./tetra.html
 ```
 
 **随机出题**：`generate.py random <seed> [输出.html]`，内部用 `kernel.is_clean(...)` 判答案规整、不过重抽：

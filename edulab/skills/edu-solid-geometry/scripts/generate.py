@@ -329,10 +329,288 @@ def build_random_data(seed=0) -> dict:
     return build_box_volume_data()
 
 
+# =====================================================================
+# 新增题型 4：点到平面的距离
+# =====================================================================
+def build_distance_data(edge=1) -> dict:
+    """正方体 ABCD-A1B1C1D1（棱长 a），求点 A 到平面 A1BD 的距离。"""
+    sol = gk.solve_cube_point_plane_distance(edge=edge, scale=2)
+    v, ans = sol["vals"], sol["answer_latex"]
+    topo = bodies.cuboid()
+    center = _centroid(sol["three_points"])
+    frac = gk.tex(gk.sp.sympify(edge))
+
+    model = {
+        "target": center,
+        "initialCamera": [6, 5, 7],
+        "points": sol["three_points"],
+        "spheres": topo["spheres"],
+        "edges": topo["edges"],
+        "elements": {
+            "Plane_A1BD": {"type": "plane", "pts": ["A1", "B", "D"]},
+            "Normal_Vector": {"type": "arrow", "origin": "A1", "dir": [1, 1, 1],
+                              "length": 1.7, "color": "normal"},
+            "Height": {"type": "line", "a": "A", "b": "A1", "color": "aux",
+                       "dashed": True, "depthTest": False},
+            "Axis": {"type": "axes", "size": 2.6},
+        },
+    }
+
+    lesson = {
+        "language": "zh-CN", "meta": "交互解题 · 点到平面距离",
+        "title": f"正方体ABCD-A₁B₁C₁D₁的棱长为{frac}，求点A到平面A₁BD的距离",
+        "answerLabel": "点 A 到平面 A₁BD 的距离",
+        "answerValue": f"${ans}$",
+    }
+
+    steps = [
+        {"title": "建系并写出关键点",
+         "content": (r"<p>以 $A$ 为原点，$AB$、$AD$、$AA_1$ 分别为 $x$、$y$、$z$ 轴。</p>"
+                     r"<p>棱长为 $" + frac + r"$，于是</p>"
+                     r"$$A(0,0,0),\ B" + sol["math_points"]["B"] + r",\ A_1" + sol["math_points"]["A1"] + r",\ D" + sol["math_points"]["D"] + r"$$")},
+        {"title": "求平面 A₁BD 的法向量",
+         "content": (r"<p>取 $\overrightarrow{A_1B}$ 与 $\overrightarrow{A_1D}$ 的叉积：</p>"
+                     r"<p>法向量 $n = " + v["n"] + r"$，约简到 $" + v["n_simpl"] + r"$。</p>"
+                     r"<p>$|n| = " + v["norm_n"] + r"$。</p>"
+                     r"<p>点到平面的距离公式是 "
+                     r"$d = \dfrac{|(P-P_0)\cdot n|}{|n|}$，这里 $P=A$、$P_0=A_1$。</p>")},
+        {"title": "代公式求距离",
+         "content": (r"<p>$\overrightarrow{A_1A}$ 与 $n$ 的数量积绝对值为 $"
+                     + v["numerator"] + r"$，除以 $|n| = " + v["norm_n"] + r"$ 得</p>"
+                     r"<p>$$d = " + ans + r"$$</p>"
+                     r"<p>注意这个距离**只由平面的方程与点的坐标决定**，"
+                     r"与图中那条辅助线画在哪里无关 —— 换一个点算，结果会不同。</p>")},
+    ]
+    return {"lesson": lesson, "steps": steps, "model": model, "_answer": ans}
+
+
+# =====================================================================
+# 新增题型 5：二面角
+# =====================================================================
+def build_dihedral_data(edge=1) -> dict:
+    """正方体 ABCD-A1B1C1D1（棱长 a），求二面角 A1-BD-A 的余弦值。"""
+    sol = gk.solve_cube_dihedral(edge=edge, scale=2)
+    v, ans = sol["vals"], sol["answer_latex"]
+    topo = bodies.cuboid()
+    center = _centroid(sol["three_points"])
+
+    model = {
+        "target": center,
+        "initialCamera": [5, 4, 6],
+        "points": sol["three_points"],
+        "spheres": topo["spheres"],
+        "edges": topo["edges"],
+        "elements": {
+            "Plane_A1BD": {"type": "plane", "pts": ["A1", "B", "D"]},
+            "Plane_ABD": {"type": "plane", "pts": ["A", "B", "D"]},
+            "Edge_BD": {"type": "line", "a": "B", "b": "D", "color": "emphasis",
+                        "depthTest": False},
+            "Axis": {"type": "axes", "size": 2.6},
+        },
+    }
+
+    lesson = {
+        "language": "zh-CN", "meta": "交互解题 · 二面角",
+        "title": "正方体ABCD-A₁B₁C₁D₁的棱长为1，求二面角A₁-BD-A的余弦值",
+        "answerLabel": "二面角 A₁-BD-A 的余弦值",
+        "answerValue": f"${ans}$",
+    }
+
+    steps = [
+        {"title": "建系（与上一题同一套坐标）",
+         "content": (r"<p>以 $A$ 为原点，三条棱为坐标轴。棱长为 1，则</p>"
+                     r"$$A(0,0,0),\ B" + sol["math_points"]["B"] + r",\ D" + sol["math_points"]["D"] + r",\ A_1" + sol["math_points"]["A1"] + r"$$")},
+        {"title": "在两个半平面内各取一条垂直于棱的向量",
+         "content": (r"<p>二面角的棱是 $BD$。分别在平面 $A_1BD$ 与平面 $ABD$ 内，"
+                     r"作**垂直于 $BD$** 的向量，两向量的夹角就是二面角。</p>"
+                     r"<p>做法：把 $\overrightarrow{BA_1}$ 与 $\overrightarrow{BA}$ "
+                     r"分别减去它们在 $\overrightarrow{BD}$ 上的投影，得到两条垂直于棱的分量，"
+                     r"再求它们夹角的余弦（按定义取锐角或按钝角判断符号）。</p>")},
+        {"title": "算出余弦与正切",
+         "content": (r"<p>两个垂分量的夹角余弦为</p>"
+                     r"<p>$$\cos\theta = " + ans + r"$$</p>"
+                     r"<p>再由 $\tan\theta = \dfrac{\sqrt{1-\cos^2\theta}}{\cos\theta} = "
+                     + v["tan"] + r"$。</p>"
+                     r"<p>所以这个二面角约 $54.7^\circ$ —— 它与「$A_1$ 到底面的距离比 $AO$」"
+                     r"（$O$ 为 $BD$ 中点）是同一个数：$\tan\theta = \dfrac{AA_1}{AO}$。</p>")},
+    ]
+    return {"lesson": lesson, "steps": steps, "model": model, "_answer": ans}
+
+
+# =====================================================================
+# 新增题型 6：异面直线所成角
+# =====================================================================
+def build_skew_data(edge=1) -> dict:
+    """正方体 ABCD-A1B1C1D1（棱长 a），求异面直线 A1B 与 B1C 所成角的余弦值。"""
+    sol = gk.solve_cube_skew_lines(edge=edge, scale=2)
+    v, ans = sol["vals"], sol["answer_latex"]
+    topo = bodies.cuboid()
+    center = _centroid(sol["three_points"])
+
+    model = {
+        "target": center,
+        "initialCamera": [6, 5, 7],
+        "points": sol["three_points"],
+        "spheres": topo["spheres"],
+        "edges": topo["edges"],
+        "elements": {
+            "Line_A1B": {"type": "line", "a": "A1", "b": "B", "color": "emphasis",
+                         "depthTest": False},
+            "Line_B1C": {"type": "line", "a": "B1", "b": "C", "color": "normal",
+                         "depthTest": False},
+            "Axis": {"type": "axes", "size": 2.6},
+        },
+    }
+
+    lesson = {
+        "language": "zh-CN", "meta": "交互解题 · 异面直线夹角",
+        "title": "正方体ABCD-A₁B₁C₁D₁的棱长为1，求异面直线A₁B与B₁C所成角的余弦值",
+        "answerLabel": "异面直线 A₁B 与 B₁C 所成角的余弦值",
+        "answerValue": f"${ans}$",
+    }
+
+    steps = [
+        {"title": "异面直线：不平行的两条线",
+         "content": (r"<p>$A_1B$ 与 $B_1C$ 不在同一平面内，也不平行 —— 这叫**异面直线**。</p>"
+                     r"<p>求它们所成角的标准办法是**平移**：把其中一条平移到与另一条相交，"
+                     r"用向量法就是直接算两个方向向量的夹角。</p>")},
+        {"title": "取方向向量并算夹角",
+         "content": (r"<p>$\overrightarrow{A_1B} = " + v["d1"] + r"$，"
+                     r"$\overrightarrow{B_1C} = " + v["d2"] + r"$。</p>"
+                     r"<p>数量积 $\overrightarrow{A_1B}\cdot\overrightarrow{B_1C} = "
+                     + v["dot"] + r"$。</p>"
+                     r"<p>注意异面直线所成角规定在 $(0^\circ,90^\circ]$ 内，"
+                     r"所以余弦要取**绝对值**：$\cos\theta = "
+                     r"\dfrac{|\overrightarrow{A_1B}\cdot\overrightarrow{B_1C}|}"
+                     r"{|\overrightarrow{A_1B}|\,|\overrightarrow{B_1C}|}$。</p>")},
+        {"title": "得出结论",
+         "content": (r"<p>代入得</p>"
+                     r"<p>$$\cos\theta = " + ans + r"$$</p>"
+                     r"<p>即两直线成 $60^\circ$。这个结果**与棱长无关** ——"
+                     r"把滑块（或把棱长改成 2、3）答案不变，因为它是纯方向量的比值。</p>")},
+    ]
+    return {"lesson": lesson, "steps": steps, "model": model, "_answer": ans}
+
+
+# =====================================================================
+# 新增题型 7：正四面体的体积与外接球
+# =====================================================================
+def build_tetra_data(edge=None) -> dict:
+    """正四面体（棱长 2√2，坐标为整数）的体积、高、外接球与内切球半径。"""
+    sol = gk.solve_regular_tetrahedron() if edge is None else gk.solve_regular_tetrahedron(edge)
+    v, ans = sol["vals"], sol["answer_latex"]
+    topo = bodies.tri_pyramid(apex="D", base=("A", "B", "C"))
+    center = _centroid(sol["three_points"])
+
+    model = {
+        "target": center,
+        "initialCamera": [4, 4, 5],
+        "points": sol["three_points"],
+        "spheres": topo["spheres"],
+        "edges": topo["edges"],
+        "elements": {
+            "Edge_AB": {"type": "line", "a": "A", "b": "B", "color": "emphasis",
+                        "depthTest": False},
+            "Axis": {"type": "axes", "size": 2.4},
+        },
+    }
+
+    lesson = {
+        "language": "zh-CN", "meta": "交互解题 · 正四面体",
+        "title": f"正四面体ABCD的棱长为${v['a']}$，求它的体积、高、外接球半径与内切球半径",
+        "answerLabel": "正四面体的体积",
+        "answerValue": f"${ans}$",
+    }
+
+    steps = [
+        {"title": "正四面体可以放在正方体里",
+         "content": (r"<p>取正方体 $(\pm k,\pm k,\pm k)$ 中**两两异面**的四个顶点，"
+                     r"恰好构成正四面体 —— 本题就取这组坐标：</p>"
+                     r"$$A" + sol["math_points"]["A"] + r",\ B" + sol["math_points"]["B"]
+                     + r",\ C" + sol["math_points"]["C"] + r",\ D" + sol["math_points"]["D"] + r"$$"
+                     r"<p>这组坐标下棱长恰为 $" + v["a"] + r"$（整数，便于手算）。</p>")},
+        {"title": "体积用混合积算",
+         "content": (r"<p>四面体体积 $V = \dfrac16\left|"
+                     r"(\overrightarrow{AB}\times\overrightarrow{AC})\cdot\overrightarrow{AD}"
+                     r"\right|$ —— 用坐标直接算，不必先求高。</p>"
+                     r"<p>得到 $V = " + ans + r"$。</p>"
+                     r"<p>也可以反过来用公式 $V = \dfrac{a^3}{6\sqrt2}$ 核对，两者一致。</p>")},
+        {"title": "高与两个球",
+         "content": (r"<p>体积 $V = " + ans + r"$，高 $h = " + v["h"] + r"$"
+                     r"（可由 $h = a\sqrt{2/3}$ 得到）。</p>"
+                     r"<p>外接球半径 $R = " + v["R"] + r"$，内切球半径 $r = " + v["r"] + r"$。</p>"
+                     r"<p>这三个量满足 $R = 3r$，且 $h = R + r$ ——"
+                     r"**球心在高上，把高分成了 $R:r = 3:1$**。"
+                     r"这是正四面体的一个漂亮性质，可以直接用来验算。</p>")},
+    ]
+    return {"lesson": lesson, "steps": steps, "model": model, "_answer": ans}
+
+
+# =====================================================================
+# 新增题型 8：正三棱柱的体积与侧面积
+# =====================================================================
+def build_prism_data(edge=2, height=2) -> dict:
+    """正三棱柱 ABC-A1B1C1（底面边长 a、高 h）：底面积、体积、侧面积。"""
+    sol = gk.solve_triangular_prism(edge=edge, height=height, scale=1.6)
+    v, ans = sol["vals"], sol["answer_latex"]
+    topo = bodies.prism(bottom=("A", "B", "C"), top=("A1", "B1", "C1"))
+    center = _centroid(sol["three_points"])
+
+    model = {
+        "target": center,
+        "initialCamera": [5, 4, 5],
+        "points": sol["three_points"],
+        "spheres": topo["spheres"],
+        "edges": topo["edges"],
+        "elements": {
+            "Base_ABC": {"type": "plane", "pts": ["A", "B", "C"]},
+            "Edge_AB": {"type": "line", "a": "A", "b": "B", "color": "emphasis",
+                        "depthTest": False},
+            "Height_AA1": {"type": "line", "a": "A", "b": "A1", "color": "normal",
+                           "depthTest": False},
+            "Measure_AB": {"type": "measure", "a": "A", "b": "B", "label": str(edge)},
+            "Measure_AA1": {"type": "measure", "a": "A", "b": "A1", "label": str(height)},
+            "Axis": {"type": "axes", "size": 2.6},
+        },
+    }
+
+    lesson = {
+        "language": "zh-CN", "meta": "交互解题 · 棱柱体积",
+        "title": f"正三棱柱ABC-A₁B₁C₁的底面边长为{v['a']}，高为{v['h']}，求它的体积与侧面积",
+        "answerLabel": "正三棱柱的体积",
+        "answerValue": f"${ans}$",
+    }
+
+    steps = [
+        {"title": "先求底面积",
+         "content": (r"<p>底面是边长为 $" + v["a"] + r"$ 的正三角形，面积为</p>"
+                     r"<p>$$S_{\text{底}} = \dfrac{\sqrt3}{4}a^2 = " + v["base_area"] + r"$$</p>"
+                     r"<p>这是初中就学过的正三角形面积公式，这里只是把 $a$ 代进去。</p>")},
+        {"title": "棱柱体积 = 底面积 × 高",
+         "content": (r"<p>棱柱的体积与柱体一样：$V = S_{\text{底}} \cdot h$。"
+                     r"注意这里的 $h$ 是**两底面之间的距离**（侧棱长），"
+                     r"不是斜高。</p>"
+                     r"<p>$$V = " + v["base_area"] + r" \times " + v["h"] + r" = " + ans + r"$$</p>")},
+        {"title": "侧面积与「高」的辨析",
+         "content": (r"<p>侧面是三个 $a \times h$ 的矩形，所以</p>"
+                     r"<p>$$S_{\text{侧}} = 3ah = " + v["lateral"] + r"$$</p>"
+                     r"<p>而体积 $V = " + ans + r"$（上面已算出）。</p>"
+                     r"<p>凡是这类题，**先分清求的是体积、侧面积还是表面积**："
+                     r"侧面积不含两个底面，表面积要把两个底面加上。"
+                     r"把棱长与高改一改，三个量会同时变，但公式不变。</p>")},
+    ]
+    return {"lesson": lesson, "steps": steps, "model": model, "_answer": ans}
+
+
 PROBLEMS = {
     "pyramid": build_data,
     "cube": build_cube_data,
     "box": build_box_volume_data,
+    "distance": build_distance_data,
+    "dihedral": build_dihedral_data,
+    "skew": build_skew_data,
+    "tetra": build_tetra_data,
+    "prism": build_prism_data,
 }
 
 

@@ -264,6 +264,107 @@ def solve_cube_line_plane_angle(edge=1, scale=2):
     }
 
 
+# ===================== 具体题目求解（距离 / 二面角 / 异面 / 四面体 / 棱柱） =====================
+
+def solve_cube_point_plane_distance(edge=1, scale=2):
+    """正方体 ABCD-A1B1C1D1（棱长 a），求点 A 到平面 A1BD 的距离。
+
+    平面 A1BD 的法向量与 A 到它的距离都由 kernel 精确算；棱长 1 时距离是 √3/3。
+    """
+    pts = cube(edge)
+    n = normal_from_points(pts["A1"], pts["B"], pts["D"])
+    n_simpl = simplify_vec(n)
+    d = point_plane_distance(pts["A"], pts["A1"], n)
+    return {
+        "answer_latex": tex(d),
+        "math_points": {k: tex_vec(v) for k, v in pts.items()},
+        "three_points": to_three(pts, scale=scale),
+        "vals": {
+            "n": tex_vec(n), "n_simpl": tex_vec(n_simpl),
+            "dist": tex(d),
+            "numerator": tex(sp.Abs((pts["A"] - pts["A1"]).dot(n_simpl))),
+            "norm_n": tex(sp.simplify(n_simpl.norm())),
+        },
+        "_exact": {"dist": d},
+    }
+
+
+def solve_cube_dihedral(edge=1, scale=2):
+    """正方体 ABCD-A1B1C1D1，求二面角 A1-BD-A 的余弦值与正切值。
+
+    棱是 BD；两个半平面分别是 A1BD 与 ABD。
+    """
+    pts = cube(edge)
+    c = dihedral_cos(pts["B"], pts["D"], pts["A1"], pts["A"])
+    t = sp.simplify(sqrt(1 - c ** 2) / c)
+    return {
+        "answer_latex": tex(c),
+        "math_points": {k: tex_vec(v) for k, v in pts.items()},
+        "three_points": to_three(pts, scale=scale),
+        "vals": {"cos": tex(c), "tan": tex(t)},
+        "_exact": {"cos": c, "tan": t},
+    }
+
+
+def solve_cube_skew_lines(edge=1, scale=2):
+    """正方体 ABCD-A1B1C1D1，求异面直线 A1B 与 B1C 所成角的余弦值。"""
+    pts = cube(edge)
+    d1 = pts["B"] - pts["A1"]
+    d2 = pts["C"] - pts["B1"]
+    c = line_line_angle_cos(d1, d2)
+    return {
+        "answer_latex": tex(c),
+        "math_points": {k: tex_vec(v) for k, v in pts.items()},
+        "three_points": to_three(pts, scale=scale),
+        "vals": {"d1": tex_vec(d1), "d2": tex_vec(d2),
+                 "dot": tex(d1.dot(d2)), "cos": tex(c)},
+        "_exact": {"cos": c},
+    }
+
+
+def solve_regular_tetrahedron(edge=2 * sqrt(2), scale=1.6):
+    """正四面体 ABCD（棱长 a）：体积、高、外接球半径、内切球半径。
+
+    体积由 volume_tetra 从实际坐标算（不套公式），高与两球半径用解析式，
+    两者在自检里互相校验。
+    """
+    pts = regular_tetrahedron(edge)
+    a = sp.sympify(edge)
+    vol = volume_tetra(pts["A"], pts["B"], pts["C"], pts["D"])
+    h = sp.simplify(a * sqrt(sp.Rational(2, 3)))
+    R = sp.simplify(a * sqrt(6) / 4)
+    r = sp.simplify(a * sqrt(6) / 12)
+    return {
+        "answer_latex": tex(vol),
+        "math_points": {k: tex_vec(v) for k, v in pts.items()},
+        "three_points": to_three(pts, scale=scale),
+        "vals": {"a": tex(a), "vol": tex(vol), "h": tex(h), "R": tex(R), "r": tex(r)},
+        "_exact": {"vol": vol, "h": h, "R": R, "r": r, "a": a},
+    }
+
+
+def solve_triangular_prism(edge=2, height=2, scale=1.6):
+    """正三棱柱 ABC-A1B1C1（底面边长 a、高 h）：底面积、体积与侧面积。"""
+    a, h = sp.sympify(edge), sp.sympify(height)
+    base_area = sp.simplify(sqrt(3) / 4 * a ** 2)
+    vol = volume_prism(base_area, h)
+    lateral = sp.simplify(3 * a * h)
+    pts = {
+        "A": V(0, 0, 0), "B": V(a, 0, 0),
+        "C": V(a / 2, a * sqrt(3) / 2, 0),
+        "A1": V(0, 0, h), "B1": V(a, 0, h),
+        "C1": V(a / 2, a * sqrt(3) / 2, h),
+    }
+    return {
+        "answer_latex": tex(vol),
+        "math_points": {k: tex_vec(v) for k, v in pts.items()},
+        "three_points": to_three(pts, scale=scale),
+        "vals": {"a": tex(a), "h": tex(h), "base_area": tex(base_area),
+                 "vol": tex(vol), "lateral": tex(lateral)},
+        "_exact": {"base_area": base_area, "vol": vol, "lateral": lateral},
+    }
+
+
 if __name__ == "__main__":
     sol = solve_pyramid_line_plane_angle()
     expected = 2 * sqrt(22) / 11
@@ -314,5 +415,54 @@ if __name__ == "__main__":
     assert ok_v
     assert volume_box(2, 3, 4) == 24 and volume_pyramid(4, 3) == 4
     print("体积 box(2,3,4)=24, pyramid(4,3)=4 通过")
+
+    print("\n--- 新增五类求解器自检 ---")
+
+    # 1) 点到平面距离：正方体棱长 1，A 到平面 A1BD 的距离 = √3/3
+    d1 = solve_cube_point_plane_distance(edge=1)
+    ok_d = sp.simplify(d1["_exact"]["dist"] - sqrt(3) / 3) == 0
+    print("正方体 A→平面A1BD 距离 =", d1["answer_latex"], "(期望 √3/3)",
+          "通过" if ok_d else "失败")
+    assert ok_d
+    d2 = solve_cube_point_plane_distance(edge=2)
+    ok_d2 = sp.simplify(d2["_exact"]["dist"] - 2 * sqrt(3) / 3) == 0
+    print("  └ 棱长 2 时 =", d2["answer_latex"], "(期望 2√3/3)", "通过" if ok_d2 else "失败")
+    assert ok_d2
+
+    # 2) 二面角 A1-BD-A：cos = 1/√3，tan = √2
+    dh = solve_cube_dihedral(edge=1)
+    ok_dh = sp.simplify(dh["_exact"]["cos"] - 1 / sqrt(3)) == 0
+    ok_dht = sp.simplify(dh["_exact"]["tan"] - sqrt(2)) == 0
+    print("正方体二面角 A1-BD-A cos =", dh["answer_latex"], "(期望 √3/3)",
+          "通过" if ok_dh else "失败")
+    print("  └ tan =", dh["vals"]["tan"], "(期望 √2)", "通过" if ok_dht else "失败")
+    assert ok_dh and ok_dht
+
+    # 3) 异面直线 A1B 与 B1C：cos = 1/2（夹角 60°）
+    sk = solve_cube_skew_lines(edge=1)
+    ok_sk = sp.simplify(sk["_exact"]["cos"] - sp.Rational(1, 2)) == 0
+    print("异面直线 A1B·B1C cos =", sk["answer_latex"], "(期望 1/2)",
+          "通过" if ok_sk else "失败")
+    assert ok_sk
+
+    # 4) 正四面体（棱长 2√2）：体积 8/3、高 4√3/3、外接球 √3、内切球 √3/3
+    te = solve_regular_tetrahedron()
+    ok_te = (sp.simplify(te["_exact"]["vol"] - sp.Rational(8, 3)) == 0
+             and sp.simplify(te["_exact"]["h"] - 4 * sqrt(3) / 3) == 0
+             and sp.simplify(te["_exact"]["R"] - sqrt(3)) == 0
+             and sp.simplify(te["_exact"]["r"] - sqrt(3) / 3) == 0)
+    print("正四面体(棱2√2) 体积 =", te["answer_latex"], "高 =", te["vals"]["h"],
+          "R =", te["vals"]["R"], "r =", te["vals"]["r"], "通过" if ok_te else "失败")
+    assert ok_te
+    assert sp.simplify(te["_exact"]["R"] - 3 * te["_exact"]["r"]) == 0
+
+    # 5) 正三棱柱（底边 2、高 2）：底面积 √3、体积 2√3、侧面积 12
+    pr = solve_triangular_prism(edge=2, height=2)
+    ok_pr = (sp.simplify(pr["_exact"]["base_area"] - sqrt(3)) == 0
+             and sp.simplify(pr["_exact"]["vol"] - 2 * sqrt(3)) == 0
+             and pr["_exact"]["lateral"] == 12)
+    print("正三棱柱(2,2) 底面积 =", pr["vals"]["base_area"], "体积 =", pr["answer_latex"],
+          "侧面积 =", pr["vals"]["lateral"], "通过" if ok_pr else "失败")
+    assert ok_pr
 
     print("\n全部自检通过 ✅")
