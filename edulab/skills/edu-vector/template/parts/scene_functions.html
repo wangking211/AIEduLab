@@ -1,0 +1,243 @@
+// ===================== 平面向量场景 =====================
+let animT = 0;
+
+// ---- 通用防御：把文字锚点自动收进画布（文字比视窗宽时也要兜住） ----
+function labelIn(x, y, text, color, align, size){
+    size = size || 12;
+    ctx.font = 'bold ' + size + 'px system-ui';
+    const w = ctx.measureText(String(text)).width / (sc || 1);
+    const x0 = view.xRange[0], x1 = view.xRange[1];
+    const pad = 0.06;
+    let a = x;
+    if (align === 'end')         a = Math.max(x, x0 + w + pad);
+    else if (align === 'center') a = Math.max(x0 + w/2 + pad, Math.min(x, x1 - w/2 - pad));
+    else                         a = Math.max(x0 + pad, Math.min(x, x1 - w - pad));
+    label(a, y, text, color, align, size);
+}
+
+// ---- 数学坐标 → 世界坐标（原点在画布中心） ----
+const V_OX = 5.0, V_OY = 3.0;
+function vX(x, s){ return V_OX + x*s; }
+function vY(y, s){ return V_OY + y*s; }
+function vSeg(x1, y1, x2, y2, col, lw, s, dash){
+    if (dash) ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 1.2;
+    ctx.beginPath(); ctx.moveTo(SX(vX(x1,s)), SY(vY(y1,s)));
+    ctx.lineTo(SX(vX(x2,s)), SY(vY(y2,s))); ctx.stroke();
+    if (dash) ctx.setLineDash([]);
+}
+function vArrow(x1, y1, x2, y2, col, lw, s){
+    arrow(vX(x1,s), vY(y1,s), vX(x2,s), vY(y2,s), col, lw || 2.6, null);
+}
+function vAxes(s, R){
+    vSeg(-R, 0, R, 0, '#334155', 1.4, s);
+    vSeg(0, -R, 0, R, '#334155', 1.4, s);
+    label(vX(R,s)-0.10, vY(0,s)-0.28, 'x', '#64748b', 'end', 10);
+    label(vX(0,s)+0.14, vY(R,s)-0.16, 'y', '#64748b', 'start', 10);
+}
+function vPoly(pts, col, lw, s, fill){
+    if (pts.length < 2) return;
+    if (fill){ ctx.fillStyle = fill; ctx.beginPath();
+        pts.forEach((p,i)=>{ const X=SX(vX(p[0],s)), Y=SY(vY(p[1],s));
+            i===0?ctx.moveTo(X,Y):ctx.lineTo(X,Y); });
+        ctx.closePath(); ctx.fill(); }
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 2;
+    ctx.beginPath();
+    pts.forEach((p,i)=>{ const X=SX(vX(p[0],s)), Y=SY(vY(p[1],s));
+        i===0?ctx.moveTo(X,Y):ctx.lineTo(X,Y); });
+    ctx.stroke();
+}
+function vDot(x, y, col, s, r){
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(SX(vX(x,s)), SY(vY(y,s)), r||5.5, 0, 7); ctx.fill();
+    ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.4; ctx.stroke();
+}
+// 向量代数（画板侧，与内核同式）
+const vLen = v => Math.hypot(v[0], v[1]);
+const vAdd = (u,v) => [u[0]+v[0], u[1]+v[1]];
+const vScale = (k,u) => [k*u[0], k*u[1]];
+
+// ---- 1) 向量的加减与数乘 ----
+function drawVectoradd(S){
+    const th = S.th, s = 0.72;
+    const a = [2.5, 0.8];
+    const b = [1.8*Math.cos(th*Math.PI/180), 1.8*Math.sin(th*Math.PI/180)];
+    const c = vAdd(a, b);
+    vAxes(s, 6.6);
+    // 平行四边形
+    vPoly([[0,0], a, c, b], 'rgba(148,163,184,0.55)', 1.4, s, 'rgba(99,102,241,0.12)');
+    vArrow(0,0, a[0], a[1], '#38bdf8', 3.0, s);
+    vArrow(0,0, b[0], b[1], '#f472b6', 3.0, s);
+    vArrow(0,0, c[0], c[1], '#facc15', 3.4, s);
+    label(vX(a[0]*0.55,s), vY(a[1]*0.55,s)+0.26, 'a', '#38bdf8', 'center', 12);
+    label(vX(b[0]*0.55,s), vY(b[1]*0.55,s)-0.28, 'b', '#f472b6', 'center', 12);
+    label(vX(c[0]*0.55,s), vY(c[1]*0.55,s)+0.28, 'a+b', '#facc15', 'center', 12);
+    const mag = Math.hypot(c[0], c[1]);
+    labelIn(0.20, 5.72, '三角形法则 / 平行四边形法则：两向量首尾相接，第三条边就是和', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, '|a+b| = ' + mag.toFixed(5), '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, 'a+b = (' + c[0].toFixed(4) + ', ' + c[1].toFixed(4) + ')', '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.44, 'b 的方向角 θ = ' + th.toFixed(1) + '°', '#f472b6', 'end', 11);
+    labelIn(9.90, 4.04, '|a| = ' + vLen(a).toFixed(4) + '，|b| = ' + vLen(b).toFixed(4), '#64748b', 'end', 10);
+}
+
+// ---- 2) 共线定理与三点共线 ----
+function drawCollinear(S){
+    const x = S.x, s = 0.95;
+    const A = [0.5, 0.6], B = [3.6, 2.4];
+    // C = x·A + (1−x)·B，x+(1−x)=1 ⇒ C 恒在直线 AB 上
+    const C = [x*A[0] + (1-x)*B[0], x*A[1] + (1-x)*B[1]];
+    vAxes(s, 4.6);
+    // 直线 AB（只向两端各延长 0.45 倍 AB，否则会冲出画布）
+    const dir = [B[0]-A[0], B[1]-A[1]];
+    const L = 0.45;
+    vSeg(A[0]-dir[0]*L, A[1]-dir[1]*L, B[0]+dir[0]*L, B[1]+dir[1]*L, 'rgba(148,163,184,0.75)', 2.0, s);
+    label(vX(A[0]-dir[0]*0.62, s), vY(A[1]-dir[1]*0.62, s), '直线 AB', '#94a3b8', 'center', 10);
+    vDot(A[0], A[1], '#38bdf8', s);
+    vDot(B[0], B[1], '#f472b6', s);
+    vDot(C[0], C[1], '#facc15', s, 6.5);
+    label(vX(A[0],s), vY(A[1],s)-0.30, 'A', '#38bdf8', 'center', 12);
+    label(vX(B[0],s), vY(B[1],s)+0.30, 'B', '#f472b6', 'center', 12);
+    label(vX(C[0],s), vY(C[1],s)+0.30, 'C', '#facc15', 'center', 12);
+    labelIn(0.20, 5.72, 'C = x·A + (1−x)·B，系数之和恒为 1 ⇒ C 恒在直线 AB 上', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, 'x = ' + x.toFixed(3) + '，1−x = ' + (1-x).toFixed(3), '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, '系数之和 = ' + (x + (1-x)).toFixed(6) + '（恒为 1）', '#34d399', 'end', 11);
+    labelIn(9.90, 4.44, 'C = (' + C[0].toFixed(4) + ', ' + C[1].toFixed(4) + ')', '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.04, 'x=1 时 C 重合于 A，x=0 时重合于 B', '#64748b', 'end', 10);
+}
+
+// ---- 3) 平面向量基本定理 ----
+function drawBasis(S){
+    const lam = S.lam, s = 0.95;
+    const e1 = [1.6, 0.5], e2 = [-0.6, 1.5], mu = 2;
+    const c = [lam*e1[0] + mu*e2[0], lam*e1[1] + mu*e2[1]];
+    const p1 = vScale(lam, e1), p2 = vScale(mu, e2);
+    vAxes(s, 5.0);
+    // 基底平行四边形（分解的几何）
+    vPoly([[0,0], p1, c, p2], 'rgba(148,163,184,0.55)', 1.4, s, 'rgba(99,102,241,0.12)');
+    vArrow(0,0, e1[0], e1[1], '#38bdf8', 2.4, s);
+    vArrow(0,0, e2[0], e2[1], '#f472b6', 2.4, s);
+    vArrow(0,0, p1[0], p1[1], 'rgba(56,189,248,0.75)', 2.0, s);
+    vArrow(0,0, p2[0], p2[1], 'rgba(244,114,182,0.75)', 2.0, s);
+    vArrow(0,0, c[0], c[1], '#facc15', 3.2, s);
+    label(vX(e1[0],s), vY(e1[1],s)+0.26, 'e₁', '#38bdf8', 'center', 12);
+    label(vX(e2[0],s), vY(e2[1],s)+0.26, 'e₂', '#f472b6', 'center', 12);
+    label(vX(c[0],s), vY(c[1],s)+0.30, 'c', '#facc15', 'center', 12);
+    labelIn(0.20, 5.72, 'c = λ·e₁ + μ·e₂：给定基底后分解唯一（黄 = 两个分量的和）', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, 'λ = ' + lam.toFixed(3) + '，μ = ' + mu.toFixed(1), '#38bdf8', 'end', 12);
+    labelIn(9.90, 4.84, 'c = (' + c[0].toFixed(4) + ', ' + c[1].toFixed(4) + ')', '#facc15', 'end', 11);
+    labelIn(9.90, 4.44, '残差 |c − (λe₁+μe₂)| = 0（唯一性）', '#34d399', 'end', 11);
+    labelIn(9.90, 4.04, 'e₁、e₂ 不共线 ⇒ 任何 c 都能唯一表示', '#64748b', 'end', 10);
+}
+
+// ---- 4) 数量积与夹角 ----
+function drawDot(S){
+    const th = S.th, s = 0.78;
+    const a = [2.4, 1.2];
+    const b = [2*Math.cos(th*Math.PI/180), 2*Math.sin(th*Math.PI/180)];
+    const d = a[0]*b[0] + a[1]*b[1];
+    const na = Math.hypot(a[0], a[1]), nb = Math.hypot(b[0], b[1]);
+    const cs = Math.max(-1, Math.min(1, d/(na*nb)));
+    const ang = Math.acos(cs)*180/Math.PI;
+    vAxes(s, 5.4);
+    vArrow(0,0, a[0], a[1], '#38bdf8', 3.0, s);
+    vArrow(0,0, b[0], b[1], '#f472b6', 3.0, s);
+    // 夹角弧
+    const r0 = 1.1;
+    const t0 = Math.atan2(a[1], a[0]), t1 = Math.atan2(b[1], b[0]);
+    ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(SX(vX(0,s)), SY(vY(0,s)), r0*s*sc, -Math.max(t0,t1), -Math.min(t0,t1));
+    ctx.stroke();
+    label(vX(Math.cos((t0+t1)/2)*r0*1.35,s), vY(Math.sin((t0+t1)/2)*r0*1.35,s),
+          ang.toFixed(1) + '°', '#facc15', 'center', 12);
+    label(vX(a[0]*0.55,s), vY(a[1]*0.55,s)+0.26, 'a', '#38bdf8', 'center', 12);
+    label(vX(b[0]*0.6,s), vY(b[1]*0.6,s)-0.28, 'b', '#f472b6', 'center', 12);
+    const perp = Math.abs(d) < 1e-9;
+    labelIn(0.20, 5.72, 'a·b = |a||b|cosθ（黄弧是两向量的夹角）', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, 'a·b = ' + d.toFixed(5), '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, '夹角 = ' + ang.toFixed(3) + '°', '#facc15', 'end', 11);
+    labelIn(9.90, 4.44, perp ? 'a·b = 0 → 两向量垂直' : 'a·b ≠ 0 → 不垂直',
+            perp ? '#34d399' : '#64748b', 'end', 11);
+    labelIn(9.90, 4.04, '|a| = ' + na.toFixed(4) + '，|b| = ' + nb.toFixed(4), '#64748b', 'end', 10);
+}
+
+// ---- 5) 投影 ----
+function drawProject(S){
+    const th = S.th, s = 0.95;
+    const a = [3.2, 0];
+    const b = [2*Math.cos(th*Math.PI/180), 2*Math.sin(th*Math.PI/180)];
+    const k = (a[0]*b[0] + a[1]*b[1]) / (a[0]*a[0] + a[1]*a[1]);
+    const pv = [k*a[0], k*a[1]];                 // 投影向量
+    const rv = [b[0]-pv[0], b[1]-pv[1]];         // 垂直分量
+    const sp = (a[0]*b[0] + a[1]*b[1]) / Math.hypot(a[0], a[1]);   // 数量投影
+    vAxes(s, 4.4);
+    vArrow(0,0, a[0], a[1], '#38bdf8', 3.0, s);
+    vArrow(0,0, b[0], b[1], '#f472b6', 3.0, s);
+    vArrow(0,0, pv[0], pv[1], '#34d399', 3.4, s);
+    vSeg(pv[0], pv[1], b[0], b[1], '#f87171', 2.0, s, true);
+    label(vX(a[0]*0.75,s), vY(0,s)+0.28, 'a', '#38bdf8', 'center', 12);
+    label(vX(b[0]*0.6,s), vY(b[1]*0.6,s)-0.28, 'b', '#f472b6', 'center', 12);
+    label(vX(pv[0]*0.55,s), vY(pv[1]*0.55,s)+0.30, '投影', '#34d399', 'center', 11);
+    labelIn(0.20, 5.72, 'b 在 a 上的投影向量（绿）+ 垂直分量（红虚线）= b', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, '数量投影 a·b/|a| = ' + sp.toFixed(5), '#34d399', 'end', 12);
+    labelIn(9.90, 4.84, '投影向量 = (' + pv[0].toFixed(4) + ', ' + pv[1].toFixed(4) + ')', '#34d399', 'end', 11);
+    labelIn(9.90, 4.44, '垂直分量 = (' + rv[0].toFixed(4) + ', ' + rv[1].toFixed(4) + ')', '#f87171', 'end', 11);
+    labelIn(9.90, 4.04, '夹角 θ = ' + th.toFixed(1) + '°（θ=90° 时投影为零）', '#64748b', 'end', 10);
+}
+
+// ---- 6) 力的合成与余弦定理 ----
+function drawResolve(S){
+    const th = S.th, s = 0.80;
+    const F1 = [2.6, 0];
+    const F2 = [3*Math.cos(th*Math.PI/180), 3*Math.sin(th*Math.PI/180)];
+    const Rv = vAdd(F1, F2);
+    const R = Math.hypot(Rv[0], Rv[1]);
+    vAxes(s, 5.0);
+    // 首尾相接：F1 从原点，F2 从 F1 末端
+    vArrow(0,0, F1[0], F1[1], '#38bdf8', 2.8, s);
+    vArrow(F1[0], F1[1], Rv[0], Rv[1], '#f472b6', 2.8, s);
+    vArrow(0,0, Rv[0], Rv[1], '#facc15', 3.4, s);
+    // 夹角弧（在 F1 起点处标示 F1 与 F2 的方向夹角）
+    ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    const ar = th*Math.PI/180;
+    ctx.arc(SX(vX(0,s)), SY(vY(0,s)), 1.0*s*sc, 0, -ar, true);
+    ctx.stroke();
+    label(vX(Math.cos(ar/2)*1.3,s), vY(Math.sin(ar/2)*1.3,s), th.toFixed(1)+'°', '#94a3b8', 'center', 11);
+    label(vX(F1[0]*0.5,s), vY(0,s)-0.28, 'F₁', '#38bdf8', 'center', 12);
+    label(vX((F1[0]+Rv[0])/2,s), vY((F1[1]+Rv[1])/2,s)+0.28, 'F₂', '#f472b6', 'center', 12);
+    label(vX(Rv[0]*0.45,s), vY(Rv[1]*0.45,s), 'F', '#facc15', 'center', 13);
+    labelIn(0.20, 5.72, '首尾相接求合力：|F₁+F₂| = √(F₁²+F₂²+2F₁F₂cosθ)', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, '合力 = ' + R.toFixed(5), '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, '|F₁| = 2.6，|F₂| = 3.0', '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.44, '夹角 θ = ' + th.toFixed(1) + '°', '#f472b6', 'end', 11);
+    const same = Math.abs(th) < 1e-9, opp = Math.abs(th-180) < 1e-9;
+    labelIn(9.90, 4.04, same ? '同向：合力 = 两力之和 = 5.6'
+            : (opp ? '反向：合力 = 两力之差 = 0.4' : '│F₁−F₂│ < 合力 < F₁+F₂'),
+            '#64748b', 'end', 10);
+}
+
+// ---- 7) 定比分点 ----
+function drawSection(S){
+    const lam = S.lam, s = 1.05;
+    const A = [0.6, 0.6], B = [3.8, 2.6];
+    const den = 1 + lam;
+    const P = [(A[0] + lam*B[0])/den, (A[1] + lam*B[1])/den];
+    vAxes(s, 4.8);
+    vSeg(A[0], A[1], B[0], B[1], 'rgba(148,163,184,0.85)', 2.2, s);
+    vDot(A[0], A[1], '#38bdf8', s);
+    vDot(B[0], B[1], '#f472b6', s);
+    vDot(P[0], P[1], '#facc15', s, 6.5);
+    label(vX(A[0],s), vY(A[1],s)-0.30, 'A', '#38bdf8', 'center', 12);
+    label(vX(B[0],s), vY(B[1],s)+0.30, 'B', '#f472b6', 'center', 12);
+    label(vX(P[0],s), vY(P[1],s)+0.30, 'P', '#facc15', 'center', 12);
+    // AP / PB 的比值
+    const isMid = Math.abs(lam-1) < 1e-9;
+    labelIn(0.20, 5.72, '定比分点：AP = λ·PB ⇒ P = (A + λB)/(1 + λ)', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, 'λ = ' + lam.toFixed(3), '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, 'P = (' + P[0].toFixed(4) + ', ' + P[1].toFixed(4) + ')', '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.44, 'AP : PB = ' + lam.toFixed(3) + ' : 1', '#34d399', 'end', 11);
+    labelIn(9.90, 4.04, isMid ? 'λ = 1 ⇒ P 是中点'
+            : (lam < 0 ? 'λ < 0 ⇒ 外分（P 在 AB 延长线上）' : 'λ > 0 ⇒ 内分'),
+            '#64748b', 'end', 10);
+}
