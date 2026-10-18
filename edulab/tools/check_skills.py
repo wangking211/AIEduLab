@@ -33,10 +33,13 @@ check_skills.py —— 技能与根级产品的一致性 / 可复现性闸门。
 """
 
 import hashlib
+import io
 import json
 import os
+import re
 import subprocess
 import sys
+import tokenize
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -118,6 +121,50 @@ def check_skill_docs(items=None):
         has_fallback = any(k in joined for k in ("直接回答", "直接算", "直接说明"))
         if not (has_sibling or has_fallback):
             bad.append((name, "「不该用」段没给替代去向（兄弟技能名，或「直接回答」）"))
+    return bad
+
+
+def brace_literal_check():
+    """LaTeX 花括号在**非 f-string** 字符串里不能写双份 —— 但**只限 `\\begin`/`\\end`**。
+
+    只有 f-string 里 `{{ }}` 才表示 `{ }`；隐式拼接里没有 `f` 前缀的那些片段，
+    `{{ }}` 会原样进入 LaTeX。
+
+    **为什么只查 `\\begin`/`\\end`**：在浏览器里逐条实测过（KaTeX 0.16.8），
+    「组套组」只在环境名这一处失败：
+      · `\\begin{{pmatrix}}…\\end{{pmatrix}}` → 抛
+        `Expected node of type textord, but got node of type ordgroup`；
+      · `\\mathbf{{v}}`、`\\dfrac{{a}}{{b}}`、`\\operatorname{{tr}}`、`x^{{2}}`、
+        `\\sqrt{{10}}`、`\\text{{abc}}` → **全部正常**（组套组在这些位置是合法 LaTeX）。
+    所以判据必须收窄到实际会出问题的位置，否则会把一批渲染正常的技能误报成坏。
+
+    这条坑已在两个技能上各复发一次（edu-linear-algebra、edu-ode-dynamics），
+    所以入闸门。用 tokenize 精确定位字符串字面量，只看非 f-string 的那些。
+    """
+    bad = []
+    for name, d in skill_dirs():
+        p = d / "scripts" / "generate.py"
+        if not p.exists():
+            continue
+        src = p.read_text(encoding="utf-8", errors="replace")
+        try:
+            toks = list(tokenize.generate_tokens(io.StringIO(src).readline))
+        except Exception as exc:                     # noqa: BLE001
+            bad.append((name, f"tokenize 失败：{exc}"))
+            continue
+        lines = []
+        for t in toks:
+            if t.type != tokenize.STRING:
+                continue
+            s = t.string
+            if "f" in re.match(r"[A-Za-z]*", s).group(0).lower():
+                continue                             # f-string 里的 {{ }} 是对的
+            if "begin{{" in s or "end{{" in s:
+                lines.append(t.start[0])
+        if lines:
+            bad.append((name, f"generate.py 的 \\begin{{\\{{ 位置：第 "
+                              f"{', '.join(str(x) for x in lines[:5])} 行"
+                              f"{' 等' if len(lines) > 5 else ''}"))
     return bad
 
 
@@ -250,6 +297,12 @@ def main(argv):
         if not ok:
             print(f"      {desc}")
 
+    # 0.75) LaTeX 环境名：普通字符串里不能写 \begin{{…}}（见 brace_literal_check 的实测证据）
+    brace_bad = brace_literal_check()
+    print(f"  {'✓' if not brace_bad else '✗'} LaTeX 环境名（普通字符串里不得写 \\begin{{{{…}}}}）")
+    for name, why in brace_bad:
+        print(f"      {name}: {why}")
+
     # 0.8) 出处审计：数值分「现算 / 实测 / 假设」，报告必须与代码一致。
     r = _sp.run([sys.executable,
                  str(ROOT / "mental-models" / "lib" / "provenance.py"), "--check"],
@@ -320,7 +373,8 @@ def main(argv):
                             encoding="utf-8")
         print(f"✓ 基线已刷新：{BASELINE.relative_to(ROOT).as_posix()}（{len(fresh)} 个技能）")
         return 0
-    if failures or not tpl_ok or not assets_ok or doc_bad or not guard_ok or not prov_ok:
+    if failures or not tpl_ok or not assets_ok or doc_bad or not guard_ok or not prov_ok \
+            or brace_bad:
         if failures:
             print(f"✗ {len(failures)} 项未通过")
             for s, why, tail in failures:
@@ -337,6 +391,9 @@ def main(argv):
             print("✗ 记号守卫自检未通过（verify_scene 没在拦截撒谎的记号）")
         if not prov_ok:
             print("✗ 出处分级与代码不一致（有模型的假设/读数变了但报告没重新生成）")
+        if brace_bad:
+            print(f"✗ {len(brace_bad)} 个技能的 LaTeX 花括号写重了"
+                  "（普通字符串里的 {{ }} 会原样进入 LaTeX，KaTeX 会抛错但不报错）")
         print("\n  若确认新产物正确，用 `--update` 刷新基线；"
               "模板用 compose_templates.py、素材用 sync_video_assets.py 重新组装。")
         return 1

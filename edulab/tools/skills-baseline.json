@@ -149,6 +149,16 @@
   "sin_wave.html": "6e1268094e50a9feac78549bd0250727214228a0717d0611a7b556c0260b09d0",
   "telescope.html": "08ecb81ff86cfd4936b6609a6e2eb6ab40dae7c82f002a19678c5f8cd05e1538"
  },
+ "edu-ode-dynamics": {
+  "damped.html": "5ea2ee07020cc4e52cb072b308d043321776b5730c60485581dd78ea7e7f64d0",
+  "euler.html": "872aef56586228539c0d8f2122350e6f57453c6134c7eeb357a5f744e12ea59a",
+  "firstorder.html": "21ba3a63c01d7810396dfca5fd50f97e12319cf298b9b8ca35da0d8c6cc434b3",
+  "forced.html": "a36efb5fe1b817fae890ab95bdc7b5e1d3874c0b52aad788a1476b81b5eadb8d",
+  "index.html": "496f5c94990babd7b4fe81f63570681157522928315e4279af5e6641eb002bd5",
+  "logistic.html": "ebdc5884c3a3a5e60099db41b0405afa2a1cf18baf9cb484bf64d388dd90d9a1",
+  "phase.html": "7d06391c3475870583d2e3fb840fa9c3724944b726887cfaae8e7524bd92d2fa",
+  "predator.html": "08cd03d6756100f55c324dd6e92098129c6faa54e606efa7aeb6f97dcf97a01f"
+ },
  "edu-physics-em": {
   "ampere.html": "6aad82590f72792b61647fa6485c2126a359f0cd46234daaa15b8ee3d1abbfc8",
   "capacitor.html": "04c1b7b6b9ada4241b067a1c0f826ff3907019d54983bb1bff6813abe3e78ed5",

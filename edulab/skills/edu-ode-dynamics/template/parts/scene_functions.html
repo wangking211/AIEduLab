@@ -1,0 +1,329 @@
+// ===================== 常微分方程与动力系统场景 =====================
+let animT = 0;
+
+// ---- 通用防御：把文字锚点自动收进画布 ----
+function labelIn(x, y, text, color, align, size){
+    size = size || 12;
+    ctx.font = 'bold ' + size + 'px system-ui';
+    const w = ctx.measureText(String(text)).width / (sc || 1);
+    const x0 = view.xRange[0], x1 = view.xRange[1];
+    const pad = 0.06;
+    let a = x;
+    if (align === 'end')         a = Math.max(x, x0 + w + pad);
+    else if (align === 'center') a = Math.max(x0 + w/2 + pad, Math.min(x, x1 - w/2 - pad));
+    else                         a = Math.min(x, x1 - w - pad);
+    label(a, y, text, color, align, size);
+}
+
+// ---- 数据坐标 → 世界坐标的绘图框 ----
+function mkPlot(px0, px1, py0, py1, xr, yr){
+    const X = x => px0 + (x - xr[0])/(xr[1]-xr[0])*(px1-px0);
+    const Y = y => py0 + (y - yr[0])/(yr[1]-yr[0])*(py1-py0);
+    return {X, Y, px0, px1, py0, py1, xr, yr};
+}
+function plotSeg(P, x1, y1, x2, y2, col, lw){
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 1;
+    ctx.beginPath(); ctx.moveTo(SX(P.X(x1)), SY(P.Y(y1)));
+    ctx.lineTo(SX(P.X(x2)), SY(P.Y(y2))); ctx.stroke();
+}
+function plotPoly(P, pts, col, lw){
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 2.4; ctx.beginPath();
+    pts.forEach((p,i)=>{ const X=SX(P.X(p[0])), Y=SY(P.Y(p[1]));
+        i===0 ? ctx.moveTo(X,Y) : ctx.lineTo(X,Y); });
+    ctx.stroke();
+}
+// 世界坐标下的线段裁剪（Liang–Barsky）——不稳定平衡点附近的轨道会指数发散，
+// 直接画会冲出绘图框，必须逐段裁到框内
+function wClipSeg(x1, y1, x2, y2, xmin, xmax, ymin, ymax){
+    let t0 = 0, t1 = 1;
+    const dx = x2-x1, dy = y2-y1;
+    const ok = (p, q)=>{
+        if (Math.abs(p) < 1e-12) return q >= 0;
+        const r = q/p;
+        if (p < 0){ if (r > t1) return false; if (r > t0) t0 = r; }
+        else      { if (r < t0) return false; if (r < t1) t1 = r; }
+        return true;
+    };
+    if (!ok(-dx, x1-xmin)) return null;
+    if (!ok( dx, xmax-x1)) return null;
+    if (!ok(-dy, y1-ymin)) return null;
+    if (!ok( dy, ymax-y1)) return null;
+    return [x1+t0*dx, y1+t0*dy, x1+t1*dx, y1+t1*dy];
+}
+function plotPolyClip(P, pts, col, lw){
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 2;
+    for (let i=0;i<pts.length-1;i++){
+        const c = wClipSeg(P.X(pts[i][0]), P.Y(pts[i][1]),
+                           P.X(pts[i+1][0]), P.Y(pts[i+1][1]),
+                           P.px0, P.px1, P.py0, P.py1);
+        if (!c) continue;
+        ctx.beginPath(); ctx.moveTo(SX(c[0]), SY(c[1])); ctx.lineTo(SX(c[2]), SY(c[3])); ctx.stroke();
+    }
+}
+function plotFrame(P, xlab, ylab){
+    plotSeg(P, P.xr[0], 0, P.xr[1], 0, '#334155', 1.4);
+    plotSeg(P, 0, P.yr[0], 0, P.yr[1], '#334155', 1.4);
+    labelIn(P.X(P.xr[1]), P.Y(0)-0.28, xlab, '#64748b', 'end', 10);
+    labelIn(P.X(0)+0.14, P.Y(P.yr[1])-0.22, ylab, '#64748b', 'start', 10);
+}
+// 与内核同一套 RK4（真跑，不是画出来的曲线）
+function odeRk4(f, y0, t0, t1, n){
+    const h = (t1-t0)/n;
+    let y = y0.slice();
+    const pts = [[t0, y.slice()]];
+    for (let i=0;i<n;i++){
+        const t = t0 + i*h;
+        const k1 = f(t, y);
+        const k2 = f(t+h/2, y.map((v,j)=> v + h/2*k1[j]));
+        const k3 = f(t+h/2, y.map((v,j)=> v + h/2*k2[j]));
+        const k4 = f(t+h, y.map((v,j)=> v + h*k3[j]));
+        y = y.map((v,j)=> v + h/6*(k1[j] + 2*k2[j] + 2*k3[j] + k4[j]));
+        pts.push([t+h, y.slice()]);
+    }
+    return pts;
+}
+function odeEuler(f, y0, t0, t1, n){
+    const h = (t1-t0)/n;
+    let y = y0.slice();
+    const pts = [[t0, y.slice()]];
+    for (let i=0;i<n;i++){
+        const t = t0 + i*h;
+        const d = f(t, y);
+        y = y.map((v,j)=> v + h*d[j]);
+        pts.push([t+h, y.slice()]);
+    }
+    return pts;
+}
+// 一阶方程 y' = t − y
+const ODE_SLOPE = (t, y) => [t - y[0]];
+const ODE_EXACT = (t, y0) => t - 1 + (y0 + 1)*Math.exp(-t);
+
+// ---- 1) 方向场与解曲线 ----
+function drawSlopefield(S){
+    const y0 = S.y0;
+    const P = mkPlot(0.90, 9.10, 0.95, 4.90, [0, 5], [-2, 3]);
+    plotFrame(P, 't', 'y');
+    // 方向场：每点画一小段斜率为 t−y 的线段
+    for (let t=0.25; t<=5; t+=0.55){
+        for (let y=-1.8; y<=2.8; y+=0.55){
+            const m = t - y;
+            const L = 0.22, dx = L/Math.sqrt(1+m*m), dy = m*dx;
+            plotSeg(P, t-dx, y-dy, t+dx, y+dy, 'rgba(148,163,184,0.45)', 1.4);
+        }
+    }
+    // 渐近直线 y = t − 1
+    plotSeg(P, 0, -1, 5, 4, 'rgba(248,113,113,0.7)', 1.6);
+    labelIn(P.X(4.2), P.Y(3.2)-0.24, '所有解都趋于 y = t − 1', '#f87171', 'end', 10);
+    // 特解（内核同式）
+    const pts = [];
+    for (let i=0; i<=200; i++){ const t = 5*i/200; pts.push([t, ODE_EXACT(t, y0)]); }
+    plotPoly(P, pts, '#34d399', 2.8);
+    // 初值点
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath(); ctx.arc(SX(P.X(0)), SY(P.Y(y0)), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.5; ctx.stroke();
+    labelIn(0.20, 5.72, "y′ = t − y 的方向场与解曲线", '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, 'y(5) = ' + ODE_EXACT(5, y0).toFixed(5), '#34d399', 'end', 12);
+    labelIn(9.90, 4.84, 'y(1) = ' + ODE_EXACT(1, y0).toFixed(5), '#facc15', 'end', 11);
+    labelIn(9.90, 4.44, '初值 y(0) = ' + y0.toFixed(2), '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.04, '斜率场在该点的值 = ' + (-y0).toFixed(2), '#64748b', 'end', 10);
+}
+
+// ---- 2) 数值方法：步长对误差的影响 ----
+function drawNumerror(S){
+    const n = Math.round(S.n);
+    const P = mkPlot(0.90, 7.30, 0.95, 4.90, [0, 5], [-2, 3]);
+    plotFrame(P, 't', 'y');
+    // 精确解
+    const ex = [];
+    for (let i=0;i<=200;i++){ const t = 5*i/200; ex.push([t, ODE_EXACT(t, 0)]); }
+    plotPoly(P, ex, '#34d399', 2.8);
+    // 欧拉法（真跑）
+    const eu = odeEuler(ODE_SLOPE, [0], 0, 5, n).map(p=>[p[0], p[1][0]]);
+    plotPoly(P, eu, '#f87171', 2.0);
+    // RK4（真跑）
+    const rk = odeRk4(ODE_SLOPE, [0], 0, 5, n).map(p=>[p[0], p[1][0]]);
+    plotPoly(P, rk, '#38bdf8', 2.0);
+    // 右：误差曲线（对数感：放大 20 倍显示）
+    const Q = mkPlot(7.70, 9.70, 1.60, 4.40, [0, 5], [0, 0.6]);
+    plotSeg(Q, 0, 0, 5, 0, '#334155', 1.2);
+    plotSeg(Q, 0, 0, 0, 0.6, '#334155', 1.2);
+    const errPt = (arr) => arr.map(p=>[p[0], Math.min(0.6, Math.abs(p[1][0] - ODE_EXACT(p[0], 0)))]);
+    plotPoly(Q, errPt(eu), '#f87171', 1.8);
+    plotPoly(Q, errPt(rk), '#38bdf8', 1.8);
+    labelIn(Q.X(2.5), Q.Y(0.62)+0.16, '|误差|（欧拉 vs RK4）', '#94a3b8', 'center', 9);
+    const eE = Math.abs(eu[eu.length-1][1] - ODE_EXACT(5, 0));
+    const eR = Math.abs(rk[rk.length-1][1] - ODE_EXACT(5, 0));
+    labelIn(0.20, 5.72, '绿色 = 精确解；红色 = 欧拉法；蓝色 = RK4（都用 n 步真跑）', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, 'n = ' + n + ' 步，h = ' + (5/n).toFixed(4), '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, '欧拉法终点误差 = ' + eE.toFixed(6), '#f87171', 'end', 11);
+    labelIn(9.90, 4.44, 'RK4 终点误差 = ' + eR.toFixed(8), '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.04, 'RK4 误差量级 ≈ h⁴，欧拉法 ≈ h', '#64748b', 'end', 10);
+}
+
+// ---- 3) 阻尼振动 ----
+function drawOscillator(S){
+    const z = S.z;
+    const P = mkPlot(0.90, 9.10, 0.95, 4.90, [0, 20], [-1.2, 1.2]);
+    plotFrame(P, 't', 'y');
+    // 包络 ±e^{−ζω₀t}
+    const envPos = [], envNeg = [];
+    for (let i=0;i<=200;i++){ const t = 20*i/200; const e = Math.exp(-z*t);
+        envPos.push([t, e]); envNeg.push([t, -e]); }
+    plotPoly(P, envPos, 'rgba(148,163,184,0.8)', 1.4);
+    plotPoly(P, envNeg, 'rgba(148,163,184,0.8)', 1.4);
+    labelIn(P.X(11.5), P.Y(0.95), '±e^(−ζt) 包络', '#94a3b8', 'start', 9);
+    // 解曲线（与内核同式的三支）
+    const yv = (t)=>{
+        if (z < 1){ const wd = Math.sqrt(1-z*z);
+            return Math.exp(-z*t)*(Math.cos(wd*t) + z/wd*Math.sin(wd*t)); }
+        if (z > 1){ const wh = Math.sqrt(z*z-1), l1 = -z+wh, l2 = -z-wh;
+            const A = -l2/(l1-l2), B = l1/(l1-l2);
+            return A*Math.exp(l1*t) + B*Math.exp(l2*t); }
+        return Math.exp(-t)*(1+t);
+    };
+    const pts = [];
+    for (let i=0;i<=400;i++){ const t = 20*i/400; pts.push([t, yv(t)]); }
+    plotPoly(P, pts, '#facc15', 2.8);
+    const type = z < 1-1e-9 ? '欠阻尼' : (z > 1+1e-9 ? '过阻尼' : '临界阻尼');
+    labelIn(0.20, 5.72, 'y″ + 2ζy′ + y = 0，y(0)=1，y′(0)=0', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, '阻尼比 ζ = ' + z.toFixed(3) + ' → ' + type, '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, 'ω_d = √(1−ζ²) = ' + Math.sqrt(Math.max(0,1-z*z)).toFixed(4), '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.44, 'y(3) = ' + yv(3).toFixed(5), '#34d399', 'end', 11);
+    labelIn(9.90, 4.04, '包络衰减到 e^(−3ζ) = ' + Math.exp(-3*z).toFixed(4), '#64748b', 'end', 10);
+}
+
+// ---- 4) 受迫振动与共振 ----
+function drawResonance(S){
+    const w = S.w, z = S.zeta;
+    const amax = (z < 1/Math.SQRT2) ? 1/(2*z*Math.sqrt(1-z*z)) : 1;
+    const P = mkPlot(0.90, 9.10, 0.95, 4.90, [0, 2.6], [0, Math.min(amax*1.15, 12)]);
+    plotFrame(P, '驱动频率 ω', '振幅 A');
+    // 响应曲线
+    const pts = [];
+    for (let i=0;i<=300;i++){ const ww = 2.6*i/300;
+        const re = 1-ww*ww, im = 2*z*ww;
+        pts.push([ww, 1/Math.sqrt(re*re+im*im)]); }
+    plotPoly(P, pts, '#facc15', 2.8);
+    // 静力位移 A(0)=1 与峰值
+    plotSeg(P, 0, 1, 2.6, 1, 'rgba(56,189,248,0.7)', 1.4);
+    labelIn(P.X(2.4), P.Y(1)+0.20, 'A(0)=1（静力位移）', '#38bdf8', 'end', 9);
+    if (z < 1/Math.SQRT2){
+        const wr = Math.sqrt(1-2*z*z), ar = 1/(2*z*Math.sqrt(1-z*z));
+        plotSeg(P, wr, 0, wr, ar, 'rgba(248,113,113,0.85)', 1.5);
+        ctx.fillStyle = '#f87171';
+        ctx.beginPath(); ctx.arc(SX(P.X(wr)), SY(P.Y(ar)), 5.5, 0, 7); ctx.fill();
+        labelIn(P.X(wr), P.Y(ar)+0.26, '峰值 ω_r=' + wr.toFixed(3), '#f87171', 'center', 10);
+    }
+    // 当前 ω 的游标
+    const re = 1-w*w, im = 2*z*w, av = 1/Math.sqrt(re*re+im*im);
+    plotSeg(P, w, 0, w, Math.min(av, P.yr[1]), 'rgba(52,211,153,0.9)', 1.6);
+    ctx.fillStyle = '#34d399';
+    ctx.beginPath(); ctx.arc(SX(P.X(w)), SY(P.Y(Math.min(av, P.yr[1]))), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.5; ctx.stroke();
+    labelIn(0.20, 5.72, '受迫振动的稳态振幅 A(ω) = 1 / √((1−ω²)² + (2ζω)²)', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, 'ω = ' + w.toFixed(3) + ' 时 A = ' + av.toFixed(4), '#34d399', 'end', 12);
+    labelIn(9.90, 4.84, '阻尼比 ζ = ' + z.toFixed(3), '#facc15', 'end', 11);
+    labelIn(9.90, 4.44, z < 1/Math.SQRT2
+            ? '峰值振幅 = ' + (1/(2*z*Math.sqrt(1-z*z))).toFixed(3) + '（ζ 越小越高）'
+            : 'ζ 足够大 → 振幅随 ω 单调下降，无内部峰值', '#f87171', 'end', 10);
+}
+
+// ---- 5) 线性系统的相平面与平衡点分类 ----
+function drawPhaseplane(S){
+    const k = S.k;
+    const R = 2.2;
+    const P = mkPlot(1.00, 8.20, 0.90, 4.90, [-R, R], [-R, R]);
+    plotFrame(P, 'x', 'y');
+    // 向量场
+    for (let x=-R+0.25; x<=R-0.25; x+=0.42){
+        for (let y=-R+0.25; y<=R-0.25; y+=0.42){
+            const vx = k*x + y, vy = -x + k*y;
+            const n = Math.hypot(vx, vy) || 1;
+            const L = 0.20, dx = vx/n*L, dy = vy/n*L;
+            plotSeg(P, x-dx, y-dy, x+dx, y+dy, 'rgba(148,163,184,0.40)', 1.3);
+        }
+    }
+    // 若干轨道（RK4 真跑）
+    const f = (_t, v)=> [k*v[0] + v[1], -v[0] + k*v[1]];
+    [[1.6,0],[0,1.6],[-1.6,0],[0,-1.6],[1.2,1.2]].forEach((s0, i)=>{
+        const tr = odeRk4(f, s0, 0, 14, 900);
+        const pts = tr.map(p=>p[1]);
+        plotPolyClip(P, pts, i === 0 ? '#facc15' : 'rgba(52,211,153,0.75)', i === 0 ? 2.4 : 1.6);
+    });
+    // 平衡点
+    ctx.fillStyle = '#f87171';
+    ctx.beginPath(); ctx.arc(SX(P.X(0)), SY(P.Y(0)), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.5; ctx.stroke();
+    const type = Math.abs(k) < 1e-9 ? '中心（center）'
+               : (k < 0 ? '稳定焦点' : '不稳定焦点');
+    labelIn(0.20, 5.72, 'x′ = Ax，A = [[k, 1], [−1, k]]：特征值 k ± i', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, '迹 = 2k = ' + (2*k).toFixed(3) + '，det = k²+1 = ' + (k*k+1).toFixed(3),
+            '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.84, 'Re λ = ' + k.toFixed(3) + ' → ' + type,
+            Math.abs(k) < 1e-9 ? '#38bdf8' : (k < 0 ? '#34d399' : '#f87171'), 'end', 12);
+    labelIn(9.90, 4.44, '虚部 ±1 → 始终是旋转（焦点/中心），不会成为结点', '#64748b', 'end', 10);
+}
+
+// ---- 6) Logistic 方程 ----
+function drawLogisticode(S){
+    const r = S.r, y0 = S.y0, Kk = 1;
+    const P = mkPlot(0.90, 9.10, 0.95, 4.90, [0, 12], [0, 1.25]);
+    plotFrame(P, 't', 'y');
+    // 平衡线 y = K
+    plotSeg(P, 0, Kk, 12, Kk, 'rgba(248,113,113,0.7)', 1.5);
+    labelIn(P.X(10.6), P.Y(Kk)+0.20, 'K = 1（稳定平衡）', '#f87171', 'end', 9);
+    // 若干初值的解
+    [0.02, 0.1, 0.5, 1.6].forEach((yy, i)=>{
+        const pts = [];
+        for (let j=0;j<=240;j++){ const t = 12*j/240;
+            pts.push([t, Kk/(1 + (Kk-yy)/yy*Math.exp(-r*t))]); }
+        ctx.strokeStyle = i === 1 ? '#facc15' : 'rgba(56,189,248,0.7)';
+        ctx.lineWidth = i === 1 ? 2.8 : 1.6;
+        ctx.beginPath();
+        pts.forEach((p,j)=>{ const X=SX(P.X(p[0])), Y=SY(P.Y(p[1]));
+            j===0 ? ctx.moveTo(X,Y) : ctx.lineTo(X,Y); });
+        ctx.stroke();
+    });
+    const yv = (t)=> Kk/(1 + (Kk-y0)/y0*Math.exp(-r*t));
+    const t90 = Math.log(((Kk-y0)/y0)/((Kk-0.9)/0.9))/r;
+    labelIn(0.20, 5.72, "Logistic：y′ = r·y(1 − y/K)，K = 1", '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, 'y(2) = ' + yv(2).toFixed(5), '#facc15', 'end', 12);
+    labelIn(9.90, 4.84, 'y(6) = ' + yv(6).toFixed(5), '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.44, '到达 0.9K 用时 = ' + t90.toFixed(3), '#34d399', 'end', 11);
+    labelIn(9.90, 4.04, '最大增长率 rK/4 = ' + (r/4).toFixed(4), '#64748b', 'end', 10);
+}
+
+// ---- 7) Lotka–Volterra 相图与守恒量 ----
+function drawLvplane(S){
+    const N0 = S.N0, r = 0.05, a = 1, c = 1, m = 0.05;
+    const E0 = 0.05;
+    const R = 0.14;
+    const P = mkPlot(1.00, 8.20, 0.90, 4.90, [0, R], [0, R]);
+    plotFrame(P, 'N（猎物）', 'E（捕食者）');
+    const f = (_t, v)=> [r*v[0] - a*v[0]*v[1], c*v[0]*v[1] - m*v[1]];
+    // 若干轨道（RK4 真跑）
+    [[N0, E0], [0.10, 0.05], [0.05, 0.09], [0.03, 0.05], [0.05, 0.03]].forEach((s0, i)=>{
+        const tr = odeRk4(f, s0, 0, 300, 6000);
+        ctx.strokeStyle = i === 0 ? '#facc15' : 'rgba(52,211,153,0.6)';
+        ctx.lineWidth = i === 0 ? 2.4 : 1.4;
+        ctx.beginPath();
+        tr.forEach((p,j)=>{ const X=SX(P.X(p[1][0])), Y=SY(P.Y(p[1][1]));
+            j===0 ? ctx.moveTo(X,Y) : ctx.lineTo(X,Y); });
+        ctx.stroke();
+    });
+    // 平衡点 (m/c, r/a) = (0.05, 0.05)
+    ctx.fillStyle = '#f87171';
+    ctx.beginPath(); ctx.arc(SX(P.X(0.05)), SY(P.Y(0.05)), 6, 0, 7); ctx.fill();
+    ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.5; ctx.stroke();
+    labelIn(P.X(0.05), P.Y(0.05)-0.26, '平衡点 (0.05, 0.05)', '#f87171', 'center', 9);
+    // 初值点
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath(); ctx.arc(SX(P.X(N0)), SY(P.Y(E0)), 5.5, 0, 7); ctx.fill();
+    const H = N0 - m*Math.log(N0) + E0 - r*Math.log(E0);
+    labelIn(0.20, 5.72, 'Ṅ = rN − aNE，Ė = cNE − mE（r=m=0.05，a=c=1）', '#94a3b8', 'start', 11);
+    labelIn(9.90, 5.24, '守恒量 H = N − m·lnN + E − r·lnE', '#34d399', 'end', 11);
+    labelIn(9.90, 4.84, 'H(初值) = ' + H.toFixed(5) + '（沿整条轨道不变）', '#facc15', 'end', 11);
+    labelIn(9.90, 4.44, 'N₀ = ' + N0.toFixed(3) + '，E₀ = ' + E0.toFixed(2), '#38bdf8', 'end', 11);
+    labelIn(9.90, 4.04, '轨道闭合 ⇒ 周期严格存在（H 是它的第一条积分）', '#64748b', 'end', 10);
+}
