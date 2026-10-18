@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>机械振动 · 机械波 · 光 · 交互学习</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+<style>
+    body { font-family: "PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
+    .katex { font-size: 1.02em; }
+    canvas { display:block; }
+    input[type=range] { -webkit-appearance:none; appearance:none; height:6px; border-radius:3px; background:#cbd5e1; outline:none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#4f46e5; cursor:pointer; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.3); }
+    .scroll-thin::-webkit-scrollbar { width:6px; }
+    .scroll-thin::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+<div class="flex h-screen overflow-hidden">
+    <!-- 左：题面 + 动态控制台 -->
+    <aside class="w-[30%] min-w-[300px] max-w-[420px] bg-white border-r border-slate-200 flex flex-col">
+        <div class="px-5 py-4 border-b border-slate-200">
+            <div class="text-[11px] uppercase tracking-wider text-indigo-500 font-bold mb-1">互动教学 · 题面</div>
+            <h1 id="prob-title" class="text-lg font-bold text-slate-900"></h1>
+        </div>
+        <div class="flex-1 overflow-y-auto scroll-thin px-5 py-4 text-sm leading-relaxed" id="prob-body"></div>
+        <div class="border-t border-slate-200 px-5 py-4 bg-slate-50">
+            <div class="text-[11px] uppercase tracking-wider text-teal-600 font-bold mb-3" id="console-title">动态控制台</div>
+            <!-- 参数滑块 -->
+            <div id="param-block" class="hidden">
+                <div class="flex justify-between text-xs text-slate-600 mb-1"><span id="param-label"></span><span id="param-val" class="font-mono font-bold text-teal-700"></span></div>
+                <input id="param-slider" type="range" class="w-full">
+                <div id="param-ticks" class="flex justify-between text-[10px] text-slate-400 mt-1"></div>
+            </div>
+            <!-- 读数 -->
+            <div id="readouts" class="mt-3 space-y-2 text-sm"></div>
+            <!-- 能量/功率条 -->
+            <div id="bar-block" class="hidden mt-4">
+                <div class="text-xs text-slate-600 mb-1" id="bar-label"></div>
+                <div class="h-5 w-full bg-slate-200 rounded-full overflow-hidden flex text-[10px] text-white font-bold">
+                    <div id="bar-seg1" class="h-full flex items-center justify-center" style="width:0%;background:#4f46e5"></div>
+                    <div id="bar-seg2" class="h-full flex items-center justify-center" style="width:0%;background:#0ea5e9"></div>
+                </div>
+                <div class="flex gap-4 text-[10px] text-slate-500 mt-1" id="bar-legend"></div>
+            </div>
+            <!-- 定值指示器 -->
+            <div id="constant-block" class="hidden mt-4 border-t border-slate-200 pt-3">
+                <span class="text-[11px] text-slate-500">定值指示</span>
+                <span id="constant-val" class="ml-auto font-bold text-emerald-700"></span>
+            </div>
+        </div>
+    </aside>
+    <!-- 中：分步解析 -->
+    <main class="flex-1 bg-white overflow-y-auto scroll-thin px-6 py-5">
+        <div class="text-[11px] uppercase tracking-wider text-indigo-500 font-bold mb-2">分步解析</div>
+        <div id="solution-body" class="space-y-5"></div>
+    </main>
+    <!-- 右：数学画板 -->
+    <section class="w-[36%] min-w-[340px] bg-slate-900 flex flex-col">
+        <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+            <div class="text-[11px] uppercase tracking-wider text-amber-400 font-bold">振动 · 波 · 光</div>
+            <div id="scene-caption" class="text-xs text-slate-400"></div>
+        </div>
+        <div class="flex-1 relative"><canvas id="math-canvas" class="absolute inset-0"></canvas></div>
+        <div id="legend" class="px-4 py-3 border-t border-slate-700 text-[11px] text-slate-300 space-y-1"></div>
+    </section>
+</div>
+
+<script type="application/json" id="lesson-data">__LESSON_DATA__</script>
+<script>
+"use strict";
+// ===================== 数据装载 =====================
+const DATA = JSON.parse(document.getElementById('lesson-data').textContent);
+const BOARD = DATA.board || {};
+const UI = Object.assign({
+    consoleTitle: "动态控制台", solutionTitle: "详细解析", current: "当前:"
+}, (DATA.lesson && DATA.lesson.ui) || {});
+
+const COLORS = {
+    force:'#f87171', effort:'#38bdf8', aux:'#94a3b8', label:'#e2e8f0',
+    obj:'#a78bfa', load:'#fbbf24', rope:'#e2e8f0', water:'#38bdf8',
+    water2:'#0ea5e9', sponge:'#34d399', ground:'#64748b', metal:'#cbd5e1',
+    wire:'#94a3b8', current:'#22d3ee', battery:'#facc15', bulb:'#fde047',
+    meter:'#f472b6', arrow:'#f87171', good:'#34d399', bad:'#f87171'
+};
+const col = c => (c && COLORS[c]) ? COLORS[c] : (c || '#e2e8f0');
+
+// ===================== 安全表达式求值 =====================
+// 表达式由 generate.py 生成（可信本地内容）：可用 @param 名(或别名 p)、+ - * / ^、
+// 及 sqrt/abs/min/max/pow/sign/PI 等白名单函数。
+const MATHENV = {sqrt:Math.sqrt, abs:Math.abs, min:Math.min, max:Math.max,
+    pow:Math.pow, sign:Math.sign, floor:Math.floor, ceil:Math.ceil, PI:Math.PI, E:Math.E,
+    sin:Math.sin, cos:Math.cos, tan:Math.tan, asin:Math.asin, acos:Math.acos, atan:Math.atan, exp:Math.exp, log:Math.log};
+const _exprCache = {};
+function evalExpr(expr, env){
+    if (typeof expr !== 'string') return expr;
+    const scope = Object.assign({}, MATHENV, env);
+    const names = Object.keys(scope);
+    const key = expr + '|' + names.join(',');
+    let fn = _exprCache[key];
+    if (!fn){ try { fn = Function(...names, '"use strict";return ('+expr.replace(/\^/g,'**')+');'); }
+              catch(e){ fn = () => NaN; } _exprCache[key] = fn; }
+    try { const v = fn(...names.map(n=>scope[n])); return (typeof v==='number') ? v : NaN; }
+    catch(e){ return NaN; }
+}
+const resolveVal = (v, env) => (typeof v === 'string') ? evalExpr(v, env) : v;
+function fmt(x, d=2){
+    if (x === null || x === undefined || !isFinite(x)) return '—';
+    let s = x.toFixed(d);
+    if (s === '-' + (0).toFixed(d)) s = (0).toFixed(d);
+    return s;
+}
+
+// ===================== 画布与世界坐标 =====================
+const canvas = document.getElementById('math-canvas');
+const ctx = canvas.getContext('2d');
+let cssW = 0, cssH = 0, sc = 1, offX = 0, offY = 0;
+const view = BOARD.view || {xRange:[0,10], yRange:[0,6]};
+const SX = x => offX + x*sc;
+const SY = y => offY - y*sc;
+
+function resizeCanvas(){
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+    canvas.style.width = rect.width+'px'; canvas.style.height = rect.height+'px';
+    ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr,dpr);
+    cssW = rect.width; cssH = rect.height;
+    const spanX = view.xRange[1]-view.xRange[0], spanY = view.yRange[1]-view.yRange[0];
+    sc = Math.min((rect.width-30)/spanX, (rect.height-30)/spanY);
+    offX = rect.width/2 - ((view.xRange[0]+view.xRange[1])/2)*sc;
+    offY = rect.height/2 + ((view.yRange[0]+view.yRange[1])/2)*sc;
+    render();
+}
+
+// ===================== 绘制基元 =====================
+function arrow(x1,y1,x2,y2,color,lw=2.5,label=null){
+    const px1=SX(x1), py1=SY(y1), px2=SX(x2), py2=SY(y2);
+    const dx=px2-px1, dy=py2-py1, L=Math.hypot(dx,dy);
+    if (L < 4) return;
+    const ang=Math.atan2(dy,dx), hl=Math.min(10, L*0.45);
+    ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=lw;
+    ctx.beginPath(); ctx.moveTo(px1,py1); ctx.lineTo(px2-hl*Math.cos(ang), py2-hl*Math.sin(ang)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px2,py2);
+    ctx.lineTo(px2-hl*Math.cos(ang-0.42), py2-hl*Math.sin(ang-0.42));
+    ctx.lineTo(px2-hl*Math.cos(ang+0.42), py2-hl*Math.sin(ang+0.42));
+    ctx.closePath(); ctx.fill();
+    if (label){
+        ctx.font='bold 12px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        const mx=(px1+px2)/2, my=(py1+py2)/2;
+        const ox=Math.cos(ang+Math.PI/2)*13, oy=Math.sin(ang+Math.PI/2)*13;
+        ctx.fillText(label, mx+ox, my+oy);
+    }
+}
+function label(x,y,text,color='#e2e8f0',align='center',size=12){
+    ctx.font='bold '+size+'px system-ui'; ctx.textAlign=align; ctx.textBaseline='middle';
+    ctx.fillStyle=color; ctx.fillText(text, SX(x), SY(y));
+}
+function dashLine(x1,y1,x2,y2,color='#94a3b8',lw=1.2){
+    ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(SX(x1),SY(y1)); ctx.lineTo(SX(x2),SY(y2)); ctx.stroke();
+    ctx.setLineDash([]);
+}
+function rectBox(x,y,w,h,fill,stroke=null,lw=1.5){
+    ctx.fillStyle=fill;
+    ctx.fillRect(SX(x), SY(y+h), w*sc, h*sc);
+    if (stroke){ ctx.strokeStyle=stroke; ctx.lineWidth=lw; ctx.strokeRect(SX(x), SY(y+h), w*sc, h*sc); }
+}
+function groundLine(y, x0, x1, color='#64748b'){
+    ctx.strokeStyle=color; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.moveTo(SX(x0),SY(y)); ctx.lineTo(SX(x1),SY(y)); ctx.stroke();
+    ctx.lineWidth=1.2;
+    for (let x=x0; x<x1; x+=0.28){
+        ctx.beginPath(); ctx.moveTo(SX(x),SY(y)); ctx.lineTo(SX(x)-6,SY(y)+8); ctx.stroke();
+    }
+}
+// 标尺线（标注长度 L 的辅助线：两端短横 + 虚线 + 中点标签）
+function dimLine(x1,y1,x2,y2,text,color='#94a3b8'){
+    dashLine(x1,y1,x2,y2,color);
+    ctx.strokeStyle=color; ctx.lineWidth=1.5;
+    const nx=(y2===y1)?0:0, ny=(x2===x1)?0:0;
+    ctx.beginPath(); ctx.moveTo(SX(x1),SY(y1)-5+ny); ctx.lineTo(SX(x1),SY(y1)+5+ny); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(SX(x2),SY(y2)-5); ctx.lineTo(SX(x2),SY(y2)+5); ctx.stroke();
+    label((x1+x2)/2, (y1+y2)/2 + 0.22, text, color);
+}
+
+// ===================== 场景状态 =====================
+let PARAM_NAME = null;
+function buildScene(pval){
+    const env = {p: pval};
+    if (PARAM_NAME) env[PARAM_NAME] = pval;
+    (BOARD.scalars||[]).forEach(s=>{ env[s.name] = evalExpr(s.expr, env); });
+    const sc2 = BOARD.scene || {};
+    const out = {kind: sc2.kind, env, raw:{}};
+    // 把场景各数值字段（可为表达式）按 env 解析
+    for (const k in sc2){
+        if (k === 'kind') continue;
+        const v = sc2[k];
+        out.raw[k] = v;
+        if (typeof v === 'number') out[k] = v;
+        else if (typeof v === 'string'){ const v2 = evalExpr(v, env); out[k] = isFinite(v2) ? v2 : v; }
+        else if (Array.isArray(v)) out[k] = v.map(z => (typeof z==='string')? evalExpr(z,env) : z);
+        else out[k] = v;
+    }
+    return out;
+}
+// ===================== 机械振动 · 机械波 · 光 场景 =====================
+let animT = 0;
+
+// ---- 文字锚点自动收进画布；文字比视窗还宽时自动缩小字号 ----
+function labelIn(x, y, text, color, align, size){
+    size = size || 12;
+    const x0 = view.xRange[0], x1 = view.xRange[1];
+    const pad = 0.06;
+    const avail = (x1 - x0) - 2 * pad;
+    let s = size;
+    const meas = () => { ctx.font = 'bold ' + s + 'px system-ui';
+                         return ctx.measureText(String(text)).width / (sc || 1); };
+    let w = meas();
+    while (w > avail && s > 7){ s -= 0.5; w = meas(); }
+    let a = x;
+    if (align === 'end')         a = Math.max(x, x0 + w + pad);
+    else if (align === 'center') a = Math.max(x0 + w/2 + pad, Math.min(x, x1 - w/2 - pad));
+    else                         a = Math.max(x0 + pad, Math.min(x, x1 - w - pad));
+    label(a, y, text, color, align, s);
+}
+
+// ---- 世界坐标绘图助手 ----
+function ws(x, y){ return [SX(x), SY(y)]; }
+function wSeg(x1, y1, x2, y2, col, lw, dash){
+    if (dash) ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 1.4;
+    const a = ws(x1, y1), b = ws(x2, y2);
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    if (dash) ctx.setLineDash([]);
+}
+function wPoly(pts, col, lw, fill){
+    if (pts.length < 2) return;
+    if (fill){ ctx.fillStyle = fill; ctx.beginPath();
+        pts.forEach((p,i)=>{ const q = ws(p[0], p[1]); i===0?ctx.moveTo(q[0],q[1]):ctx.lineTo(q[0],q[1]); });
+        if (pts.length > 2) ctx.closePath();
+        ctx.fill(); }
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 2;
+    ctx.beginPath();
+    pts.forEach((p,i)=>{ const q = ws(p[0], p[1]); i===0?ctx.moveTo(q[0],q[1]):ctx.lineTo(q[0],q[1]); });
+    ctx.stroke();
+}
+function wDot(x, y, col, r){
+    const q = ws(x, y);
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(q[0], q[1], r || 5.5, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.4; ctx.stroke();
+}
+function wArrow(x1, y1, x2, y2, col, lw){
+    const a = ws(x1, y1), b = ws(x2, y2);
+    arrow(a[0], a[1], b[0], b[1], col, lw || 2.4, null);
+}
+function axisBox(x0, y0, w, h, xr, yr){
+    return { x0: x0, y0: y0, w: w, h: h, xr: xr, yr: yr,
+        X: v => x0 + (v - xr[0]) / (xr[1] - xr[0]) * w,
+        Y: v => y0 + (v - yr[0]) / (yr[1] - yr[0]) * h };
+}
+function plotFrame(B, xlab, ylab, xticks, yticks){
+    wSeg(B.x0, B.y0, B.x0 + B.w, B.y0, 'rgba(148,163,184,0.85)', 1.6);
+    wSeg(B.x0, B.y0, B.x0, B.y0 + B.h, 'rgba(148,163,184,0.85)', 1.6);
+    xticks.forEach(t => {
+        const X = B.X(t);
+        wSeg(X, B.y0, X, B.y0 - 0.09, 'rgba(148,163,184,0.7)', 1.2);
+        labelIn(X, B.y0 - 0.30, String(t), '#64748b', 'center', 9);
+    });
+    yticks.forEach(t => {
+        const Y = B.Y(t);
+        wSeg(B.x0, Y, B.x0 - 0.09, Y, 'rgba(148,163,184,0.7)', 1.2);
+        labelIn(B.x0 - 0.16, Y, String(t), '#64748b', 'end', 9);
+    });
+    labelIn(B.x0 + B.w, B.y0 - 0.62, xlab, '#94a3b8', 'end', 10);
+    labelIn(B.x0 - 0.18, B.y0 + B.h + 0.24, ylab, '#94a3b8', 'start', 10);
+}
+function wGrid(B, n){
+    for (let i = 1; i < n; i++){
+        const X = B.x0 + B.w * i / n, Y = B.y0 + B.h * i / n;
+        wSeg(X, B.y0, X, B.y0 + B.h, 'rgba(148,163,184,0.10)', 1);
+        wSeg(B.x0, Y, B.x0 + B.w, Y, 'rgba(148,163,184,0.10)', 1);
+    }
+}
+function roText(lines){
+    const y0 = 5.72;
+    lines.forEach((l, i) => labelIn(0.20 + (l[3] || 0), y0 - i * 0.40,
+                                   l[0], l[1], l[2] || 'start', l[4] || 11));
+}
+
+// ---- 1) 简谐运动：参考圆 + x-t 曲线 ----
+function drawShm(S){
+    const t = S.t, A = 1.0, T = 2.0, w = 2 * Math.PI / T;
+    const th = w * t;
+    const x = A * Math.sin(th), v = A * w * Math.cos(th);
+    // ---- 左：参考圆 ----
+    const cx = 2.35, cy = 2.45, R = 1.30;
+    ctx.strokeStyle = 'rgba(148,163,184,0.6)'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(SX(cx), SY(cy), R * sc, 0, 7); ctx.stroke();
+    wSeg(cx - R - 0.2, cy, cx + R + 0.2, cy, 'rgba(148,163,184,0.45)', 1.0, true);
+    wSeg(cx, cy - R - 0.2, cx, cy + R + 0.2, '#f472b6', 1.6);
+    labelIn(cx, cy + R + 0.42, 'x 轴（投影）', '#f472b6', 'center', 9);
+    // 旋转矢量
+    const tx = cx + R * Math.cos(th), ty = cy + R * Math.sin(th);
+    wArrow(cx, cy, tx, ty, '#38bdf8', 2.6);
+    wDot(tx, ty, '#38bdf8', 4.5);
+    // 投影
+    const px = cx, py = cy + R * Math.sin(th);
+    wSeg(tx, ty, px, py, 'rgba(250,204,21,0.75)', 1.2, true);
+    wDot(px, py, '#facc15', 5.5);
+    labelIn(tx + 0.10, ty + 0.20, 'ωt = ' + (th * 180 / Math.PI).toFixed(0) + '°', '#38bdf8', 'start', 9);
+    labelIn(cx - R - 0.25, cy + R + 0.24, '参考圆 R = A', '#94a3b8', 'start', 9);
+    // ---- 右：x-t 曲线 ----
+    const B = axisBox(4.60, 1.00, 4.70, 3.00, [0, 4], [-1.3, 1.3]);
+    wGrid(B, 4);
+    wSeg(B.x0, B.Y(0), B.x0 + B.w, B.Y(0), 'rgba(148,163,184,0.9)', 1.6);
+    const pts = [];
+    for (let i = 0; i <= 240; i++){ const tt = 4 * i / 240; pts.push([B.X(tt), B.Y(A * Math.sin(w * tt))]); }
+    wPoly(pts, '#38bdf8', 2.6, null);
+    plotFrame(B, 't / s', 'x / m', [0, 1, 2, 3, 4], [-1, 0, 1]);
+    // 游标 + 与参考圆的水平连线
+    const ct = B.X(t), cyy = B.Y(x);
+    wSeg(B.x0, cyy, ct, cyy, 'rgba(250,204,21,0.6)', 1.2, true);
+    wSeg(ct, B.y0, ct, cyy, 'rgba(250,204,21,0.6)', 1.2, true);
+    wDot(ct, cyy, '#facc15', 6.0);
+    labelIn(B.x0 - 0.18, B.y0 + B.h + 0.24, 'x / m', '#94a3b8', 'start', 10);
+    roText([
+        ['简谐运动 x = A sin(ωt)：参考圆上的匀速圆周运动在直径上的投影', '#94a3b8', 'start', 0, 10],
+        ['t = ' + t.toFixed(2) + ' s      x = ' + x.toFixed(4) + ' m',
+         '#38bdf8', 'start', 0, 12],
+        ['v = Aωcos(ωt) = ' + v.toFixed(4) + ' m/s      a = −ω²x = ' + (-w * w * x).toFixed(4) + ' m/s²',
+         '#f472b6', 'start', 0, 11],
+        ['T = 2.0 s、ω = π rad/s（定值）；x 最大时 v = 0，x = 0 时 |v| 最大',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 2) 横波的传播：波形 y(x,t) 与质点振动方向 ----
+function drawWave(S){
+    const t = S.t, A = 1.0, T = 2.0, lam = 4.0, v = lam / T;
+    const B = axisBox(1.30, 0.95, 8.00, 3.05, [0, 12], [-1.35, 1.35]);
+    wGrid(B, 6);
+    wSeg(B.x0, B.Y(0), B.x0 + B.w, B.Y(0), 'rgba(148,163,184,0.9)', 1.6);
+    const y = xx => A * Math.sin(2 * Math.PI * (t / T - xx / lam));
+    const pts = [];
+    for (let i = 0; i <= 300; i++){ const xx = 12 * i / 300; pts.push([B.X(xx), B.Y(y(xx))]); }
+    wPoly(pts, '#38bdf8', 2.6, null);
+    plotFrame(B, 'x / m', 'y / m', [0, 2, 4, 6, 8, 10, 12], [-1, 0, 1]);
+    // 传播方向
+    wArrow(B.X(9.6), B.Y(0) + 0.82, B.X(11.5), B.Y(0) + 0.82, '#34d399', 2.2);
+    labelIn(B.X(9.5), B.Y(0) + 1.12, '波传播方向 v', '#34d399', 'start', 10);
+    // 标记质点 P（x = 5）
+    const xp = 5.0, yp = y(xp);
+    const vp = A * (2 * Math.PI / T) * Math.cos(2 * Math.PI * (t / T - xp / lam));
+    wSeg(B.X(xp), B.y0, B.X(xp), B.Y(yp), 'rgba(244,114,182,0.6)', 1.2, true);
+    wDot(B.X(xp), B.Y(yp), '#f472b6', 6.5);
+    const up = vp > 0;
+    if (Math.abs(vp) > 1e-6){
+        const dy = 0.55 * (up ? 1 : -1);
+        wArrow(B.X(xp), B.Y(yp), B.X(xp), B.Y(yp) + dy, up ? '#34d399' : '#f87171', 2.4);
+    }
+    labelIn(B.X(xp) + 0.10, B.Y(yp) + (up ? 0.42 : -0.42), 'P', '#f472b6', 'start', 11);
+    roText([
+        ['沿 +x 传播的横波 y = A sin[2π(t/T − x/λ)]：波形整体平移', '#94a3b8', 'start', 0, 10],
+        ['t = ' + t.toFixed(2) + ' s      波速 v = λ/T = ' + v.toFixed(2) + ' m/s（定值）',
+         '#38bdf8', 'start', 0, 12],
+        ['质点 P（x = 5 m）位移 = ' + yp.toFixed(4) + ' m，振动速度 = ' + vp.toFixed(4) + ' m/s',
+         '#f472b6', 'start', 0, 11],
+        ['质点 P 只上下振动、不随波迁移；λ = 4 m、T = 2 s 为定值', '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 3) 驻波：波节与波腹 ----
+function drawStanding(S){
+    const t = S.t, A = 1.0, lam = 4.0, T = 2.0;
+    const k = 2 * Math.PI / lam, w = 2 * Math.PI / T;
+    const B = axisBox(1.30, 0.95, 8.00, 3.05, [0, 12], [-2.45, 2.45]);
+    wGrid(B, 6);
+    wSeg(B.x0, B.Y(0), B.x0 + B.w, B.Y(0), 'rgba(148,163,184,0.9)', 1.6);
+    // 包络 ±2A|sin kx|
+    [1, -1].forEach(sg => {
+        const pe = [];
+        for (let i = 0; i <= 300; i++){ const xx = 12 * i / 300; pe.push([B.X(xx), B.Y(sg * 2 * A * Math.abs(Math.sin(k * xx)))]); }
+        wPoly(pe, 'rgba(148,163,184,0.55)', 1.4, null);
+    });
+    // 实际波形
+    const pts = [];
+    for (let i = 0; i <= 300; i++){ const xx = 12 * i / 300; pts.push([B.X(xx), B.Y(2 * A * Math.sin(k * xx) * Math.cos(w * t))]); }
+    wPoly(pts, '#38bdf8', 2.8, null);
+    plotFrame(B, 'x / m', 'y / m', [0, 2, 4, 6, 8, 10, 12], [-2, 0, 2]);
+    // 波节（x = nλ/2）与波腹（x = (2n+1)λ/4）
+    for (let n = 0; n * lam / 2 <= 12; n++){
+        const xn = n * lam / 2;
+        wDot(B.X(xn), B.Y(0), '#f87171', 4.5);
+    }
+    labelIn(B.X(6), B.Y(0) - 0.36, '红点 = 波节（始终不动）', '#f87171', 'center', 9);
+    for (let n = 0; (2 * n + 1) * lam / 4 <= 12; n++){
+        const xa = (2 * n + 1) * lam / 4;
+        wSeg(B.X(xa), B.Y(-2), B.X(xa), B.Y(2), 'rgba(52,211,153,0.35)', 1.2, true);
+    }
+    labelIn(B.X(1), B.Y(2) + 0.26, '绿虚线 = 波腹', '#34d399', 'center', 9);
+    roText([
+        ['驻波 y = 2A sin(kx)cos(ωt)：波节不动，波腹振幅最大', '#94a3b8', 'start', 0, 10],
+        ['t = ' + t.toFixed(2) + ' s      相邻波节间距 = λ/2 = ' + (lam / 2).toFixed(1) + ' m（定值）',
+         '#38bdf8', 'start', 0, 12],
+        ['波节在 x = 0, 2, 4, 6, 8, 10, 12 m      波腹在 x = 1, 3, 5, 7, 9, 11 m',
+         '#f472b6', 'start', 0, 10],
+        ['λ = 4 m 时一个波长里有两个波节、两个波腹，间距都是 λ/2', '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 4) 波的叠加与拍 ----
+function drawBeat(S){
+    const f2 = S.f2, f1 = 440, A = 1.0;
+    const dt = Math.abs(f1 - f2);
+    const B = axisBox(1.30, 0.95, 8.00, 3.05, [0, 0.25], [-2.45, 2.45]);
+    wGrid(B, 5);
+    wSeg(B.x0, B.Y(0), B.x0 + B.w, B.Y(0), 'rgba(148,163,184,0.9)', 1.6);
+    // 两列分波（细线）
+    [f1, f2].forEach((fq, i) => {
+        const c = i === 0 ? 'rgba(148,163,184,0.6)' : 'rgba(167,139,250,0.6)';
+        const p = [];
+        for (let j = 0; j <= 900; j++){ const tt = 0.25 * j / 900;
+            p.push([B.X(tt), B.Y(A * Math.sin(2 * Math.PI * fq * tt))]); }
+        wPoly(p, c, 1.4, null);
+    });
+    // 包络
+    [1, -1].forEach(sg => {
+        const p = [];
+        for (let j = 0; j <= 600; j++){ const tt = 0.25 * j / 600;
+            p.push([B.X(tt), B.Y(sg * 2 * A * Math.abs(Math.cos(Math.PI * (f1 - f2) * tt)))]); }
+        wPoly(p, 'rgba(52,211,153,0.75)', 1.6, null);
+    });
+    // 合成的波
+    const pts = [];
+    for (let j = 0; j <= 1400; j++){ const tt = 0.25 * j / 1400;
+        pts.push([B.X(tt), B.Y(A * Math.sin(2 * Math.PI * f1 * tt) + A * Math.sin(2 * Math.PI * f2 * tt))]); }
+    wPoly(pts, '#38bdf8', 2.4, null);
+    plotFrame(B, 't / s', 'y', [0, 0.05, 0.1, 0.15, 0.2, 0.25], [-2, 0, 2]);
+    roText([
+        ['两列等振幅波叠加：绿虚线是拍的外包络 2A|cos πΔf·t|', '#94a3b8', 'start', 0, 10],
+        ['f₁ = 440 Hz（定值）      f₂ = ' + f2.toFixed(1) + ' Hz', '#38bdf8', 'start', 0, 12],
+        ['拍频 |Δf| = ' + dt.toFixed(1) + ' Hz      拍周期 = ' + (dt > 0 ? (1 / dt).toFixed(4) : '∞') + ' s',
+         '#34d399', 'start', 0, 11],
+        ['Δf 越大拍越密；Δf = 0 时两波完全同相，不再有拍', '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 5) 双缝干涉：屏上强度分布 ----
+function drawDoubleslit(S){
+    const lam = S.lam;                       // nm
+    const L = 1.0, d = 0.5e-3;               // m
+    const dy = L * lam * 1e-9 / d;           // 条纹间距（m）
+    const B = axisBox(1.30, 1.25, 8.00, 2.75, [-6, 6], [0, 1.15]);
+    wGrid(B, 6);
+    const I = ymm => Math.pow(Math.cos(Math.PI * (d * (ymm * 1e-3)) / (lam * 1e-9 * L)), 2);
+    const pts = [];
+    for (let i = 0; i <= 700; i++){ const y = -6 + 12 * i / 700; pts.push([B.X(y), B.Y(I(y))]); }
+    wPoly(pts, '#38bdf8', 2.0, null);
+    // 明纹位置
+    for (let k = -4; k <= 4; k++){
+        const yk = k * dy * 1e3;
+        if (Math.abs(yk) > 6) continue;
+        wSeg(B.X(yk), B.y0, B.X(yk), B.Y(1), 'rgba(250,204,21,0.45)', 1.2, true);
+        if (Math.abs(k) <= 2) labelIn(B.X(yk), B.y0 - 0.30, 'k=' + k, '#facc15', 'center', 9);
+    }
+    plotFrame(B, '屏上位置 y / mm', '相对强度 I', [-6, -4, -2, 0, 2, 4, 6], [0, 0.5, 1]);
+    // 底部的条纹亮暗条
+    for (let i = 0; i < 400; i++){
+        const y = -6 + 12 * (i + 0.5) / 400, a = I(y);
+        const q0 = ws(B.X(y), 1.10), q1 = ws(B.X(y + 12 / 400), 1.10);
+        ctx.fillStyle = 'rgba(56,189,248,' + (0.10 + 0.85 * a).toFixed(3) + ')';
+        ctx.fillRect(q0[0], SY(1.19), Math.max(1, q1[0] - q0[0]), SY(0.98) - SY(1.19));
+    }
+    roText([
+        ['双缝干涉：光程差是波长整数倍处最亮，半整数倍处最暗', '#94a3b8', 'start', 0, 10],
+        ['λ = ' + lam.toFixed(0) + ' nm      条纹间距 Δy = Lλ/d = ' + (dy * 1e3).toFixed(4) + ' mm',
+         '#facc15', 'start', 0, 12],
+        ['L = 1 m、d = 0.5 mm（定值）      第 3 级明纹在 y = ' + (3 * dy * 1e3).toFixed(4) + ' mm',
+         '#f472b6', 'start', 0, 11],
+        ['λ 越长条纹越宽：拖滑块看整个条纹花样被均匀撑开或收拢', '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 6) 折射与全反射 ----
+function drawRefraction(S){
+    const i = S.i, n1 = 1.5, n2 = 1.0;
+    const C = Math.asin(n2 / n1) * 180 / Math.PI;
+    const sr = n1 * Math.sin(i * Math.PI / 180) / n2;
+    const tin = sr > 1;
+    const r = tin ? null : Math.asin(sr) * 180 / Math.PI;
+    const O = [5.0, 2.55], LEN = 2.6;
+    const pu = d => [Math.sin(d * Math.PI / 180), Math.cos(d * Math.PI / 180)];
+    // 两种介质
+    ctx.fillStyle = 'rgba(56,189,248,0.09)';
+    const a0 = ws(1.2, O[1]), a1 = ws(8.8, 0.75);
+    ctx.fillRect(a0[0], a1[1], a1[0] - a0[0], a0[1] - a1[1]);
+    wSeg(1.2, O[1], 8.8, O[1], '#94a3b8', 2.4);
+    labelIn(1.35, O[1] + 0.24, '玻璃 n₁ = 1.5', '#38bdf8', 'start', 10);
+    labelIn(1.35, O[1] - 0.24, '空气 n₂ = 1.0', '#94a3b8', 'start', 10);
+    wSeg(O[0], 0.85, O[0], 4.45, 'rgba(148,163,184,0.7)', 1.4, true);
+    labelIn(O[0] + 0.10, 4.34, '法线', '#94a3b8', 'start', 9);
+    // 入射光线（从玻璃射向界面）
+    const pin = pu(i);
+    const Pin = [O[0] - LEN * pin[0], O[1] - LEN * pin[1]];
+    wArrow(Pin[0], Pin[1], O[0], O[1], '#facc15', 2.8);
+    labelIn(Pin[0] - 0.10, Pin[1] - 0.22, 'i = ' + i.toFixed(0) + '°', '#facc15', 'end', 10);
+    // 折射光线（或全反射）
+    if (!tin){
+        const pr = pu(r);
+        wArrow(O[0], O[1], O[0] + LEN * pr[0], O[1] + LEN * pr[1], '#34d399', 2.8);
+        labelIn(O[0] + LEN * pr[0] + 0.08, O[1] + LEN * pr[1], 'r = ' + r.toFixed(1) + '°',
+                '#34d399', 'start', 10);
+    }
+    // 反射光线：全反射时画亮，否则画淡
+    const pref = [Math.sin(i * Math.PI / 180), -Math.cos(i * Math.PI / 180)];
+    wArrow(O[0], O[1], O[0] + LEN * pref[0], O[1] + LEN * pref[1],
+           tin ? '#f87171' : 'rgba(248,113,113,0.35)', tin ? 2.8 : 1.4);
+    labelIn(O[0] + LEN * pref[0] + 0.08, O[1] + LEN * pref[1] - 0.20,
+            tin ? '全反射' : '反射光（弱）', tin ? '#f87171' : '#94a3b8', 'start', 10);
+    // 临界角方向参考线
+    const pc = pu(C);
+    wSeg(O[0], O[1], O[0] + 2.2 * pc[0], O[1] + 2.2 * pc[1], 'rgba(167,139,250,0.8)', 1.6, true);
+    labelIn(O[0] + 2.2 * pc[0] + 0.06, O[1] + 2.2 * pc[1], 'C = ' + C.toFixed(2) + '°',
+            '#a78bfa', 'start', 10);
+    roText([
+        ['折射定律 n₁sin i = n₂sin r；从光密到光疏时折射角大于入射角', '#94a3b8', 'start', 0, 10],
+        ['入射角 i = ' + i.toFixed(0) + '°      折射角 r = ' + (tin ? '不存在（全反射）' : r.toFixed(2) + '°'),
+         tin ? '#f87171' : '#34d399', 'start', 0, 12],
+        ['临界角 C = arcsin(n₂/n₁) = ' + C.toFixed(2) + '°（定值，由两种介质决定）', '#a78bfa', 'start', 0, 11],
+        [tin ? 'i > C：光线全部被反射回玻璃，没有折射光' : 'i < C：折射光与反射光同时存在',
+         tin ? '#f87171' : '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 7) 凸透镜成像 ----
+// 光线与绘图框求交，避免射线冲出画布
+function rayEnd(x0, y0, x1, y1, box){
+    const dx = x1 - x0, dy = y1 - y0;
+    let t = Infinity;
+    if (dx >  1e-12) t = Math.min(t, (box[2] - x0) / dx);
+    if (dx < -1e-12) t = Math.min(t, (box[0] - x0) / dx);
+    if (dy >  1e-12) t = Math.min(t, (box[3] - y0) / dy);
+    if (dy < -1e-12) t = Math.min(t, (box[1] - y0) / dy);
+    if (!isFinite(t) || t <= 0) return [x1, y1];
+    return [x0 + dx * t, y0 + dy * t];
+}
+
+function drawLens(S){
+    const u = S.u, f = 10;
+    const den = u - f;
+    const v = Math.abs(den) < 1e-9 ? null : u * f / den;
+    const m = v === null ? null : -v / u;
+    const BOX = [1.25, 0.76, 9.35, 4.30];
+    const LX = 5.20, sx = 0.068, sy = 0.20, AY = 2.25;
+    const Xo = cm => LX - sx * cm;                 // 物侧（左，取正距离）
+    const Xi = cm => LX + sx * cm;                 // 像侧（右）
+    const Yc = cm => Math.max(BOX[1] + 0.06, Math.min(BOX[3] - 0.06, AY + sy * cm));
+    const h = 4.5;
+    const ox = Xo(u), oy = Yc(h);
+    const fx = Xo(f), fpx = Xi(f);
+    // 主光轴
+    wSeg(BOX[0], AY, BOX[2], AY, 'rgba(148,163,184,0.85)', 1.6);
+    // 透镜（双箭头竖线）
+    wArrow(LX, AY - 1.55, LX, AY + 1.55, 'rgba(56,189,248,0.9)', 1.6);
+    wArrow(LX, AY + 1.55, LX, AY - 1.55, 'rgba(56,189,248,0.9)', 1.6);
+    labelIn(LX + 0.12, AY + 1.72, '凸透镜', '#38bdf8', 'start', 10);
+    // 两侧焦点
+    wDot(fx, AY, '#a78bfa', 4.5);  labelIn(fx, AY - 0.30, 'F', '#a78bfa', 'center', 10);
+    wDot(fpx, AY, '#a78bfa', 4.5); labelIn(fpx, AY - 0.30, "F′", '#a78bfa', 'center', 10);
+    // 物（向上箭头）
+    wArrow(ox, AY, ox, oy, '#38bdf8', 3.0);
+    labelIn(ox, oy + 0.26, '物', '#38bdf8', 'center', 10);
+    // 三条特征光线
+    wSeg(ox, oy, LX, oy, 'rgba(52,211,153,0.80)', 1.4);            // ① 平行主轴
+    let e1 = rayEnd(LX, oy, fpx, AY, BOX);
+    wSeg(LX, oy, e1[0], e1[1], 'rgba(52,211,153,0.80)', 1.4);
+    wSeg(ox, oy, LX, AY, 'rgba(250,204,21,0.80)', 1.4);            // ② 过光心
+    let e2 = rayEnd(ox, oy, LX, AY, BOX);
+    wSeg(LX, AY, e2[0], e2[1], 'rgba(250,204,21,0.80)', 1.4);
+    let yl3 = null;
+    if (Math.abs(den) > 1e-9){                                     // ③ 过 F → 平行射出
+        yl3 = oy + (AY - oy) * u / den;
+        wSeg(ox, oy, LX, yl3, 'rgba(167,139,250,0.70)', 1.4);
+        let e3 = rayEnd(LX, yl3, LX + 1, yl3, BOX);
+        wSeg(LX, yl3, e3[0], e3[1], 'rgba(167,139,250,0.70)', 1.4);
+    }
+    // 像
+    if (v !== null){
+        const ix = Xi(v), iy = Yc(m * h);
+        const virt = v < 0;
+        if (virt){                                                 // 虚像：反向延长线
+            wSeg(LX, oy, ix, iy, 'rgba(52,211,153,0.45)', 1.2, true);
+            if (yl3 !== null) wSeg(LX, yl3, ix, iy, 'rgba(167,139,250,0.45)', 1.2, true);
+        }
+        wArrow(ix, AY, ix, iy, virt ? '#f472b6' : '#f87171', 3.0);
+        labelIn(ix, iy + (m * h < 0 ? -0.32 : 0.28), virt ? '虚像' : '实像',
+                virt ? '#f472b6' : '#f87171', 'center', 10);
+        // 像与光轴的距离标注
+        wSeg(ix - 0.22, AY, ix + 0.22, AY, 'rgba(148,163,184,0.7)', 1.2);
+    } else {
+        labelIn(6.6, AY + 1.05, '物在焦点上：折射光平行射出，像在无穷远', '#f87171', 'center', 11);
+    }
+    const far = v !== null && Math.abs(v) > 60;
+    roText([
+        ['凸透镜成像 1/u + 1/v = 1/f（f = 10 cm 定值）：三线交于像点', '#94a3b8', 'start', 0, 10],
+        ['物距 u = ' + u.toFixed(1) + ' cm      像距 v = '
+         + (v === null ? '∞（不成像）' : v.toFixed(2) + ' cm'), '#38bdf8', 'start', 0, 12],
+        ['放大率 m = −v/u = ' + (m === null ? '—' : m.toFixed(4))
+         + '（负号表示倒立）', '#f472b6', 'start', 0, 11],
+        [v === null ? 'u = f：折射光线互相平行，不成像'
+            : (v < 0 ? 'u < f：正立放大的虚像（虚线是反向延长线）'
+                     : 'u > f：倒立的实像' + (far ? '（像很远，已超出画布）' : '')),
+         v !== null && v < 0 ? '#a78bfa' : '#64748b', 'start', 0, 10],
+    ]);
+}
+function render(){
+    ctx.clearRect(0,0,cssW,cssH);
+    const S = buildScene(curParam);
+    switch(S.kind){
+        case 'shm':        drawShm(S);        break;
+        case 'wave':       drawWave(S);       break;
+        case 'standing':   drawStanding(S);   break;
+        case 'beat':       drawBeat(S);       break;
+        case 'doubleslit': drawDoubleslit(S); break;
+        case 'refraction': drawRefraction(S); break;
+        case 'lens':       drawLens(S);       break;
+    }
+    updateReadouts(S);
+}
+
+// ===================== 读数 =====================
+function updateReadouts(S){
+    (BOARD.readouts||[]).forEach(r=>{
+        const el=document.getElementById('ro-'+r.id);
+        if (!el) return;
+        try{
+            if (r.type==='expr'){
+                const v=evalExpr(r.expr, S.env);
+                el.textContent=fmt(v, r.digits!=null?r.digits:2)+(r.unit?' '+r.unit:'');
+            } else if (r.type==='status'){
+                const v=evalExpr(r.expr, S.env), rhs=(r.rhs!=null?r.rhs:0), op=r.op||'>';
+                const ok = op==='<'? v<rhs-1e-9 : op==='>'? v>rhs+1e-9 : op==='=='? Math.abs(v-rhs)<1e-6 : v>rhs-1e-9;
+                el.textContent = ok?(r.okText||'满足'):(r.badText||'不满足');
+                el.style.color = ok?'#059669':'#dc2626';
+            }
+        }catch(e){ el.textContent='—'; }
+    });
+    // 能量/功率条
+    if (BOARD.bars){
+        const a=evalExpr(BOARD.bars.a.expr, S.env), b=evalExpr(BOARD.bars.b.expr, S.env);
+        const A=isFinite(a)&&a>0?a:0, B=isFinite(b)&&b>0?b:0, T=A+B||1;
+        document.getElementById('bar-seg1').style.width=(A/T*100)+'%';
+        document.getElementById('bar-seg2').style.width=(B/T*100)+'%';
+        document.getElementById('bar-seg1').textContent=fmt(A,1);
+        document.getElementById('bar-seg2').textContent=fmt(B,1);
+    }
+}
+
+// ===================== 控制台构建 =====================
+function renderKatex(el){ if (typeof renderMathInElement!=='undefined') renderMathInElement(el,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],throwOnError:false}); }
+let curParam = BOARD.param ? (BOARD.param.value!==undefined?BOARD.param.value:BOARD.param.min) : 0;
+function buildConsole(){
+    document.getElementById('prob-title').textContent=(DATA.lesson&&DATA.lesson.title)||'';
+    document.getElementById('prob-body').innerHTML=(DATA.lesson&&DATA.lesson.problem)||'';
+    document.getElementById('scene-caption').textContent=(BOARD.scene&&BOARD.scene.caption)||'';
+    const p=BOARD.param;
+    if (p){
+        document.getElementById('param-block').classList.remove('hidden');
+        document.getElementById('param-label').innerHTML=(p.label||p.name)+' :';
+        const s=document.getElementById('param-slider');
+        s.min=p.min; s.max=p.max; s.step=p.step||0.5; s.value=curParam;
+        document.getElementById('param-ticks').innerHTML=(p.ticks||[`${p.min}${p.unit||''}`,`${p.max}${p.unit||''}`]).map(t=>`<span>${t}</span>`).join('');
+        s.addEventListener('input', ()=>{ curParam=parseFloat(s.value); syncParamVal(); render(); });
+        syncParamVal();
+    }
+    document.getElementById('readouts').innerHTML=(BOARD.readouts||[]).map(r=>{
+        if (r.highlight) return `<div class="flex justify-between items-center pt-1"><span class="text-slate-800 font-semibold">${r.label}:</span><span id="ro-${r.id}" class="text-base font-bold bg-teal-50 text-teal-700 px-3 py-1 rounded-lg border border-teal-200">—</span></div>`;
+        return `<div class="flex justify-between border-b border-dashed border-slate-200 pb-1"><span>${r.label}:</span><span id="ro-${r.id}" class="font-bold" style="color:${r.color?col(r.color):'#0f172a'}">—</span></div>`;
+    }).join('');
+    if (BOARD.bars){
+        document.getElementById('bar-block').classList.remove('hidden');
+        document.getElementById('bar-label').textContent=BOARD.bars.label||'';
+        document.getElementById('bar-legend').innerHTML=
+            `<span><span class="inline-block w-2 h-2 rounded-sm" style="background:#4f46e5"></span> ${BOARD.bars.a.label}</span>`+
+            `<span><span class="inline-block w-2 h-2 rounded-sm" style="background:#0ea5e9"></span> ${BOARD.bars.b.label}</span>`;
+    }
+    if (BOARD.constant){ document.getElementById('constant-block').classList.remove('hidden');
+        document.getElementById('constant-val').innerHTML='≡ '+(BOARD.constant.label||''); }
+    const legend=document.getElementById('legend'); const items=[];
+    (BOARD.legend||[]).forEach(it=> items.push(`<div class="flex items-center gap-2"><span class="w-3 h-3 inline-block rounded" style="background:${col(it.color)}"></span> ${it.text}</div>`));
+    legend.innerHTML=items.join('');
+    document.getElementById('solution-body').innerHTML=(DATA.steps||[]).map((st,i)=>{
+        const no=String(i+1).padStart(2,'0');
+        return `<div class="${i>0?'border-t border-slate-100 pt-5':''}">
+            <div class="flex items-start gap-4 mb-3">
+                <span class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold font-mono text-sm flex-shrink-0">${no}</span>
+                <h3 class="text-base font-bold text-slate-900 pt-0.5">${st.title||''}</h3>
+            </div>
+            <div class="prose max-w-none text-slate-700 leading-relaxed text-sm space-y-2">${st.content||''}</div>
+        </div>`;
+    }).join('');
+    renderKatex(document.body);
+}
+function syncParamVal(){ document.getElementById('param-val').textContent = fmt(curParam,2)+((BOARD.param&&BOARD.param.unit)||''); }
+
+// ===================== 主循环 =====================
+function loop(now){ animT = now/1000; render(); requestAnimationFrame(loop); }
+window.addEventListener('resize', resizeCanvas);
+PARAM_NAME = (BOARD.param && /^[A-Za-z_$][\w$]*$/.test(BOARD.param.name||'')) ? BOARD.param.name : null;
+buildConsole();
+resizeCanvas();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -212,6 +212,16 @@
   "levels.html": "bbd3bc3b5bb0f39d1e66cc7443dfb298a345da4e5879a5130f6a22a25c8ac298",
   "photoelectric.html": "cd6b06aaf409f2cdab14b72e0fd45b36354fa98d89f0ca8343f2f4013377ed30"
  },
+ "edu-physics-wave-optics": {
+  "beat.html": "1e0edd342a74f464b762cb8d3e5009f9e1dc6132e47cf33e532465e8882db80c",
+  "index.html": "16211ff57f7ce5bfd4e715e199e6b82290fb3c8b03a6558123df87b7fefa0ade",
+  "interference.html": "02b08ee8896e1a0a3485994a7a76f6c635803af1d02d2840b03f8fe6fa1add9e",
+  "refraction.html": "c50fcc26698e892793d43b10f28cbc08b4ff92bb8206e7dc36f42dd784fcbc07",
+  "shm.html": "aa1c7e78a3230931b58136b94e03c02ba2f18f5b96f51240ce517ab526669172",
+  "standing.html": "5f0100cc35f3479ccff85f476307e3ff6cc2c85004e4af8c3d60c90c49194cb7",
+  "thinlens.html": "7aacb606508ddaa0da156745584da7b69993e978a300e6df98764c6dffb9f407",
+  "wavemotion.html": "9ee6c279b7f2e867946b864a4f5ea7b17043ec9252c09a85f16439bcd0c384d9"
+ },
  "edu-plane-geometry": {
   "circumcircle.html": "a3ac9fbc403296bf483433921f855ba779496b248938ee6179bfc6b40e56c702",
   "incircle.html": "9f90931a7dc0d436dc4ce4fba52ee826b6d4c53585c998ef4d3d6b5b7a2a9d8d",
