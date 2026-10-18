@@ -108,6 +108,17 @@
   "sin_wave.html": "6e1268094e50a9feac78549bd0250727214228a0717d0611a7b556c0260b09d0",
   "telescope.html": "08ecb81ff86cfd4936b6609a6e2eb6ab40dae7c82f002a19678c5f8cd05e1538"
  },
+ "edu-physics-em": {
+  "ampere.html": "6aad82590f72792b61647fa6485c2126a359f0cd46234daaa15b8ee3d1abbfc8",
+  "capacitor.html": "04c1b7b6b9ada4241b067a1c0f826ff3907019d54983bb1bff6813abe3e78ed5",
+  "coulomb.html": "990152f10a739f69f67538d3ce77176b94c8820e0ce17a65d6936f90cb853d42",
+  "eb_deflect.html": "def45da3ef8aae2f3be338d4e8223014fcc3838defa0b7233a5a2817a421b6f5",
+  "faraday.html": "f9dad76ac7b85c44f838ef4bf5a247b39dbfcfb4fb165706ecac5a3cca636d76",
+  "field_sum.html": "ff42de3449a1258971c5726657365d322b3b847c1a41d76aae7182912f3503d5",
+  "index.html": "f91cf428f3ff57904fef58cdeaf20b178f517fc457581aed110d23ee7f2a53ef",
+  "mag_circ.html": "b3e6ce6e3a743071154f0e1748789ca6e486a18eae6ce179d7b7cb65b92695ec",
+  "ohm.html": "fd6c1e76fdb6a2181aeb53b985a0170a9ab639a83f077037118fefa8c6d350ea"
+ },
  "edu-physics-junior": {
   "buoyancy.html": "fb93efe98e3af3e8681ecd6108d4b1e52c241784a827ce1c759b52b39a722e7c",
   "elec_power.html": "a4b2c0ea031e4eba4768d02801cf43714f1aabb5d0d4d0ec2c65b96478450280",

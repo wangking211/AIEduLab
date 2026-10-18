@@ -60,8 +60,9 @@ FAMILIES = {
                   "edu-math-junior"],
     },
     "seq-phys": {
-        "desc": "数列与三角 / 初中物理 / 高中物理",
-        "users": ["edu-math-sequences", "edu-physics-junior", "edu-physics-senior"],
+        "desc": "数列与三角 / 初中物理 / 高中物理 / 高中电磁学",
+        "users": ["edu-math-sequences", "edu-physics-junior", "edu-physics-senior",
+                  "edu-physics-em"],
     },
 }
 

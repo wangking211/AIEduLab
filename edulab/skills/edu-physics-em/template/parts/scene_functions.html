@@ -1,0 +1,407 @@
+    // ===================== 电磁学场景 =====================
+    // 外壳的主循环每帧执行 `animT = now/1000`（脚本在 "use strict" 下），
+    // 这里必须先声明，否则第一帧就 ReferenceError，动画循环整个死掉。
+    let animT = 0;
+    // 世界坐标单位按场景约定（见各函数注释）；颜色直接传 hex，col() 会原样返回。
+
+    // 画一个带电粒子：圆 + 正负号
+    function chargeDot(x, y, q, rad, fill){
+        const px=SX(x), py=SY(y), R=rad*sc;
+        ctx.beginPath(); ctx.arc(px,py,R,0,2*Math.PI);
+        ctx.fillStyle=fill; ctx.fill();
+        ctx.strokeStyle='#0f172a'; ctx.lineWidth=1.6; ctx.stroke();
+        ctx.fillStyle='#0f172a'; ctx.font='bold '+Math.max(10,R*1.15)+'px system-ui';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(q>=0?'+':'−', px, py+1);
+    }
+
+    // 点电荷符号阵列（沿一段线排布 +/− 号）
+    function signRow(x0,y0,x1,y1,n,q,color){
+        ctx.fillStyle=color; ctx.font='bold 11px system-ui';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        for(let i=0;i<n;i++){
+            const t=(i+0.5)/n, x=x0+(x1-x0)*t, y=y0+(y1-y0)*t;
+            ctx.fillText(q>=0?'+':'−', SX(x), SY(y));
+        }
+    }
+
+    // × 号阵列（磁场垂直纸面向里）
+    function crossGrid(x0,y0,x1,y1,step,color='#475569',s=5){
+        ctx.strokeStyle=color; ctx.lineWidth=1.2;
+        for(let x=x0;x<=x1+1e-9;x+=step){
+            for(let y=y0;y<=y1+1e-9;y+=step){
+                ctx.beginPath(); ctx.moveTo(SX(x)-s,SY(y)-s); ctx.lineTo(SX(x)+s,SY(y)+s); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(SX(x)-s,SY(y)+s); ctx.lineTo(SX(x)+s,SY(y)-s); ctx.stroke();
+            }
+        }
+    }
+
+    // ---------------- 1) 库仑定律 ----------------
+    // 世界单位 1 = 1 dm（0.1 m）。S.r 单位 m，S.sq / S.pq 单位 C。
+    function drawCharge(S){
+        const XP = S.r*10;                       // m → dm
+        // 源电荷
+        chargeDot(0, 0, S.sq, 0.30, S.sq>=0?'#f87171':'#38bdf8');
+        label(0, -0.55, 'q₁ = '+fmtSci(S.sq)+' C', '#cbd5e1', 'center', 11);
+        // 探测电荷
+        chargeDot(XP, 0, S.pq, 0.26, S.pq>=0?'#f87171':'#38bdf8');
+        label(XP, -0.55, 'q₂ = '+fmtSci(S.pq)+' C', '#cbd5e1', 'center', 11);
+        // 距离标注
+        dimLine(0, 0, XP, 0, 'r = '+fmt(S.r,3)+' m', '#94a3b8');
+        // 场强方向（源电荷在探测点产生的 E）
+        const eSign = (S.sq>=0)?1:-1;
+        const eTip = XP + eSign*0.95;
+        arrow(XP, 0.05, eTip, 0.05, '#a78bfa', 2.2);
+        label((XP+eTip)/2, 0.42, 'E', '#a78bfa', 'center', 12);
+        // 库仑力方向：同号斥（向外），异号吸（向内）
+        const fSign = (S.sq*S.pq>=0)?1:-1;
+        const fTip = XP + fSign*1.55;
+        arrow(XP, 0, fTip, 0, (S.sq*S.pq>=0)?'#f87171':'#34d399', 3);
+        label((XP+fTip)/2, -0.02, (S.sq*S.pq>=0)?'F 斥':'F 吸',
+              (S.sq*S.pq>=0)?'#f87171':'#34d399', 'center', 12);
+        // 源电荷的场强方向线
+        dashLine(0, 0, XP, 0, '#475569', 1);
+        label(XP/2, 0.95, '两点电荷连线', '#64748b', 'center', 10);
+    }
+
+    // ---------------- 2) 点电荷组的场强叠加 ----------------
+    // S.arrows 由内核预先算好：[{x,y,ex,ey,mag}]，世界单位 1 = 1 dm。
+    function drawDipole(S){
+        const xs = S.arrows.map(a=>a.mag);
+        // 全场为零时 emax 会是 0 —— 退化成 1，箭头自然缩成点而不是 NaN
+        const emax = Math.max.apply(null, xs.filter(isFinite)) || 1;
+        // 场强箭头（长度按模长相对缩放）
+        S.arrows.forEach(a=>{
+            // 长度封顶 1.0：emax 是本图最大值，箭头最长就是 1.17 世界单位，
+            // 而视窗半高只有 ~1.5，采样点在 y=±2.2 时箭头尖会冲出画布。
+            const L = 0.22 + 0.80*Math.min(1, a.mag/(emax||1));
+            const n = Math.hypot(a.ex,a.ey) || 1;
+            const dx = a.ex/n*L, dy = a.ey/n*L;
+            arrow(a.x, a.y, a.x+dx, a.y+dy, '#a78bfa', 2);
+        });
+        // 可移动的探测点：坐标与合场强都由滑块实时求值（嵌套对象不被外壳解析）
+        if (S.probe){
+            const px = evalExpr(S.probe.x, S.env);
+            const ex = evalExpr(S.probe.ex, S.env);
+            if (isFinite(px) && isFinite(ex)){
+                // 探针箭头同样封顶长度，免得在 p 靠近电荷时冲出视窗
+                const L = 0.24 + 0.72*(Math.min(1, Math.abs(ex)/(emax||1)));
+                if (Math.abs(ex) > (emax||1)*1e-9){
+                    arrow(px, 0, px + (ex>0?1:-1)*L, 0, '#fbbf24', 3, null);
+                    label(px + (ex>0?1:-1)*L*0.5, 0.45, 'E', '#fbbf24', 'center', 12);
+                } else {
+                    label(px, 0.55, 'E = 0（合场强为零）', '#34d399', 'center', 13);
+                }
+                ctx.strokeStyle='#fbbf24'; ctx.lineWidth=2.2;
+                ctx.beginPath(); ctx.arc(SX(px),SY(0),6,0,2*Math.PI); ctx.stroke();
+                label(px, -0.72, '探测点 p = '+fmt(px,2)+' dm', '#fbbf24', 'center', 11);
+            }
+        }
+        // 两个源电荷（画在箭头之上，保证可见）
+        chargeDot(S.q1x, S.q1y, S.q1, 0.28, S.q1>=0?'#f87171':'#38bdf8');
+        chargeDot(S.q2x, S.q2y, S.q2, 0.28, S.q2>=0?'#f87171':'#38bdf8');
+        label(S.q1x, S.q1y-0.52, 'q₁ = '+fmtSci(S.q1)+' C', '#cbd5e1', 'center', 11);
+        label(S.q2x, S.q2y-0.52, 'q₂ = '+fmtSci(S.q2)+' C', '#cbd5e1', 'center', 11);
+        dashLine(S.q1x, S.q1y, S.q2x, S.q2y, '#475569', 1);
+    }
+
+    // ---------------- 3) 平行板电容器 ----------------
+    // 极板水平放置，世界单位 1 = 1 mm。S.d 单位 mm，S.w 半宽 mm。
+    function drawPlates(S){
+        const half=S.d/2, w=S.w, th=1.1;
+        // 极板
+        rectBox(-w, half, 2*w, th, '#94a3b8', '#e2e8f0', 1.2);
+        rectBox(-w, -half-th, 2*w, th, '#94a3b8', '#e2e8f0', 1.2);
+        signRow(-w+1.2, half+th/2, w-1.2, half+th/2, 7, +1, '#0f172a');
+        signRow(-w+1.2, -half-th/2, w-1.2, -half-th/2, 7, -1, '#0f172a');
+        label(-w-1.6, half+th/2, '+', '#f87171', 'right', 16);
+        label(-w-1.6, -half-th/2, '−', '#38bdf8', 'right', 16);
+        label(w+2.0, half+th/2, '上极板', '#cbd5e1', 'left', 10);
+        label(w+2.0, -half-th/2, '下极板', '#cbd5e1', 'left', 10);
+        // 板间匀强电场：等间距直线 + 箭头（等间距 = 匀强电场的判据）
+        const n=5;
+        for(let i=0;i<n;i++){
+            const x=-w+ (i+0.5)*(2*w)/n;
+            ctx.strokeStyle='#a78bfa'; ctx.lineWidth=1.4;
+            ctx.beginPath(); ctx.moveTo(SX(x),SY(half)); ctx.lineTo(SX(x),SY(-half)); ctx.stroke();
+            // 上极板 +、下极板 − → 电场由 + 指向 −，即**向下**，箭头尖端朝下
+            ctx.fillStyle='#a78bfa';
+            ctx.beginPath(); ctx.moveTo(SX(x),SY(0)+5); ctx.lineTo(SX(x)-5.5,SY(0)-5);
+            ctx.lineTo(SX(x)+5.5,SY(0)-5); ctx.closePath(); ctx.fill();
+        }
+        label(0, half+th+1.9, '匀强电场（等间距直线 = 场强处处相等）', '#a78bfa', 'center', 11);
+        // 板间距标注
+        dimLine(w+5.5, half, w+5.5, -half, 'd = '+fmt(S.d,2)+' mm', '#94a3b8');
+        label(0, -half-th-3.6, 'S = '+fmt(S.S*1e4,1)+' cm²   εᵣ = '+fmt(S.epsr,2)+'   U = '+fmt(S.V,1)+' V',
+              '#64748b', 'center', 10);
+    }
+
+    // ---------------- 4) 带电粒子在匀强磁场中的圆周运动 ----------------
+    // 世界单位 1 = 1 cm。S.r 单位 cm，S.qsign = ±1，S.theta0 起始角（度）。
+    function drawCircB(S){
+        crossGrid(-4.4,-3.4,4.4,3.4,0.62);
+        label(-4.35, 3.3, 'B ⊗ 向里', '#64748b', 'left', 11);
+        const cx=S.cx, cy=S.cy, r=S.r;
+        // 轨道
+        ctx.strokeStyle='#a78bfa'; ctx.lineWidth=1.8; ctx.setLineDash([6,4]);
+        ctx.beginPath(); ctx.arc(SX(cx),SY(cy),r*sc,0,2*Math.PI); ctx.stroke();
+        ctx.setLineDash([]);
+        // 圆心
+        ctx.fillStyle='#94a3b8';
+        ctx.beginPath(); ctx.arc(SX(cx),SY(cy),3,0,2*Math.PI); ctx.fill();
+        label(cx, cy-0.42, 'O', '#94a3b8', 'center', 11);
+        // 粒子在轨道顶端：v 沿切向，F 指向圆心
+        const th=(S.theta0||90)*Math.PI/180;
+        const px=cx+r*Math.cos(th), py=cy+r*Math.sin(th);
+        // 半径
+        dashLine(cx, cy, px, py, '#94a3b8', 1.2);
+        dimLine(cx, cy, px, py, 'r = '+fmt(r,2)+' cm', '#34d399');
+        // 速度（切向）：正电荷逆时针 → 顶部向左
+        const rev=(S.qsign>=0)?1:-1;
+        const tx=-Math.sin(th)*rev, ty=Math.cos(th)*rev;
+        arrow(px, py, px+tx*0.95, py+ty*0.95, '#38bdf8', 2.6, 'v');
+        // 洛伦兹力（指向圆心）
+        const nx=(cx-px)/r, ny=(cy-py)/r;
+        arrow(px, py, px+nx*0.85, py+ny*0.85, '#f87171', 3, 'F');
+        chargeDot(px, py, S.qsign, 0.24, S.qsign>=0?'#f87171':'#38bdf8');
+        label(px, py+0.55,
+              (S.qsign>=0?'正电荷':'负电荷') + (S.qsign>=0?'（逆时针）':'（顺时针）'),
+              '#e2e8f0', 'center', 11);
+    }
+
+    // ---------------- 5) 带电粒子在匀强电场中的偏转（类平抛） ----------------
+    // 世界单位 1 = 1 mm。轨迹 y = kk·x²（x 以 mm 计），S.yout 单位 mm。
+    function drawDeff(S){
+        const L=S.L, d=S.d, half=d/2, th=1.1;
+        // 偏转极板（竖直放置，L / d 单位 mm）
+        rectBox(0, half, L, th, '#94a3b8', '#e2e8f0', 1.1);
+        rectBox(0, -half-th, L, th, '#94a3b8', '#e2e8f0', 1.1);
+        signRow(1.5, half+th/2, L-1.5, half+th/2, 6, +1, '#0f172a');
+        signRow(1.5, -half-th/2, L-1.5, -half-th/2, 6, -1, '#0f172a');
+        // 板间电场（上 + 下 −，方向向下）
+        for(let i=0;i<4;i++){
+            const x=L*(i+0.5)/4;
+            ctx.strokeStyle='#a78bfa'; ctx.lineWidth=1.1;
+            ctx.beginPath(); ctx.moveTo(SX(x),SY(half)); ctx.lineTo(SX(x),SY(-half)); ctx.stroke();
+            const ym=half-(half*0.35);
+            ctx.fillStyle='#a78bfa';
+            ctx.beginPath(); ctx.moveTo(SX(x),SY(ym)+5); ctx.lineTo(SX(x)-5,SY(ym)-4.5);
+            ctx.lineTo(SX(x)+5,SY(ym)-4.5); ctx.closePath(); ctx.fill();
+        }
+        // 轨迹：上极板带 +、下极板带 − → 电场向下 → 正电荷（质子）被推向**下**极板。
+        // 若这里画成向上偏，就等于说正电荷被正极板吸引，图在撒谎。
+        const yOf = x => -S.kk*x*x;        // y(x) = −k x²（向下开口）
+        const dyOf = x => -2*S.kk*x;       // dy/dx（出板后的直线斜率）
+        ctx.strokeStyle='#34d399'; ctx.lineWidth=2.4;
+        ctx.beginPath();
+        const N=48;
+        for(let i=0;i<=N;i++){
+            const x=L*i/N, y=yOf(x);
+            if(i===0) ctx.moveTo(SX(x),SY(y)); else ctx.lineTo(SX(x),SY(y));
+        }
+        ctx.stroke();
+        const yL=yOf(L), vx=16, slope=dyOf(L);
+        ctx.strokeStyle='#34d399'; ctx.lineWidth=2.4; ctx.setLineDash([7,4]);
+        ctx.beginPath();
+        ctx.moveTo(SX(L),SY(yL));
+        ctx.lineTo(SX(L+vx),SY(yL+slope*vx));
+        ctx.stroke(); ctx.setLineDash([]);
+        // 入射速度
+        arrow(-11, 0, -1.0, 0, '#38bdf8', 2.6, 'v₀');
+        // 出射速度分解：v = vₓ + v_y（平行四边形，不是两根不相干的箭头）
+        arrow(L, yL, L+vx, yL, '#38bdf8', 1.8);
+        arrow(L+vx, yL, L+vx, yL+slope*vx, '#f87171', 1.8);
+        arrow(L, yL, L+vx, yL+slope*vx, '#34d399', 2.6);
+        label(L+vx*0.5, yL+1.6, 'vₓ = v₀', '#38bdf8', 'center', 11);
+        label(L+vx+1.6, yL+slope*vx*0.5, 'v_y', '#f87171', 'left', 11);
+        // 偏转量标注（从入射轴量到出射点，带符号即 −y）
+        dashLine(0, 0, L, yL, '#475569', 1);
+        dimLine(L+3.2, 0, L+3.2, yL, 'y = '+fmt(S.yout,2)+' mm', '#34d399');
+        label(L/2, -half-2.4, 'L = '+fmt(L/10,2)+' cm', '#64748b', 'center', 10);
+        label(L*0.30, half+th+2.0, '质子向负极板偏转：类平抛（抛物线）', '#34d399', 'center', 11);
+    }
+
+    // ---------------- 6) 闭合电路欧姆定律 ----------------
+    // 按点列画导线（可复用给电流圆点）；world 单位随意（示意图）。
+    function wire(path, color, lw){
+        ctx.strokeStyle=color; ctx.lineWidth=lw||2.4; ctx.lineJoin='round';
+        ctx.beginPath();
+        path.forEach((p,i)=> i?ctx.lineTo(SX(p[0]),SY(p[1])):ctx.moveTo(SX(p[0]),SY(p[1])));
+        ctx.stroke();
+    }
+    // 沿路径匀速流动的圆点 = 电流的可视化。速度与 I 成正比，I=0 则停住。
+    function flowDots(path, speed, nDots, color){
+        const segs=[]; let total=0;
+        for (let i=1;i<path.length;i++){
+            const d=Math.hypot(path[i][0]-path[i-1][0], path[i][1]-path[i-1][1]);
+            segs.push(d); total+=d;
+        }
+        if (total<0.01 || !(speed>0)) return;
+        if (!nDots) nDots=8;
+        ctx.fillStyle=color;
+        for (let k=0;k<nDots;k++){
+            let d=(((speed*animT) + k*total/nDots) % total + total) % total;
+            for (let i=0;i<segs.length;i++){
+                if (d<=segs[i] || i===segs.length-1){
+                    const f=segs[i]>0?d/segs[i]:0;
+                    const x=path[i][0]+(path[i+1][0]-path[i][0])*f;
+                    const y=path[i][1]+(path[i+1][1]-path[i][1])*f;
+                    ctx.beginPath(); ctx.arc(SX(x),SY(y),3.4,0,2*Math.PI); ctx.fill(); break;
+                }
+                d-=segs[i];
+            }
+        }
+    }
+    // 电表：圆形表盘
+    function meter(x, y, ch, color, rpx){
+        ctx.fillStyle='#0f172a';
+        ctx.beginPath(); ctx.arc(SX(x),SY(y),rpx||16,0,2*Math.PI); ctx.fill();
+        ctx.strokeStyle=color; ctx.lineWidth=2.2; ctx.stroke();
+        ctx.fillStyle=color; ctx.font='bold 14px system-ui';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(ch, SX(x), SY(y));
+    }
+
+    function drawCircuit(S){
+        const x0=0.8, x1=5.6, y0=0.7, y1=4.1, my=(y0+y1)/2;
+        // 主回路：顺时针 —— 从电源 + 极出发，经外电路回到 − 极（与电流圆点方向一致）
+        const loop=[[x0,y1],[x1,y1],[x1,y0],[x0,y0],[x0,y1]];
+        // 电压表必须**并联**在 R 两端；画成串在回路里是本节最常见的概念性错误
+        const rx=2.4, rw=1.6, vcx=3.2, vcy=2.95, vr=0.32;
+        wire([[rx,y1],[rx,vcy],[vcx-vr,vcy]], '#64748b', 1.6);
+        wire([[rx+rw,y1],[rx+rw,vcy],[vcx+vr,vcy]], '#64748b', 1.6);
+        // 主回路导线
+        wire(loop, '#94a3b8', 2.6);
+        // 电流：圆点沿回路流动，I 越大流得越快（这就是「电流大小」的图像）
+        flowDots(loop, Math.min(7, 0.9*(isFinite(S.I)?S.I:0)), 8, '#22d3ee');
+
+        // 电源（左臂）：长极板为正极（上），短极板为负极（下）
+        ctx.fillStyle='#facc15';
+        ctx.fillRect(SX(x0)-11, SY(my+0.62)-2, 22, 4);
+        ctx.fillRect(SX(x0)-5,  SY(my-0.02)-2, 10, 4);
+        label(x0-0.4, my+0.62, '+', '#facc15', 'right', 16);
+        label(x0-0.4, my-0.02, '−', '#facc15', 'right', 16);
+        label(x0+0.45, my+1.35, '电源', '#cbd5e1', 'left', 10);
+        label(x0+0.45, my+1.05, 'E, r', '#facc15', 'left', 12);
+
+        // 电阻（上臂）
+        const rh=0.30;
+        ctx.fillStyle='#0f172a';
+        ctx.fillRect(SX(rx), SY(y1)-rh*sc, rw*sc, 2*rh*sc);
+        ctx.strokeStyle='#fde047'; ctx.lineWidth=2;
+        ctx.strokeRect(SX(rx), SY(y1)-rh*sc, rw*sc, 2*rh*sc);
+        label(rx+rw/2, y1+0.85, 'R', '#fde047', 'center', 14);
+
+        // 电流表（右臂，串联）
+        meter(x1, my, 'A', '#f472b6');
+        // 电压表（与 R 并联）
+        meter(vcx, vcy, 'V', '#38bdf8');
+        label(vcx, vcy-0.78, '电压表并联在 R 两端', '#38bdf8', 'center', 10);
+
+        // 底部：电流读数 + 方向说明
+        arrow(x1-1.7, y0-0.55, x0+1.7, y0-0.55, '#22d3ee', 2, null);
+        label((x0+x1)/2, y0-1.1, 'I = '+fmt(S.I,3)+' A（顺时针）', '#22d3ee', 'center', 12);
+        label(x1+0.3, my+1.05, 'U = '+fmt(S.U,3)+' V', '#38bdf8', 'left', 12);
+        label(x1+0.3, my+0.72, '路端电压', '#94a3b8', 'left', 10);
+    }
+
+    // ---------------- 7) 法拉第电磁感应 ----------------
+    // 世界单位随意（示意图）。S.rising 决定磁通量增减，S.N 匝数。
+    function drawInduction(S){
+        // 线圈（三匝椭圆）
+        const cx=1.6, cy=2.2, rx=0.55, ry=1.75;
+        ctx.strokeStyle='#a78bfa'; ctx.lineWidth=2;
+        for(let i=0;i<3;i++){
+            ctx.beginPath(); ctx.ellipse(SX(cx+i*0.28),SY(cy),rx*sc,ry*sc,0,0,2*Math.PI); ctx.stroke();
+        }
+        label(cx+0.28, cy-ry-0.45, 'N = '+fmt(S.N,0)+' 匝', '#a78bfa', 'center', 12);
+        // 磁铁（条形，N 极朝右）
+        const mx0=3.9, my0=cy, mw=1.9, mh=0.62;
+        rectBox(mx0, my0-mh/2, mw/2, mh, '#f87171');
+        rectBox(mx0+mw/2, my0-mh/2, mw/2, mh, '#38bdf8');
+        label(mx0+mw*0.25, my0, 'N', '#0f172a', 'center', 15);
+        label(mx0+mw*0.75, my0, 'S', '#0f172a', 'center', 15);
+        label(mx0+mw*0.5, my0-mh/2-0.5, '条形磁铁', '#cbd5e1', 'center', 10);
+        // B 方向（N → S，向左穿过线圈）
+        for(let i=0;i<3;i++){
+            const y=cy-0.9+i*0.9;
+            arrow(mx0-0.15, y, cx+rx+0.75, y, '#64748b', 1.6);
+        }
+        label(mx0-0.95, cy+1.35, 'B', '#94a3b8', 'center', 12);
+        // 磁通量增减
+        const dTxt = S.rising ? 'B 增大 → Φ 增大' : 'B 减小 → Φ 减小';
+        label(cx+0.28, cy+ry+0.75, dTxt, S.rising?'#f87171':'#34d399', 'center', 12);
+        // 感应电流方向（楞次定律：阻碍变化）；线宽随电动势变化 —— 变化快，电流强
+        const ang0=S.rising?Math.PI*1.15:Math.PI*0.85;
+        const wdt=1.4+3.0*Math.min(1, (S.emf||0)/12);
+        ctx.strokeStyle='#22d3ee'; ctx.lineWidth=wdt;
+        ctx.beginPath(); ctx.arc(SX(cx+0.28),SY(cy), (rx+0.42)*sc, ang0, ang0+1.5*Math.PI); ctx.stroke();
+        const hx=SX(cx+0.28)+(rx+0.42)*sc*Math.cos(ang0), hy=SY(cy)-(rx+0.42)*sc*Math.sin(ang0);
+        ctx.fillStyle='#22d3ee';
+        ctx.beginPath(); ctx.arc(hx,hy,4,0,2*Math.PI); ctx.fill();
+        label(cx+0.28, cy-ry-0.95, '感应电流', '#22d3ee', 'center', 11);
+        label(cx+0.28, cy+ry+1.15, '阻碍 Φ 的变化', '#22d3ee', 'center', 11);
+        label(cx+0.28, cy+ry+0.72, 'ε = '+fmt(S.emf,3)+' V', '#22d3ee', 'center', 13);
+    }
+
+    // ---------------- 8) 安培力 F = BIL·sinθ ----------------
+    // B 在纸面内（→），导线与 B 成 θ 角，电流沿导线。由 F ∝ I×B 得力**垂直纸面**，
+    // 所以只能画成 ⊗（向里）/ ⊙（向外）—— 这正是左手定则三维性的来源，
+    // 硬把它画成纸面内的箭头就是错的。
+    // 世界单位随意（示意图）。S.L 为导线的显示长度，S.theta 单位度。
+    function drawAmpere(S){
+        const th=S.theta*Math.PI/180, sm=Math.abs(Math.sin(th));
+        // 匀强磁场（纸面内，向右）
+        [0.55, 1.75, 2.95, 4.15].forEach(y=>{
+            arrow(-1.4, y, 6.7, y, '#64748b', 1.5);
+        });
+        label(6.95, 2.35, 'B', '#94a3b8', 'left', 13);
+        // 导线
+        const ax=1.0, ay=0.9, L=S.L;
+        const bx=ax+L*Math.cos(th), by=ay+L*Math.sin(th);
+        ctx.strokeStyle='#e2e8f0'; ctx.lineWidth=5;
+        ctx.beginPath(); ctx.moveTo(SX(ax),SY(ay)); ctx.lineTo(SX(bx),SY(by)); ctx.stroke();
+        ctx.strokeStyle='#94a3b8'; ctx.lineWidth=1.4;
+        ctx.beginPath(); ctx.moveTo(SX(ax),SY(ay)); ctx.lineTo(SX(bx),SY(by)); ctx.stroke();
+        label(ax-0.35, ay-0.35, 'A', '#cbd5e1', 'right', 12);
+        label(bx+0.35, by+0.3, 'B′', '#cbd5e1', 'left', 12);
+        // 电流方向（沿导线，画在导线之上）
+        arrow(ax+L*0.16*Math.cos(th), ay+L*0.16*Math.sin(th),
+              ax+L*0.84*Math.cos(th), ay+L*0.84*Math.sin(th), '#22d3ee', 3, null);
+        label((ax+bx)/2-0.55, (ay+by)/2+0.55, 'I = '+fmt(S.I,2)+' A', '#22d3ee', 'center', 12);
+        // θ 角标注
+        ctx.strokeStyle='#34d399'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.arc(SX(ax),SY(ay), 34, 0, -th); ctx.stroke();
+        label(ax+0.95, ay+0.55, 'θ = '+fmt(S.theta,1)+'°', '#34d399', 'center', 12);
+        dashLine(ax, ay, ax+1.55, ay, '#34d399', 1);
+        // 安培力：垂直纸面向里 ⊗（大小按 sinθ 缩放，θ→0 时符号缩小到消失）
+        const mx=(ax+bx)/2, my=(ay+by)/2, R=4+13*sm;
+        crossSymbol(mx, my, R, '#f87171');
+        if (sm>0.02){
+            label(mx, my-R-0.55, 'F = BIL·sinθ = '+fmt(S.F,4)+' N', '#f87171', 'center', 12);
+        } else {
+            label(mx, my-1.15, 'F = 0（电流与磁场平行，不受力）', '#94a3b8', 'center', 12);
+        }
+        label(mx, my+R+0.6, '⊗ 垂直纸面向里', '#94a3b8', 'center', 11);
+    }
+
+    // ⊗ 符号：表示矢量垂直纸面向里
+    function crossSymbol(x, y, R, color){
+        const px=SX(x), py=SY(y);
+        ctx.strokeStyle=color; ctx.lineWidth=2.4;
+        ctx.beginPath(); ctx.arc(px,py,R,0,2*Math.PI); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(px-R*0.68,py-R*0.68); ctx.lineTo(px+R*0.68,py+R*0.68);
+        ctx.moveTo(px-R*0.68,py+R*0.68); ctx.lineTo(px+R*0.68,py-R*0.68);
+        ctx.stroke();
+    }
+
+    // 数值的科学计数显示（画布上写 1.6e-19 这种人话）
+    function fmtSci(v){
+        if(v===0) return '0';
+        const sign = v<0?'−':'';
+        let a=Math.abs(v), e=0;
+        while(a>=10){ a/=10; e++; }
+        while(a<1){ a*=10; e--; }
+        return e===0 ? sign+fmt(a,3) : sign+fmt(a,3)+'×10^'+e;
+    }
