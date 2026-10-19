@@ -65,7 +65,7 @@ FAMILIES = {
         "users": ["edu-math-sequences", "edu-physics-junior", "edu-physics-senior",
                   "edu-physics-em", "edu-physics-thermal", "edu-physics-wave-optics",
                   "edu-physics-momentum", "edu-organic-chem", "edu-multivariable-calc",
-                  "edu-complex", "edu-thermochem", "edu-stat-inference", "edu-quantum",
+                  "edu-complex", "edu-thermochem", "edu-stat-inference", "edu-quantum", "edu-computation-theory",
                   "edu-probability", "edu-chem-calc",
                   "edu-geography", "edu-history", "edu-economics", "edu-vector",
                   "edu-linear-algebra", "edu-ode-dynamics", "edu-signals"],

@@ -62,6 +62,16 @@
   "quadratic.html": "ad4f484eb3992336b4e8fbb0f23d09fa38bc208b09bd0361d316ceaa9bd04ee1",
   "roots.html": "d52fc09497b38e320d52d90ea6366252200b8ed9e05d7a982ae04f5695dc1a85"
  },
+ "edu-computation-theory": {
+  "dfa.html": "236e381a1eaa991a2c586594877dde748ef800712589bfee717ad7e16d36a537",
+  "grammar.html": "996360114d49aefa4748c1b35e3c7d5c690870bfebc53ee479924973f8912967",
+  "halting.html": "7769fc3a9a18e3022ae739a65135295999bcf94b95b10fadc8158bd835ac9023",
+  "index.html": "92b5d5115494444bad7d4f8e91216de0d64c127cc76161410ed3752afb5441fa",
+  "pnp.html": "fc3684c4bb9dd5456b8e6137a28c1164bfe02e0e9a8c18e0b3c2c8dcca57fe48",
+  "pumping.html": "d2a8afafc9251f1108d047387be941e0adedded5c10cfa6e9195ad53936f1418",
+  "subset.html": "1d80adb05c54e2627e1355ef390a4fbfc9310e0fd9df7812a4c3c505ac1d1368",
+  "turing.html": "9ef80656648fe0ed3e8d812d40ddb5d3f0ecc16601110df076b6468dd9dbb59b"
+ },
  "edu-cs": {
   "base_convert.html": "e7e8a46599abf40439f24444f724896139d620994be74f9871adea322887ff4f",
   "bfs.html": "11682fdb2d00d49faebe14e9187b1be9e50a7272e4947d8e5ebd7f5d31856338",

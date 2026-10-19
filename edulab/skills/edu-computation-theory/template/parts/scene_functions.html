@@ -1,0 +1,381 @@
+// ===================== 计算理论场景 =====================
+let animT = 0;
+
+function labelIn(x, y, text, color, align, size){
+    size = size || 12;
+    const x0 = view.xRange[0], x1 = view.xRange[1];
+    const pad = 0.06;
+    const avail = (x1 - x0) - 2 * pad;
+    let s = size;
+    const meas = () => { ctx.font = 'bold ' + s + 'px system-ui';
+                         return ctx.measureText(String(text)).width / (sc || 1); };
+    let w = meas();
+    while (w > avail && s > 7){ s -= 0.5; w = meas(); }
+    let a = x;
+    if (align === 'end')         a = Math.max(x, x0 + w + pad);
+    else if (align === 'center') a = Math.max(x0 + w/2 + pad, Math.min(x, x1 - w/2 - pad));
+    else                         a = Math.max(x0 + pad, Math.min(x, x1 - w - pad));
+    label(a, y, text, color, align, s);
+}
+function ws(x, y){ return [SX(x), SY(y)]; }
+function wSeg(x1, y1, x2, y2, col, lw, dash){
+    if (dash) ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 1.4;
+    const a = ws(x1, y1), b = ws(x2, y2);
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    if (dash) ctx.setLineDash([]);
+}
+function wPoly(pts, col, lw, fill){
+    if (pts.length < 2) return;
+    if (fill){ ctx.fillStyle = fill; ctx.beginPath();
+        pts.forEach((p,i)=>{ const q = ws(p[0], p[1]); i===0?ctx.moveTo(q[0],q[1]):ctx.lineTo(q[0],q[1]); });
+        if (pts.length > 2) ctx.closePath(); ctx.fill(); }
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 2;
+    ctx.beginPath();
+    pts.forEach((p,i)=>{ const q = ws(p[0], p[1]); i===0?ctx.moveTo(q[0],q[1]):ctx.lineTo(q[0],q[1]); });
+    ctx.stroke();
+}
+function wDot(x, y, col, r){
+    const q = ws(x, y);
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(q[0], q[1], r || 5.5, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.2; ctx.stroke();
+}
+function wArrow(x1, y1, x2, y2, col, lw){
+    const a = ws(x1, y1), b = ws(x2, y2);
+    arrow(a[0], a[1], b[0], b[1], col, lw || 2.4, null);
+}
+function roText(lines){
+    const y0 = 5.72;
+    lines.forEach((l, i) => labelIn(0.20 + (l[3] || 0), y0 - i * 0.40,
+                                   l[0], l[1], l[2] || 'start', l[4] || 11));
+}
+function axesBox(x0, y0, x1, y1, xlab){
+    wSeg(x0, y0, x1, y0, 'rgba(148,163,184,0.85)', 1.6);
+    wSeg(x0, y0, x0, y1, 'rgba(148,163,184,0.85)', 1.6);
+    if (xlab) labelIn((x0 + x1) / 2, y0 - 0.30, xlab, '#64748b', 'center', 10);
+}
+// 圆 + 文字（状态节点）
+function stateNode(x, y, r, txt, col, fill){
+    ctx.fillStyle = fill || 'rgba(56,189,248,0.16)';
+    ctx.beginPath(); ctx.arc(SX(x), SY(y), r * (sc || 1), 0, 7); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 2.4; ctx.stroke();
+    labelIn(x, y, txt, col, 'center', 11);
+}
+// 两节点间的有向弧（略带弧度，避免与直线重叠）
+function stateEdge(a, b, col, lw, txt, bend){
+    // 自环：在节点正上方画一个小圈
+    if (a[0] === b[0] && a[1] === b[1]){
+        const cx = a[0], cy = a[1] + 0.62;
+        ctx.strokeStyle = col; ctx.lineWidth = lw || 1.8;
+        ctx.beginPath(); ctx.arc(SX(cx), SY(cy), 0.30 * (sc || 1), 0, 7); ctx.stroke();
+        if (txt) labelIn(cx + 0.36, cy + 0.10, txt, col, 'start', 10);
+        return;
+    }
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const off = bend === undefined ? 0.22 : bend;
+    const mx = (a[0] + b[0]) / 2 - uy * off, my = (a[1] + b[1]) / 2 + ux * off;
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 1.8;
+    ctx.beginPath();
+    const p0 = ws(a[0], a[1]), p1 = ws(mx, my), p2 = ws(b[0], b[1]);
+    ctx.moveTo(p0[0], p0[1]);
+    ctx.quadraticCurveTo(p1[0], p1[1], p2[0], p2[1]);
+    ctx.stroke();
+    const ang = Math.atan2(p2[1] - p1[1], p2[0] - p1[0]);
+    arrowHead(p2[0], p2[1], ang, col, 8);
+    if (txt) labelIn(mx, my + 0.22, txt, col, 'center', 10);
+}
+function arrowHead(x, y, ang, col, size){
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - size * Math.cos(ang - 0.4), y - size * Math.sin(ang - 0.4));
+    ctx.lineTo(x - size * Math.cos(ang + 0.4), y - size * Math.sin(ang + 0.4));
+    ctx.closePath(); ctx.fill();
+}
+
+// ---- 1) DFA 逐步模拟 ----
+function drawDfa(S){
+    const nodes = S.nodes, edges = S.edges;
+    const k = Math.max(0, Math.min(S.trace.length - 1, Math.round(S.step)));
+    const cur = S.trace[k][1];
+    const prev = k > 0 ? S.trace[k - 1][1] : null;
+    const ch = k > 0 ? S.trace[k][2] : null;
+    // 边
+    edges.forEach(e => {
+        const hot = (prev !== null && e[0] === prev && e[1] === cur && e[2] === ch);
+        stateEdge(nodes[e[0]], nodes[e[1]], hot ? '#facc15' : 'rgba(148,163,184,0.55)',
+                  hot ? 3.2 : 1.6, e[2], e[3] === undefined ? 0.22 : e[3]);
+    });
+    // 节点
+    nodes.forEach((p, i) => {
+        const isCur = (i === cur);
+        stateNode(p[0], p[1], 0.42, S.names[i],
+                  isCur ? '#facc15' : 'rgba(148,163,184,0.9)',
+                  isCur ? 'rgba(250,204,21,0.22)' : 'rgba(56,189,248,0.10)');
+        if (S.accept.indexOf(i) >= 0){
+            ctx.strokeStyle = 'rgba(52,211,153,0.8)'; ctx.lineWidth = 1.6;
+            ctx.beginPath(); ctx.arc(SX(p[0]), SY(p[1]), 0.50 * (sc || 1), 0, 7); ctx.stroke();
+        }
+    });
+    labelIn(nodes[0][0] - 0.62, nodes[0][1] + 0.55, '▶ 起点', '#34d399', 'start', 9);
+    // 输入串进度
+    const s = S.input;
+    let line = '';
+    for (let i = 0; i < s.length; i++) line += (i === k - 1) ? '[' + s[i] + ']' : s[i];
+    labelIn(0.24, 1.30, '输入串：' + (s.length ? line : '（空串）'), '#38bdf8', 'start', 13);
+    roText([
+        ['DFA 逐步模拟：每读一个字符就沿一条确定的边转移（同状态同字符只有一条边）',
+         '#94a3b8', 'start', 0, 10],
+        ['已读 ' + k + ' / ' + s.length + ' 个字符      当前状态 = ' + (cur === null ? '卡住' : S.names[cur]),
+         '#facc15', 'start', 0, 12],
+        ['判定：读完全串后' + (k === s.length
+          ? (S.accept.indexOf(cur) >= 0 ? '停在**接受状态** ⇒ 接受' : '停在非接受状态 ⇒ 拒绝')
+          : '还没读完'), k === s.length && S.accept.indexOf(cur) >= 0 ? '#34d399' : '#64748b',
+         'start', 0, 11],
+        ['绿圈标出的是接受状态；拖滑块可以逐字符回放整个判定过程', '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 2) 子集构造法 ----
+function drawSubset(S){
+    const rows = S.rows;                      // [[子集字符串, a 去向, b 去向]...]
+    const k = Math.max(0, Math.min(rows.length - 1, Math.round(S.ri) - 1));
+    const x0 = 1.30, x1 = 9.30, y0 = 1.00, yt = 0.52;
+    const n = rows.length;
+    // 表头
+    labelIn(x0 + 0.10, y0 + yt * (n + 1) + 0.20, 'DFA 状态（NFA 状态集合）', '#94a3b8', 'start', 9);
+    labelIn(x1 - 1.30, y0 + yt * (n + 1) + 0.20, '读 a', '#94a3b8', 'center', 9);
+    labelIn(x1 - 0.35, y0 + yt * (n + 1) + 0.20, '读 b', '#94a3b8', 'center', 9);
+    for (let i = 0; i < n; i++){
+        const y = y0 + yt * (n - 1 - i);
+        const hot = (i === k);
+        wPoly([[x0, y - yt * 0.42], [x1, y - yt * 0.42], [x1, y + yt * 0.42], [x0, y + yt * 0.42]],
+              hot ? '#facc15' : 'rgba(148,163,184,0.35)', hot ? 2.0 : 1.0,
+              hot ? 'rgba(250,204,21,0.14)' : null);
+        const acc = S.accept.indexOf(i) >= 0;
+        labelIn(x0 + 0.10, y, (acc ? '★ ' : '   ') + 'D' + i + ' = ' + rows[i][0],
+                acc ? '#34d399' : (hot ? '#facc15' : '#94a3b8'), 'start', 10);
+        labelIn(x1 - 1.30, y, rows[i][1], hot ? '#38bdf8' : '#64748b', 'center', 10);
+        labelIn(x1 - 0.35, y, rows[i][2], hot ? '#38bdf8' : '#64748b', 'center', 10);
+    }
+    roText([
+        ['子集构造法：NFA 的每个「状态集合」变成 DFA 的一个状态（真算 ε-闭包与转移）',
+         '#94a3b8', 'start', 0, 10],
+        ['NFA 有 ' + S.nfaCount + ' 个状态，构造出的 DFA 有 ' + n + ' 个状态（当前第 ' + (k + 1) + ' 行）',
+         '#facc15', 'start', 0, 12],
+        ['★ = 含 NFA 接受状态的集合 ⇒ DFA 的接受状态（共 ' + S.accept.length + ' 个）',
+         '#34d399', 'start', 0, 11],
+        ['关键结论：DFA 与 NFA **识别同一类语言**（正则语言）—— 只是 DFA 的状态可能指数多',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 3) 上下文无关文法与推导树 ----
+function drawGrammar(S){
+    const k = Math.max(0, Math.min(S.deriv.length - 1, Math.round(S.di) - 1));
+    // 推导序列
+    const x0 = 1.30, y0 = 3.55, dy = 0.42;
+    S.deriv.forEach((s, i) => {
+        const hot = (i === k);
+        labelIn(x0, y0 - i * dy, (i === 0 ? '' : '⇒ ') + s,
+                hot ? '#facc15' : 'rgba(148,163,184,0.75)', 'start', hot ? 13 : 11);
+    });
+    // 推导树（把当前步对应的 n 画出来）
+    const n = S.curN;
+    const drawTree = (node, x, y, w) => {
+        if (node.S){
+            wDot(x, y, '#facc15', 5.5);
+            labelIn(x, y, 'S', '#0f172a', 'center', 9);
+            const kids = node.S;
+            kids.forEach((kid, i) => {
+                const cx = x - w + 2 * w * (i + 0.5) / kids.length;
+                wSeg(x, y - 0.22, cx, y - 0.72, 'rgba(148,163,184,0.8)', 1.6);
+                if (typeof kid === 'string'){
+                    wDot(cx, y - 0.95, '#38bdf8', 5.0);
+                    labelIn(cx, y - 0.95, kid, '#0f172a', 'center', 9);
+                } else {
+                    drawTree(kid, cx, y - 1.20, w / Math.max(2, kids.length));
+                }
+            });
+        }
+    };
+    if (n <= 3){
+        labelIn(6.9, 4.05, '推导树（n = ' + n + '）', '#94a3b8', 'center', 10);
+        drawTree(S.tree, 6.9, 3.50, 2.20);
+    } else {
+        labelIn(6.9, 2.60, 'n = ' + n + ' 时树太深，这里只画推导序列', '#64748b', 'center', 10);
+    }
+    roText([
+        ['上下文无关文法 S → aSb | ε：每一步把 S 替换成右边的串', '#94a3b8', 'start', 0, 10],
+        ['第 ' + (k + 1) + ' / ' + S.deriv.length + ' 步：' + S.deriv[k],
+         '#facc15', 'start', 0, 12],
+        ['这个文法生成的语言是 { aⁿbⁿ | n ≥ 0 } —— 它**不是**正则语言（a 与 b 要「配对计数」）',
+         '#34d399', 'start', 0, 11],
+        ['正则语言没有「计数器」；上下文无关文法靠**栈**（这里的嵌套 S）做到了配对',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 4) 泵引理 ----
+function drawPumping(S){
+    const k = Math.max(0, Math.min(S.seq.length - 1, Math.round(S.pi) - 1));
+    const d = S.seq[k];
+    const x0 = 1.30, y0 = 3.20, cw = 0.30;
+    // 分块显示 x | y | z（用 y 重复 i 次）
+    let cx = x0;
+    const blk = (txt, col, lab) => {
+        if (!txt) return;
+        const w = txt.length * cw;
+        wPoly([[cx, y0 - 0.26], [cx + w, y0 - 0.26], [cx + w, y0 + 0.26], [cx, y0 + 0.26]],
+              col, 1.6, col.replace('rgb', 'rgba').replace(')', ',0.20)'));
+        labelIn(cx + w / 2, y0, txt, '#0f172a', 'center', 11);
+        labelIn(cx + w / 2, y0 - 0.46, lab, col, 'center', 9);
+        cx += w + 0.10;
+    };
+    blk(S.x, '#38bdf8', 'x');
+    for (let i = 0; i < d.i; i++) blk(S.y, '#facc15', i === 0 ? 'y' : '');
+    blk(S.z, '#a78bfa', 'z');
+    // 原串对照
+    labelIn(x0, y0 + 0.62, '原串 w = aᵖbᵖ（p = ' + S.p + '）', '#94a3b8', 'start', 10);
+    labelIn(x0, y0 + 0.98, '泵出后：' + (d.s || '（空串）'), d.in_L ? '#34d399' : '#f87171', 'start', 12);
+    labelIn(x0, y0 + 1.34, d.in_L ? '✓ 仍在 L = {aⁿbⁿ} 中' : '✗ 已不在 L 中 ⇒ 与泵引理矛盾',
+            d.in_L ? '#34d399' : '#f87171', 'start', 11);
+    roText([
+        ['泵引理：若 L 是正则语言，则足够长的 w ∈ L 都能写成 w = xyz，且 xyⁱz ∈ L 对一切 i',
+         '#94a3b8', 'start', 0, 10],
+        ['取 w = aᵖbᵖ（p 为泵长度）、|xy| ≤ p ⇒ y 只能是 a 的串 ⇒ xyⁱz = a^(p+|y|(i−1))bᵖ',
+         '#38bdf8', 'start', 0, 11],
+        ['重复次数 i = ' + d.i + '      泵出后 a 的个数 ≠ b 的个数 ⇒ ' +
+         (d.in_L ? '仍在语言里' : '**不在语言里**'), d.in_L ? '#34d399' : '#f87171', 'start', 0, 12],
+        ['只有 i = 1 才回到原串 —— 所以 {aⁿbⁿ} **不是**正则语言（拖滑块看 i 变化）',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 5) 图灵机纸带 ----
+function drawTuring(S){
+    const k = Math.max(0, Math.min(S.trace.length - 1, Math.round(S.ti) - 1));
+    const fr = S.trace[k];
+    const cells = fr.tape, head = fr.head;
+    const cw = 0.52, x0 = Math.max(1.20, 5.0 - cells.length * cw / 2);
+    const y0 = 3.10;
+    for (let i = 0; i < cells.length; i++){
+        const x = x0 + i * cw;
+        const isHead = (i === head);
+        wPoly([[x, y0 - 0.30], [x + cw - 0.06, y0 - 0.30], [x + cw - 0.06, y0 + 0.30], [x, y0 + 0.30]],
+              isHead ? '#facc15' : 'rgba(148,163,184,0.7)', isHead ? 2.6 : 1.4,
+              isHead ? 'rgba(250,204,21,0.22)' : 'rgba(56,189,248,0.08)');
+        labelIn(x + (cw - 0.06) / 2, y0, cells[i] === '_' ? '␣' : cells[i],
+                isHead ? '#facc15' : '#e2e8f0', 'center', 13);
+    }
+    // 读写头三角
+    const hx = x0 + head * cw + (cw - 0.06) / 2;
+    wPoly([[hx - 0.14, y0 + 0.44], [hx + 0.14, y0 + 0.44], [hx, y0 + 0.72]],
+          '#facc15', 1.6, 'rgba(250,204,21,0.35)');
+    labelIn(hx, y0 + 0.95, '读写头', '#facc15', 'center', 9);
+    labelIn(x0, y0 - 0.66, '纸带（␣ 表示空格）', '#94a3b8', 'start', 10);
+    roText([
+        ['图灵机 = 纸带 + 读写头 + 状态转移表：每步「读符号 → 改写 → 移动 → 换状态」',
+         '#94a3b8', 'start', 0, 10],
+        ['第 ' + fr.step + ' / ' + (S.trace.length - 1) + ' 步      状态 = ' + fr.state
+         + (fr.halted ? '（已停机）' : ''), '#facc15', 'start', 0, 12],
+        ['纸带内容：' + cells.replace(/_/g, '␣') + '      读写头在第 ' + head + ' 格',
+         '#38bdf8', 'start', 0, 11],
+        ['这个机器在做**二进制加一**：向右扫到尾，再向左把连续的 1 变成 0，遇到 0 就变 1 并停机',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 6) 停机问题的对角线表 ----
+function drawHalting(S){
+    const n = S.mat.length;
+    const k = Math.max(0, Math.min(n - 1, Math.round(S.hi) - 1));
+    const cw = 0.62, x0 = 2.60, y0 = 3.55, rh = 0.42;
+    // 表头
+    for (let j = 0; j < n; j++){
+        labelIn(x0 + j * cw + cw / 2, y0 + 0.28, 'T' + j, '#94a3b8', 'center', 9);
+    }
+    for (let i = 0; i < n; i++){
+        const y = y0 - i * rh;
+        labelIn(x0 - 0.14, y, 'P' + i, i === k ? '#facc15' : '#94a3b8', 'end', 10);
+        for (let j = 0; j < n; j++){
+            const x = x0 + j * cw;
+            const diag = (i === j);
+            const hot = (i === k);
+            wPoly([[x, y - rh * 0.36], [x + cw - 0.08, y - rh * 0.36],
+                   [x + cw - 0.08, y + rh * 0.36], [x, y + rh * 0.36]],
+                  diag ? '#facc15' : (hot ? '#38bdf8' : 'rgba(148,163,184,0.5)'),
+                  diag ? 2.2 : 1.2,
+                  diag ? 'rgba(250,204,21,0.20)' : (hot ? 'rgba(56,189,248,0.12)' : null));
+            labelIn(x + (cw - 0.08) / 2, y, S.mat[i][j] ? '停' : '∞',
+                    S.mat[i][j] ? '#34d399' : '#f87171', 'center', 11);
+        }
+    }
+    // D 行
+    const yd = y0 - n * rh - 0.16;
+    labelIn(x0 - 0.14, yd, 'D', '#f472b6', 'end', 11);
+    for (let j = 0; j < n; j++){
+        const x = x0 + j * cw;
+        wPoly([[x, yd - rh * 0.36], [x + cw - 0.08, yd - rh * 0.36],
+               [x + cw - 0.08, yd + rh * 0.36], [x, yd + rh * 0.36]],
+              '#f472b6', 1.6, 'rgba(244,114,182,0.14)');
+        labelIn(x + (cw - 0.08) / 2, yd, S.diag[j] ? '停' : '∞',
+                S.diag[j] ? '#34d399' : '#f87171', 'center', 11);
+    }
+    labelIn(x0 - 0.14, yd - 0.52, 'D = 与对角线**逐项相反**的判定', '#f472b6', 'start', 10);
+    roText([
+        ['停机问题：不存在能判定「任意程序在任意输入上是否停机」的程序', '#94a3b8', 'start', 0, 10],
+        ['H(Pᵢ, Tⱼ) = 程序 Pᵢ 在输入 Tⱼ 上是否停机（黄框是对角线 H(i, i)）',
+         '#facc15', 'start', 0, 11],
+        ['构造 D：在输入 Tᵢ 上，若 H(i, i) = 停 就让 D 死循环，否则让 D 停机 ⇒ D 与每一行都不同',
+         '#f472b6', 'start', 0, 12],
+        ['那 H(D, D) 该填什么？填「停」则 D 会死循环，填「∞」则 D 会停机 —— **两种都矛盾**',
+         '#f87171', 'start', 0, 10],
+    ]);
+}
+
+// 科学计数法（大数用）
+function sci(v){
+    if (v >= 1e300) return '天文数字';
+    if (v < 1e4) return String(Math.round(v * 100) / 100);
+    const e = Math.floor(Math.log10(v));
+    return (v / Math.pow(10, e)).toFixed(2) + '×10^' + e;
+}
+
+// ---- 7) P / NP 与增长率 ----
+function drawPnp(S){
+    const n = S.nn;                       // 参数名是 nn（不是 n）
+
+    const X0 = 1.40, X1 = 9.20, Y0 = 0.90, Y1 = 4.10;
+    const toX = v => X0 + (X1 - X0) * (v - S.nlo) / (S.nhi - S.nlo);
+    const toY = v => Y0 + (Y1 - Y0) * Math.max(0, Math.min(1,
+        (Math.log10(Math.max(1, v)) + 0.2) / (Math.log10(S.vmax) + 0.2)));
+    axesBox(X0, Y0, X1, Y1, '问题规模 n（纵轴是对数刻度）');
+    S.kinds.forEach((kind, i) => {
+        const col = S.colors[i];
+        const pts = [];
+        for (let j = 0; j <= 120; j++){
+            const nv = S.nlo + (S.nhi - S.nlo) * j / 120;
+            pts.push([toX(nv), toY(S.curves[i][j])]);
+        }
+        wPoly(pts, col, 2.2, null);
+    });
+    // 图例
+    S.kinds.forEach((kind, i) => {
+        const y = Y1 - 0.10 - i * 0.30;
+        labelIn(X0 + 0.20, y, '■ ' + kind, S.colors[i], 'start', 10);
+    });
+    // 当前 n 的竖线
+    wSeg(toX(n), Y0, toX(n), Y1, 'rgba(250,204,21,0.7)', 1.8, true);
+    labelIn(toX(n) + 0.08, Y1 - 0.10, 'n = ' + n, '#facc15', 'start', 9);
+    roText([
+        ['复杂度增长：纵轴是**对数刻度** —— 否则 n! 会把其它曲线全压成一条线', '#94a3b8', 'start', 0, 10],
+        ['n = ' + n + '      n² 需要 ' + sci(S.valsByN[3][n - 1]) + ' 次操作，'
+         + '2ⁿ 需要 ' + sci(S.valsByN[4][n - 1]) + ' 次', '#38bdf8', 'start', 0, 11],
+        ['n! 需要 ' + sci(S.valsByN[5][n - 1]) + ' 次 —— 增长最快的一类', '#f472b6', 'start', 0, 11],
+        ['P = 多项式时间可解（前四条）；NP = 多项式时间可**验证**；P ⊆ NP，是否 P = NP 仍未解',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
