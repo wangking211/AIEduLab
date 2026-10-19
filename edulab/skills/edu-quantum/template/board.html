@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>量子力学入门 · 交互学习</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+<style>
+    body { font-family: "PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
+    .katex { font-size: 1.02em; }
+    canvas { display:block; }
+    input[type=range] { -webkit-appearance:none; appearance:none; height:6px; border-radius:3px; background:#cbd5e1; outline:none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#4f46e5; cursor:pointer; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.3); }
+    .scroll-thin::-webkit-scrollbar { width:6px; }
+    .scroll-thin::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+<div class="flex h-screen overflow-hidden">
+    <!-- 左：题面 + 动态控制台 -->
+    <aside class="w-[30%] min-w-[300px] max-w-[420px] bg-white border-r border-slate-200 flex flex-col">
+        <div class="px-5 py-4 border-b border-slate-200">
+            <div class="text-[11px] uppercase tracking-wider text-indigo-500 font-bold mb-1">互动教学 · 题面</div>
+            <h1 id="prob-title" class="text-lg font-bold text-slate-900"></h1>
+        </div>
+        <div class="flex-1 overflow-y-auto scroll-thin px-5 py-4 text-sm leading-relaxed" id="prob-body"></div>
+        <div class="border-t border-slate-200 px-5 py-4 bg-slate-50">
+            <div class="text-[11px] uppercase tracking-wider text-teal-600 font-bold mb-3" id="console-title">动态控制台</div>
+            <!-- 参数滑块 -->
+            <div id="param-block" class="hidden">
+                <div class="flex justify-between text-xs text-slate-600 mb-1"><span id="param-label"></span><span id="param-val" class="font-mono font-bold text-teal-700"></span></div>
+                <input id="param-slider" type="range" class="w-full">
+                <div id="param-ticks" class="flex justify-between text-[10px] text-slate-400 mt-1"></div>
+            </div>
+            <!-- 读数 -->
+            <div id="readouts" class="mt-3 space-y-2 text-sm"></div>
+            <!-- 能量/功率条 -->
+            <div id="bar-block" class="hidden mt-4">
+                <div class="text-xs text-slate-600 mb-1" id="bar-label"></div>
+                <div class="h-5 w-full bg-slate-200 rounded-full overflow-hidden flex text-[10px] text-white font-bold">
+                    <div id="bar-seg1" class="h-full flex items-center justify-center" style="width:0%;background:#4f46e5"></div>
+                    <div id="bar-seg2" class="h-full flex items-center justify-center" style="width:0%;background:#0ea5e9"></div>
+                </div>
+                <div class="flex gap-4 text-[10px] text-slate-500 mt-1" id="bar-legend"></div>
+            </div>
+            <!-- 定值指示器 -->
+            <div id="constant-block" class="hidden mt-4 border-t border-slate-200 pt-3">
+                <span class="text-[11px] text-slate-500">定值指示</span>
+                <span id="constant-val" class="ml-auto font-bold text-emerald-700"></span>
+            </div>
+        </div>
+    </aside>
+    <!-- 中：分步解析 -->
+    <main class="flex-1 bg-white overflow-y-auto scroll-thin px-6 py-5">
+        <div class="text-[11px] uppercase tracking-wider text-indigo-500 font-bold mb-2">分步解析</div>
+        <div id="solution-body" class="space-y-5"></div>
+    </main>
+    <!-- 右：数学画板 -->
+    <section class="w-[36%] min-w-[340px] bg-slate-900 flex flex-col">
+        <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+            <div class="text-[11px] uppercase tracking-wider text-indigo-400 font-bold">量子力学</div>
+            <div id="scene-caption" class="text-xs text-slate-400"></div>
+        </div>
+        <div class="flex-1 relative"><canvas id="math-canvas" class="absolute inset-0"></canvas></div>
+        <div id="legend" class="px-4 py-3 border-t border-slate-700 text-[11px] text-slate-300 space-y-1"></div>
+    </section>
+</div>
+
+<script type="application/json" id="lesson-data">__LESSON_DATA__</script>
+<script>
+"use strict";
+// ===================== 数据装载 =====================
+const DATA = JSON.parse(document.getElementById('lesson-data').textContent);
+const BOARD = DATA.board || {};
+const UI = Object.assign({
+    consoleTitle: "动态控制台", solutionTitle: "详细解析", current: "当前:"
+}, (DATA.lesson && DATA.lesson.ui) || {});
+
+const COLORS = {
+    force:'#f87171', effort:'#38bdf8', aux:'#94a3b8', label:'#e2e8f0',
+    obj:'#a78bfa', load:'#fbbf24', rope:'#e2e8f0', water:'#38bdf8',
+    water2:'#0ea5e9', sponge:'#34d399', ground:'#64748b', metal:'#cbd5e1',
+    wire:'#94a3b8', current:'#22d3ee', battery:'#facc15', bulb:'#fde047',
+    meter:'#f472b6', arrow:'#f87171', good:'#34d399', bad:'#f87171'
+};
+const col = c => (c && COLORS[c]) ? COLORS[c] : (c || '#e2e8f0');
+
+// ===================== 安全表达式求值 =====================
+// 表达式由 generate.py 生成（可信本地内容）：可用 @param 名(或别名 p)、+ - * / ^、
+// 及 sqrt/abs/min/max/pow/sign/PI 等白名单函数。
+const MATHENV = {sqrt:Math.sqrt, abs:Math.abs, min:Math.min, max:Math.max,
+    pow:Math.pow, sign:Math.sign, floor:Math.floor, ceil:Math.ceil, PI:Math.PI, E:Math.E,
+    sin:Math.sin, cos:Math.cos, tan:Math.tan, asin:Math.asin, acos:Math.acos, atan:Math.atan, exp:Math.exp, log:Math.log};
+const _exprCache = {};
+function evalExpr(expr, env){
+    if (typeof expr !== 'string') return expr;
+    const scope = Object.assign({}, MATHENV, env);
+    const names = Object.keys(scope);
+    const key = expr + '|' + names.join(',');
+    let fn = _exprCache[key];
+    if (!fn){ try { fn = Function(...names, '"use strict";return ('+expr.replace(/\^/g,'**')+');'); }
+              catch(e){ fn = () => NaN; } _exprCache[key] = fn; }
+    try { const v = fn(...names.map(n=>scope[n])); return (typeof v==='number') ? v : NaN; }
+    catch(e){ return NaN; }
+}
+const resolveVal = (v, env) => (typeof v === 'string') ? evalExpr(v, env) : v;
+function fmt(x, d=2){
+    if (x === null || x === undefined || !isFinite(x)) return '—';
+    let s = x.toFixed(d);
+    if (s === '-' + (0).toFixed(d)) s = (0).toFixed(d);
+    return s;
+}
+
+// ===================== 画布与世界坐标 =====================
+const canvas = document.getElementById('math-canvas');
+const ctx = canvas.getContext('2d');
+let cssW = 0, cssH = 0, sc = 1, offX = 0, offY = 0;
+const view = BOARD.view || {xRange:[0,10], yRange:[0,6]};
+const SX = x => offX + x*sc;
+const SY = y => offY - y*sc;
+
+function resizeCanvas(){
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+    canvas.style.width = rect.width+'px'; canvas.style.height = rect.height+'px';
+    ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr,dpr);
+    cssW = rect.width; cssH = rect.height;
+    const spanX = view.xRange[1]-view.xRange[0], spanY = view.yRange[1]-view.yRange[0];
+    sc = Math.min((rect.width-30)/spanX, (rect.height-30)/spanY);
+    offX = rect.width/2 - ((view.xRange[0]+view.xRange[1])/2)*sc;
+    offY = rect.height/2 + ((view.yRange[0]+view.yRange[1])/2)*sc;
+    render();
+}
+
+// ===================== 绘制基元 =====================
+function arrow(x1,y1,x2,y2,color,lw=2.5,label=null){
+    const px1=SX(x1), py1=SY(y1), px2=SX(x2), py2=SY(y2);
+    const dx=px2-px1, dy=py2-py1, L=Math.hypot(dx,dy);
+    if (L < 4) return;
+    const ang=Math.atan2(dy,dx), hl=Math.min(10, L*0.45);
+    ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=lw;
+    ctx.beginPath(); ctx.moveTo(px1,py1); ctx.lineTo(px2-hl*Math.cos(ang), py2-hl*Math.sin(ang)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px2,py2);
+    ctx.lineTo(px2-hl*Math.cos(ang-0.42), py2-hl*Math.sin(ang-0.42));
+    ctx.lineTo(px2-hl*Math.cos(ang+0.42), py2-hl*Math.sin(ang+0.42));
+    ctx.closePath(); ctx.fill();
+    if (label){
+        ctx.font='bold 12px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        const mx=(px1+px2)/2, my=(py1+py2)/2;
+        const ox=Math.cos(ang+Math.PI/2)*13, oy=Math.sin(ang+Math.PI/2)*13;
+        ctx.fillText(label, mx+ox, my+oy);
+    }
+}
+function label(x,y,text,color='#e2e8f0',align='center',size=12){
+    ctx.font='bold '+size+'px system-ui'; ctx.textAlign=align; ctx.textBaseline='middle';
+    ctx.fillStyle=color; ctx.fillText(text, SX(x), SY(y));
+}
+function dashLine(x1,y1,x2,y2,color='#94a3b8',lw=1.2){
+    ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(SX(x1),SY(y1)); ctx.lineTo(SX(x2),SY(y2)); ctx.stroke();
+    ctx.setLineDash([]);
+}
+function rectBox(x,y,w,h,fill,stroke=null,lw=1.5){
+    ctx.fillStyle=fill;
+    ctx.fillRect(SX(x), SY(y+h), w*sc, h*sc);
+    if (stroke){ ctx.strokeStyle=stroke; ctx.lineWidth=lw; ctx.strokeRect(SX(x), SY(y+h), w*sc, h*sc); }
+}
+function groundLine(y, x0, x1, color='#64748b'){
+    ctx.strokeStyle=color; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.moveTo(SX(x0),SY(y)); ctx.lineTo(SX(x1),SY(y)); ctx.stroke();
+    ctx.lineWidth=1.2;
+    for (let x=x0; x<x1; x+=0.28){
+        ctx.beginPath(); ctx.moveTo(SX(x),SY(y)); ctx.lineTo(SX(x)-6,SY(y)+8); ctx.stroke();
+    }
+}
+// 标尺线（标注长度 L 的辅助线：两端短横 + 虚线 + 中点标签）
+function dimLine(x1,y1,x2,y2,text,color='#94a3b8'){
+    dashLine(x1,y1,x2,y2,color);
+    ctx.strokeStyle=color; ctx.lineWidth=1.5;
+    const nx=(y2===y1)?0:0, ny=(x2===x1)?0:0;
+    ctx.beginPath(); ctx.moveTo(SX(x1),SY(y1)-5+ny); ctx.lineTo(SX(x1),SY(y1)+5+ny); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(SX(x2),SY(y2)-5); ctx.lineTo(SX(x2),SY(y2)+5); ctx.stroke();
+    label((x1+x2)/2, (y1+y2)/2 + 0.22, text, color);
+}
+
+// ===================== 场景状态 =====================
+let PARAM_NAME = null;
+function buildScene(pval){
+    const env = {p: pval};
+    if (PARAM_NAME) env[PARAM_NAME] = pval;
+    (BOARD.scalars||[]).forEach(s=>{ env[s.name] = evalExpr(s.expr, env); });
+    const sc2 = BOARD.scene || {};
+    const out = {kind: sc2.kind, env, raw:{}};
+    // 把场景各数值字段（可为表达式）按 env 解析
+    for (const k in sc2){
+        if (k === 'kind') continue;
+        const v = sc2[k];
+        out.raw[k] = v;
+        if (typeof v === 'number') out[k] = v;
+        else if (typeof v === 'string'){ const v2 = evalExpr(v, env); out[k] = isFinite(v2) ? v2 : v; }
+        else if (Array.isArray(v)) out[k] = v.map(z => (typeof z==='string')? evalExpr(z,env) : z);
+        else out[k] = v;
+    }
+    return out;
+}
+// ===================== 量子力学场景 =====================
+let animT = 0;
+
+function labelIn(x, y, text, color, align, size){
+    size = size || 12;
+    const x0 = view.xRange[0], x1 = view.xRange[1];
+    const pad = 0.06;
+    const avail = (x1 - x0) - 2 * pad;
+    let s = size;
+    const meas = () => { ctx.font = 'bold ' + s + 'px system-ui';
+                         return ctx.measureText(String(text)).width / (sc || 1); };
+    let w = meas();
+    while (w > avail && s > 7){ s -= 0.5; w = meas(); }
+    let a = x;
+    if (align === 'end')         a = Math.max(x, x0 + w + pad);
+    else if (align === 'center') a = Math.max(x0 + w/2 + pad, Math.min(x, x1 - w/2 - pad));
+    else                         a = Math.max(x0 + pad, Math.min(x, x1 - w - pad));
+    label(a, y, text, color, align, s);
+}
+function ws(x, y){ return [SX(x), SY(y)]; }
+function wSeg(x1, y1, x2, y2, col, lw, dash){
+    if (dash) ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 1.4;
+    const a = ws(x1, y1), b = ws(x2, y2);
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    if (dash) ctx.setLineDash([]);
+}
+function wPoly(pts, col, lw, fill){
+    if (pts.length < 2) return;
+    if (fill){ ctx.fillStyle = fill; ctx.beginPath();
+        pts.forEach((p,i)=>{ const q = ws(p[0], p[1]); i===0?ctx.moveTo(q[0],q[1]):ctx.lineTo(q[0],q[1]); });
+        if (pts.length > 2) ctx.closePath(); ctx.fill(); }
+    ctx.strokeStyle = col; ctx.lineWidth = lw || 2;
+    ctx.beginPath();
+    pts.forEach((p,i)=>{ const q = ws(p[0], p[1]); i===0?ctx.moveTo(q[0],q[1]):ctx.lineTo(q[0],q[1]); });
+    ctx.stroke();
+}
+function wDot(x, y, col, r){
+    const q = ws(x, y);
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(q[0], q[1], r || 5.5, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.2; ctx.stroke();
+}
+function wArrow(x1, y1, x2, y2, col, lw){
+    const a = ws(x1, y1), b = ws(x2, y2);
+    arrow(a[0], a[1], b[0], b[1], col, lw || 2.4, null);
+}
+function roText(lines){
+    const y0 = 5.72;
+    lines.forEach((l, i) => labelIn(0.20 + (l[3] || 0), y0 - i * 0.40,
+                                   l[0], l[1], l[2] || 'start', l[4] || 11));
+}
+function axesBox(x0, y0, x1, y1, xlab, ylab){
+    wSeg(x0, y0, x1, y0, 'rgba(148,163,184,0.85)', 1.6);
+    wSeg(x0, y0, x0, y1, 'rgba(148,163,184,0.85)', 1.6);
+    if (xlab) labelIn((x0 + x1) / 2, y0 - 0.30, xlab, '#64748b', 'center', 10);
+    if (ylab) labelIn(x0 - 0.14, y1 + 0.10, ylab, '#64748b', 'end', 10);
+}
+
+// ---- 1) 无限深势阱 ----
+function drawWell(S){
+    const n = S.nq;
+    const X0 = 1.35, X1 = 8.85, Y0 = 0.85, Y1 = 4.15;
+    const emax = S.emax;                       // 显示到第 6 级
+    const toY = e => Y0 + (Y1 - Y0) * e / emax;
+    axesBox(X0, Y0, X1, Y1, '位置 x（阱宽 L）', 'E');
+    // 势阱壁
+    wSeg(X0, Y0, X0, Y1, '#f87171', 3.0);
+    wSeg(X1, Y0, X1, Y1, '#f87171', 3.0);
+    labelIn(X0 - 0.10, Y1 - 0.12, '∞', '#f87171', 'end', 13);
+    labelIn(X1 + 0.10, Y1 - 0.12, '∞', '#f87171', 'start', 13);
+    // 能级线
+    for (let k = 1; k <= 6; k++){
+        const y = toY(S.levels[k - 1]);
+        wSeg(X0, y, X1, y, k === n ? '#facc15' : 'rgba(148,163,184,0.45)',
+             k === n ? 2.4 : 1.2, k !== n);
+        labelIn(X1 - 0.08, y + 0.14, 'n=' + k, k === n ? '#facc15' : '#64748b', 'end', 9);
+    }
+    // 当前能级的 ψ 与 |ψ|²（以能级线为基线放大画）
+    const base = toY(S.levels[n - 1]);
+    const amp = 0.55;
+    const psi = [], pr = [];
+    for (let i = 0; i <= 160; i++){
+        const t = i / 160;
+        const xx = X0 + (X1 - X0) * t;
+        psi.push([xx, base + amp * S.psiAll[n - 1][i]]);
+        pr.push([xx, base + amp * 0.9 * S.probAll[n - 1][i]]);
+    }
+    wPoly(pr, 'rgba(52,211,153,0.75)', 1.8, null);
+    wPoly(psi, '#38bdf8', 2.6, null);
+    wSeg(X0, base, X1, base, 'rgba(250,204,21,0.8)', 2.0);
+    labelIn(X0 + 0.12, base + 0.30, '蓝 = ψₙ(x)，绿 = |ψₙ(x)|²（基线为该能级）',
+            '#94a3b8', 'start', 9);
+    roText([
+        ['无限深势阱：两端势无穷大，波函数在壁上必须为 0（边界条件）', '#94a3b8', 'start', 0, 10],
+        ['n = ' + n + '      Eₙ = n²h²/(8mL²) = ' + S.levels[n - 1].toFixed(4)
+         + ' eV（E₁ = ' + S.levels[0].toFixed(4) + ' eV）', '#facc15', 'start', 0, 12],
+        ['Eₙ / E₁ = n² = ' + (n * n) + '      波函数节点数 = n − 1 = ' + (n - 1),
+         '#38bdf8', 'start', 0, 11],
+        ['能量按 n² 增长（不是等间距）—— 阱越窄，能级越高、间隔越大', '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 2) 德布罗意波长 ----
+function drawDebroglie(S){
+    const E = S.ekin;
+    const X0 = 1.45, X1 = 9.20, Y0 = 0.90, Y1 = 4.10;
+    const lo = S.elo, hi = S.ehi;
+    const toX = v => X0 + (X1 - X0) * (v - lo) / (hi - lo);
+    const toY = l => Y0 + (Y1 - Y0) * Math.max(0, Math.min(1, l / S.lmax));
+    axesBox(X0, Y0, X1, Y1, '动能 E（eV）', 'λ（nm）');
+    // λ ∝ 1/√E 曲线
+    const pts = [];
+    for (let i = 0; i <= 200; i++){
+        const v = lo + (hi - lo) * i / 200;
+        pts.push([toX(v), toY(S.lamAll[i])]);
+    }
+    wPoly(pts, '#38bdf8', 2.8, null);
+    // 当前点
+    const cx = toX(E), cy = toY(S.lamNow);
+    wSeg(X0, cy, cx, cy, 'rgba(250,204,21,0.55)', 1.2, true);
+    wSeg(cx, Y0, cx, cy, 'rgba(250,204,21,0.55)', 1.2, true);
+    wDot(cx, cy, '#facc15', 6.5);
+    labelIn(cx + 0.12, cy + 0.24, 'λ = ' + S.lamNow.toFixed(4) + ' nm', '#facc15', 'start', 10);
+    // 参照尺度
+    [['原子直径 ≈ 0.1 nm', 0.1], ['晶格间距 ≈ 0.3 nm', 0.3]].forEach((r, i) => {
+        const y = toY(r[1]);
+        wSeg(X0, y, X1, y, 'rgba(52,211,153,0.5)', 1.2, true);
+        labelIn(X1 - 0.08, y + 0.16, r[0], '#34d399', 'end', 9);
+    });
+    roText([
+        ['德布罗意关系 λ = h/p：实物粒子也有波长，只是宏观上小到测不出', '#94a3b8', 'start', 0, 10],
+        ['电子动能 E = ' + E.toFixed(1) + ' eV      λ = h/√(2mE) = ' + S.lamNow.toFixed(5)
+         + ' nm', '#38bdf8', 'start', 0, 12],
+        ['λ ∝ 1/√E：动能增大 4 倍，波长只剩一半（曲线是「变缓的下降」）', '#facc15', 'start', 0, 11],
+        ['当 λ 与原子间距同量级（约 0.1~0.3 nm）时就能发生衍射 —— 这是电子显微镜的原理',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 3) 不确定性原理 ----
+function drawUncert(S){
+    const sx = S.sigx;
+    const X0 = 1.35, X1 = 9.20, Y0 = 0.90, Y1 = 4.10;
+    // 上半：位置空间的高斯波包
+    const midY = (Y0 + Y1) / 2;
+    const toX = v => X0 + (X1 - X0) * (v + S.xspan) / (2 * S.xspan);
+    axesBox(X0, Y0, X1, Y1, '位置 x（nm）', '|ψ|²');
+    wSeg(X0, midY, X1, midY, 'rgba(148,163,184,0.5)', 1.0, true);
+    const pts = [];
+    for (let i = 0; i <= 240; i++){
+        const xx = -S.xspan + 2 * S.xspan * i / 240;
+        const g = Math.exp(-xx * xx / (2 * sx * sx));
+        pts.push([toX(xx), midY + (Y1 - midY) * 0.85 * g]);
+    }
+    wPoly(pts, '#38bdf8', 2.8, null);
+    // Δx 标注
+    const x1 = toX(-sx), x2 = toX(sx);
+    wSeg(x1, midY + (Y1 - midY) * 0.85 * Math.exp(-0.5) + 0.14, x2,
+         midY + (Y1 - midY) * 0.85 * Math.exp(-0.5) + 0.14, '#facc15', 2.2);
+    labelIn((x1 + x2) / 2, midY + (Y1 - midY) * 0.85 * Math.exp(-0.5) + 0.40,
+            'Δx = ' + sx.toFixed(3) + ' nm', '#facc15', 'center', 10);
+    labelIn(X0 + 0.10, Y1 - 0.10, '高斯波包（取到不确定关系等号的那种）', '#94a3b8', 'start', 9);
+    // 右下：Δx–Δp 的双曲线约束
+    const bx0 = X0, bx1 = X1, by0 = Y0 + 0.06, by1 = midY - 0.20;
+    const toBX = v => bx0 + (bx1 - bx0) * Math.min(1, v / S.dxmax);
+    const toBY = v => by0 + (by1 - by0) * Math.min(1, v / S.dpmax);
+    wSeg(bx0, by0, bx1, by0, 'rgba(148,163,184,0.7)', 1.4);
+    wSeg(bx0, by0, bx0, by1, 'rgba(148,163,184,0.7)', 1.4);
+    const hyp = [];
+    for (let i = 1; i <= 160; i++){
+        const dxv = S.dxmax * i / 160;
+        hyp.push([toBX(dxv), toBY(S.hbar2 / (2 * dxv))]);
+    }
+    wPoly(hyp, '#f87171', 2.4, null);
+    const px = toBX(sx), py = toBY(S.dpNow);
+    wDot(px, py, '#facc15', 6.0);
+    labelIn(bx1 - 0.08, by1 - 0.10, '红线：Δp = ħ/(2Δx)', '#f87171', 'end', 9);
+    labelIn(bx0 + 0.10, by0 + 0.14, 'Δx →', '#64748b', 'start', 9);
+    roText([
+        ['不确定性原理 Δx·Δp ≥ ħ/2：不是仪器不够好，而是**原理上**不可能同时确定', '#94a3b8', 'start', 0, 10],
+        ['σ = ' + sx.toFixed(3) + ' nm      Δx = ' + sx.toFixed(4) + ' nm，Δp = '
+         + S.dpNow.toExponential(3) + ' kg·m/s', '#38bdf8', 'start', 0, 11],
+        ['Δx·Δp = ' + S.prod.toExponential(4) + ' = ħ/2 = ' + S.hbar2.toExponential(4)
+         + '（高斯波包**取到等号**）', '#facc15', 'start', 0, 12],
+        ['把波包压窄（Δx 小）就必然让动量更不确定（Δp 大）—— 黄点只能在红线上滑动',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 4) 谐振子 ----
+function drawHarmonic(S){
+    const w = S.om;
+    const X0 = 1.40, X1 = 9.20, Y0 = 0.90, Y1 = 4.10;
+    const toY = e => Y0 + (Y1 - Y0) * e / S.emax;
+    axesBox(X0, Y0, X1, Y1, '位置 x', 'E');
+    // 抛物势
+    const pot = [];
+    for (let i = 0; i <= 200; i++){
+        const t = (i / 200) * 2 - 1;                 // −1 … 1
+        pot.push([X0 + (X1 - X0) * (i / 200), Y0 + (Y1 - Y0) * Math.min(1, t * t * 0.92)]);
+    }
+    wPoly(pot, 'rgba(56,189,248,0.8)', 2.6, null);
+    labelIn((X0 + X1) / 2, Y1 - 0.12, 'V(x) = ½mω²x²', '#38bdf8', 'center', 10);
+    // 能级（等间距）
+    for (let k = 0; k <= S.nmax; k++){
+        const y = toY(S.levels[k]);
+        wSeg(X0 + 0.30, y, X1 - 0.30, y, k === 0 ? '#34d399' : '#facc15',
+             k === 0 ? 2.6 : 1.8);
+        labelIn(X1 - 0.24, y + 0.13, 'n=' + k, k === 0 ? '#34d399' : '#facc15', 'end', 9);
+    }
+    // 间距标注
+    if (S.nmax >= 1){
+        const y0 = toY(S.levels[0]), y1 = toY(S.levels[1]);
+        wSeg(X0 + 0.14, y0, X0 + 0.14, y1, '#a78bfa', 2.0);
+        labelIn(X0 + 0.22, (y0 + y1) / 2, 'ħω', '#a78bfa', 'start', 10);
+    }
+    labelIn(X0 + 0.10, Y1 - 0.44, '绿线 = 零点能 ħω/2（n = 0 也有能量！）', '#34d399', 'start', 9);
+    roText([
+        ['一维谐振子：能级 Eₙ = (n + ½)ħω —— **等间距**，与无限深势阱的 n² 完全不同',
+         '#94a3b8', 'start', 0, 10],
+        ['ħω = ' + S.hwEv.toFixed(4) + ' eV      零点能 E₀ = ħω/2 = '
+         + S.zeroEv.toFixed(4) + ' eV', '#34d399', 'start', 0, 12],
+        ['Eₙ = ' + S.levels[0].toFixed(4) + '、' + S.levels[1].toFixed(4) + '、'
+         + S.levels[2].toFixed(4) + ' …（间距恒为 ' + S.hwEv.toFixed(4) + '）',
+         '#facc15', 'start', 0, 11],
+        ['零点能意味着「完全静止」不可能：把粒子定在势阱底会违反不确定性原理',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 5) 隧道效应 ----
+function drawTunnel(S){
+    const ratio = S.eratio;                        // E / V₀
+    const ei = Math.max(0, Math.min(S.TArr.length - 1, Math.round(S.ei) - 1));
+    const Tv = S.TArr[ei], kappaA = S.kappaArr[ei];
+    const X0 = 1.40, X1 = 9.20, Y0 = 0.90, Y1 = 4.10;
+    // 上半：势垒与波
+    const midY = (Y0 + Y1) / 2;
+    const bx0 = X0 + (X1 - X0) * 0.36, bx1 = X0 + (X1 - X0) * 0.56;
+    const top = midY + 0.95, base = midY - 0.55;
+    wSeg(X0, base, bx0, base, 'rgba(148,163,184,0.8)', 1.6);
+    wSeg(bx0, base, bx0, top, '#f87171', 2.6);
+    wSeg(bx0, top, bx1, top, '#f87171', 2.6);
+    wSeg(bx1, top, bx1, base, '#f87171', 2.6);
+    wSeg(bx1, base, X1, base, 'rgba(148,163,184,0.8)', 1.6);
+    labelIn((bx0 + bx1) / 2, top + 0.20, 'V₀（势垒）', '#f87171', 'center', 10);
+    labelIn(X0 + 0.10, base + 0.22, '入射波', '#38bdf8', 'start', 9);
+    labelIn(X1 - 0.10, base + 0.22, '透射波', '#34d399', 'end', 9);
+    // 入射/衰减/透射的示意包络
+    const pts = [];
+    const kappa = kappaA / Math.max(1e-9, (bx1 - bx0));
+    for (let i = 0; i <= 200; i++){
+        const t = i / 200;
+        const xx = X0 + (X1 - X0) * t;
+        let a = 1.0;
+        if (xx > bx0 && xx < bx1) a = Math.exp(-kappa * (xx - bx0));
+        else if (xx >= bx1) a = Math.exp(-kappaA) * (0.4 + 0.6 * Math.sqrt(Tv));
+        pts.push([xx, base + 0.42 * a * (0.5 + 0.5 * Math.abs(Math.sin(t * 22)))]);
+    }
+    wPoly(pts, '#facc15', 2.2, null);
+    // 下半：T(E) 曲线
+    const cy0 = Y0 + 0.08, cy1 = midY - 0.20;
+    const toX = v => X0 + (X1 - X0) * v / S.emaxR;
+    const toY = v => cy0 + (cy1 - cy0) * Math.max(0, Math.min(1, v));
+    wSeg(X0, cy0, X1, cy0, 'rgba(148,163,184,0.7)', 1.4);
+    wSeg(X0, cy0, X0, cy1, 'rgba(148,163,184,0.7)', 1.4);
+    const curve = [];
+    for (let i = 0; i <= 200; i++){
+        const r = S.emaxR * i / 200;
+        curve.push([toX(r), toY(S.tAll[i])]);
+    }
+    wPoly(curve, '#34d399', 2.6, null);
+    const px = toX(ratio), py = toY(Tv);
+    wDot(px, py, '#facc15', 6.0);
+    labelIn(px + 0.10, py + 0.22, 'T = ' + Tv.toExponential(3), '#facc15', 'start', 10);
+    // E = V₀ 参考线
+    wSeg(toX(1), cy0, toX(1), cy1, 'rgba(248,113,113,0.7)', 1.6, true);
+    labelIn(toX(1) + 0.06, cy1 - 0.10, 'E = V₀', '#f87171', 'start', 9);
+    labelIn(X0 + 0.10, cy1 - 0.10, '透射系数 T(E)', '#34d399', 'start', 9);
+    roText([
+        ['隧道效应：E < V₀ 时经典上「过不去」，量子上却有非零的透射概率', '#94a3b8', 'start', 0, 10],
+        ['E/V₀ = ' + ratio.toFixed(2) + '      κa = ' + kappaA.toFixed(3)
+         + '      T = ' + Tv.toExponential(4), '#38bdf8', 'start', 0, 12],
+        ['势垒内波函数按 e^(−κx) 衰减（图上黄线的凹陷）；κ = √(2m(V₀−E))/ħ',
+         '#facc15', 'start', 0, 11],
+        ['注意 E > V₀ 时 T 也**不是 1** —— 量子反射；且 T 随 E 振荡（曲线的锯齿段）',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 6) 有限深势阱 ----
+function drawFiniteWell(S){
+    const di = Math.max(0, Math.min(S.levelsAll.length - 1, Math.round(S.di) - 1));
+    const V0 = S.depth;                            // eV
+    const levels = S.levelsAll[di], count = S.countAll[di], psi = S.psiAll[di];
+    const X0 = 1.35, X1 = 8.90, Y0 = 0.85, Y1 = 4.15;
+    const toY = e => Y0 + (Y1 - Y0) * Math.min(1, e / (V0 * 1.05));
+    axesBox(X0, Y0, X1, Y1, '位置 x', 'E');
+    // 势阱形状
+    const wx0 = X0 + (X1 - X0) * 0.32, wx1 = X0 + (X1 - X0) * 0.68;
+    const yV = toY(V0);
+    wSeg(X0, yV, wx0, yV, '#f87171', 2.8);
+    wSeg(wx0, yV, wx0, Y0, '#f87171', 2.8);
+    wSeg(wx0, Y0, wx1, Y0, '#f87171', 2.8);
+    wSeg(wx1, Y0, wx1, yV, '#f87171', 2.8);
+    wSeg(wx1, yV, X1, yV, '#f87171', 2.8);
+    labelIn((wx0 + wx1) / 2, Y0 + 0.22, '阱内 V = 0', '#f87171', 'center', 9);
+    labelIn(X0 + 0.10, yV + 0.20, 'V₀ = ' + V0.toFixed(1) + ' eV', '#f87171', 'start', 10);
+    // 能级线
+    levels.forEach((e, k) => {
+        const y = toY(e);
+        wSeg(wx0 - 0.20, y, wx1 + 0.20, y, '#facc15', 2.2);
+        labelIn(wx1 + 0.28, y + 0.13, 'E' + (k + 1) + ' = ' + e.toFixed(3) + ' eV',
+                '#facc15', 'start', 9);
+    });
+    // 基态波函数（示意：阱内正弦、阱外指数衰减）
+    if (psi.length){
+        const base = toY(levels[0]);
+        const pts = [];
+        for (let i = 0; i <= 200; i++){
+            const t = i / 200;
+            const xx = X0 + (X1 - X0) * t;
+            pts.push([xx, base + 0.55 * psi[i]]);
+        }
+        wPoly(pts, '#38bdf8', 2.6, null);
+        labelIn(X0 + 0.10, base + 0.68, '基态波函数（阱外呈指数衰减 —— 有限阱特有）',
+                '#38bdf8', 'start', 9);
+    }
+    roText([
+        ['有限深势阱：阱外势有限，波函数会**渗出**阱外 —— 这是与无限深势阱的本质区别',
+         '#94a3b8', 'start', 0, 10],
+        ['阱深 V₀ = ' + V0.toFixed(1) + ' eV，宽 1 nm     束缚态个数 = ' + levels.length
+         + '（解析上界 ' + count + '）', '#38bdf8', 'start', 0, 12],
+        ['基态 E₁ = ' + (levels.length ? levels[0].toFixed(4) : '—')
+         + ' eV，比同宽无限深势阱的 ' + S.infE1.toFixed(4) + ' eV **更低**（比值 '
+         + (levels.length ? (levels[0] / S.infE1).toFixed(3) : '—') + '）', '#facc15', 'start', 0, 11],
+        ['能级由超越方程（偶态 k·tan(ka/2)=κ、奇态 −k·cot(ka/2)=κ）**数值解出**，不是查表',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+
+// ---- 7) 波包与色散 ----
+function drawWavepacket(S){
+    const wi = Math.max(0, Math.min(S.pAll.length - 1, Math.round(S.ti) - 1));
+    const t = S.tAll[wi];
+    const X0 = 1.35, X1 = 9.20, Y0 = 0.85, Y1 = 4.15;
+    const toX = v => X0 + (X1 - X0) * (v - S.xlo) / (S.xhi - S.xlo);
+    const toY = v => Y0 + (Y1 - Y0) * Math.min(1, v / S.pmax);
+    axesBox(X0, Y0, X1, Y1, '位置 x（nm）', '|ψ(x,t)|²');
+    // 参考时刻的波包（淡）
+    S.tRef.forEach((tr, i) => {
+        const pts = [];
+        for (let j = 0; j <= 220; j++){
+            const xx = S.xlo + (S.xhi - S.xlo) * j / 220;
+            pts.push([toX(xx), toY(S.pRef[i][j])]);
+        }
+        wPoly(pts, 'rgba(148,163,184,0.40)', 1.4, null);
+    });
+    // 当前时刻
+    const pts = [];
+    for (let j = 0; j <= 220; j++){
+        const xx = S.xlo + (S.xhi - S.xlo) * j / 220;
+        pts.push([toX(xx), toY(S.pAll[wi][j])]);
+    }
+    wPoly(pts, '#38bdf8', 2.8, null);
+    // Δx 标注
+    const cx = toX(S.centerAll[wi]);
+    wSeg(toX(S.centerAll[wi] - S.sigAll[wi]), Y0 + 0.14,
+         toX(S.centerAll[wi] + S.sigAll[wi]), Y0 + 0.14, '#facc15', 2.2);
+    labelIn(cx, Y0 + 0.38, 'σ(t) = ' + S.sigAll[wi].toFixed(3) + ' nm', '#facc15', 'center', 10);
+    labelIn(X0 + 0.10, Y1 - 0.10, '灰线 = 更早时刻的波包（对比展宽）', '#94a3b8', 'start', 9);
+    roText([
+        ['自由波包会**自己变宽**：不同动量成分跑得快慢不同，波包就散开了（量子色散）',
+         '#94a3b8', 'start', 0, 10],
+        ['t = ' + t.toExponential(2) + ' s      σ(t) = σ₀√(1+(ħt/2mσ₀²)²) = '
+         + S.sigAll[wi].toFixed(4) + ' nm（σ₀ = ' + S.sig0.toFixed(3) + '）', '#38bdf8', 'start', 0, 11],
+        ['波包中心以群速度 v = ħk₀/m = ' + S.speed.toExponential(3) + ' m/s 平移',
+         '#34d399', 'start', 0, 11],
+        ['峰值随时间下降但**面积恒为 1** —— 粒子没有消失，只是位置更不确定了',
+         '#64748b', 'start', 0, 10],
+    ]);
+}
+function render(){
+    ctx.clearRect(0,0,cssW,cssH);
+    const S = buildScene(curParam);
+    switch(S.kind){
+        case 'wellplot':    drawWell(S);       break;
+        case 'debroglie':   drawDebroglie(S);  break;
+        case 'uncert':      drawUncert(S);     break;
+        case 'harmonic':    drawHarmonic(S);   break;
+        case 'tunnel':      drawTunnel(S);     break;
+        case 'finitewell':  drawFiniteWell(S); break;
+        case 'wavepacket':  drawWavepacket(S); break;    }
+    updateReadouts(S);
+}
+
+// ===================== 读数 =====================
+function updateReadouts(S){
+    (BOARD.readouts||[]).forEach(r=>{
+        const el=document.getElementById('ro-'+r.id);
+        if (!el) return;
+        try{
+            if (r.type==='expr'){
+                const v=evalExpr(r.expr, S.env);
+                el.textContent=fmt(v, r.digits!=null?r.digits:2)+(r.unit?' '+r.unit:'');
+            } else if (r.type==='status'){
+                const v=evalExpr(r.expr, S.env), rhs=(r.rhs!=null?r.rhs:0), op=r.op||'>';
+                const ok = op==='<'? v<rhs-1e-9 : op==='>'? v>rhs+1e-9 : op==='=='? Math.abs(v-rhs)<1e-6 : v>rhs-1e-9;
+                el.textContent = ok?(r.okText||'满足'):(r.badText||'不满足');
+                el.style.color = ok?'#059669':'#dc2626';
+            }
+        }catch(e){ el.textContent='—'; }
+    });
+    // 能量/功率条
+    if (BOARD.bars){
+        const a=evalExpr(BOARD.bars.a.expr, S.env), b=evalExpr(BOARD.bars.b.expr, S.env);
+        const A=isFinite(a)&&a>0?a:0, B=isFinite(b)&&b>0?b:0, T=A+B||1;
+        document.getElementById('bar-seg1').style.width=(A/T*100)+'%';
+        document.getElementById('bar-seg2').style.width=(B/T*100)+'%';
+        document.getElementById('bar-seg1').textContent=fmt(A,1);
+        document.getElementById('bar-seg2').textContent=fmt(B,1);
+    }
+}
+
+// ===================== 控制台构建 =====================
+function renderKatex(el){ if (typeof renderMathInElement!=='undefined') renderMathInElement(el,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],throwOnError:false}); }
+let curParam = BOARD.param ? (BOARD.param.value!==undefined?BOARD.param.value:BOARD.param.min) : 0;
+function buildConsole(){
+    document.getElementById('prob-title').textContent=(DATA.lesson&&DATA.lesson.title)||'';
+    document.getElementById('prob-body').innerHTML=(DATA.lesson&&DATA.lesson.problem)||'';
+    document.getElementById('scene-caption').textContent=(BOARD.scene&&BOARD.scene.caption)||'';
+    const p=BOARD.param;
+    if (p){
+        document.getElementById('param-block').classList.remove('hidden');
+        document.getElementById('param-label').innerHTML=(p.label||p.name)+' :';
+        const s=document.getElementById('param-slider');
+        s.min=p.min; s.max=p.max; s.step=p.step||0.5; s.value=curParam;
+        document.getElementById('param-ticks').innerHTML=(p.ticks||[`${p.min}${p.unit||''}`,`${p.max}${p.unit||''}`]).map(t=>`<span>${t}</span>`).join('');
+        s.addEventListener('input', ()=>{ curParam=parseFloat(s.value); syncParamVal(); render(); });
+        syncParamVal();
+    }
+    document.getElementById('readouts').innerHTML=(BOARD.readouts||[]).map(r=>{
+        if (r.highlight) return `<div class="flex justify-between items-center pt-1"><span class="text-slate-800 font-semibold">${r.label}:</span><span id="ro-${r.id}" class="text-base font-bold bg-teal-50 text-teal-700 px-3 py-1 rounded-lg border border-teal-200">—</span></div>`;
+        return `<div class="flex justify-between border-b border-dashed border-slate-200 pb-1"><span>${r.label}:</span><span id="ro-${r.id}" class="font-bold" style="color:${r.color?col(r.color):'#0f172a'}">—</span></div>`;
+    }).join('');
+    if (BOARD.bars){
+        document.getElementById('bar-block').classList.remove('hidden');
+        document.getElementById('bar-label').textContent=BOARD.bars.label||'';
+        document.getElementById('bar-legend').innerHTML=
+            `<span><span class="inline-block w-2 h-2 rounded-sm" style="background:#4f46e5"></span> ${BOARD.bars.a.label}</span>`+
+            `<span><span class="inline-block w-2 h-2 rounded-sm" style="background:#0ea5e9"></span> ${BOARD.bars.b.label}</span>`;
+    }
+    if (BOARD.constant){ document.getElementById('constant-block').classList.remove('hidden');
+        document.getElementById('constant-val').innerHTML='≡ '+(BOARD.constant.label||''); }
+    const legend=document.getElementById('legend'); const items=[];
+    (BOARD.legend||[]).forEach(it=> items.push(`<div class="flex items-center gap-2"><span class="w-3 h-3 inline-block rounded" style="background:${col(it.color)}"></span> ${it.text}</div>`));
+    legend.innerHTML=items.join('');
+    document.getElementById('solution-body').innerHTML=(DATA.steps||[]).map((st,i)=>{
+        const no=String(i+1).padStart(2,'0');
+        return `<div class="${i>0?'border-t border-slate-100 pt-5':''}">
+            <div class="flex items-start gap-4 mb-3">
+                <span class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold font-mono text-sm flex-shrink-0">${no}</span>
+                <h3 class="text-base font-bold text-slate-900 pt-0.5">${st.title||''}</h3>
+            </div>
+            <div class="prose max-w-none text-slate-700 leading-relaxed text-sm space-y-2">${st.content||''}</div>
+        </div>`;
+    }).join('');
+    renderKatex(document.body);
+}
+function syncParamVal(){ document.getElementById('param-val').textContent = fmt(curParam,2)+((BOARD.param&&BOARD.param.unit)||''); }
+
+// ===================== 主循环 =====================
+function loop(now){ animT = now/1000; render(); requestAnimationFrame(loop); }
+window.addEventListener('resize', resizeCanvas);
+PARAM_NAME = (BOARD.param && /^[A-Za-z_$][\w$]*$/.test(BOARD.param.name||'')) ? BOARD.param.name : null;
+buildConsole();
+resizeCanvas();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

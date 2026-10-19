@@ -284,6 +284,16 @@
   "lln.html": "b96e7b32d002aee3f3dca965d81e2787b634c378499c7340bc75b37e14c2b418",
   "normal.html": "6dddfab369ce55c37467a75870f6c07c53960c816c4244a3836081ed428b8ff3"
  },
+ "edu-quantum": {
+  "debroglie.html": "cf51de06f889a98fa4ed80bf7816c242806fb74bcb8f4f08a6c391a934739745",
+  "finite_well.html": "97b42dc0a167e944a8d95bfe658cf45c7b9d80d5eb05d208f2c0b0298edff4ac",
+  "harmonic.html": "7d918d8876dc22718b85195146e0433d60103f96b7028d67f64466a6f78b3713",
+  "index.html": "f3daccaaf801fc40a8578ea7253eb6883cbe772cf6b896d35bc286a6aeb36a39",
+  "tunneling.html": "cee4b1575bb7e855115d6eb04c5d582eeed982840309a69362adfbee9a65665c",
+  "uncertainty.html": "6ad1ad1c54a6b9628b9699f4861b4cbfb19e5605825db8b9e54254affe7afdcc",
+  "wavepacket.html": "007ec0a3394e0ea8d0fbf9347cd475d29a9b4a8eef685ef7c64321776cde9d73",
+  "well.html": "33bfd96c07b905d7f563cc904724758f3df03231b025111db1e2d72a9a9821a1"
+ },
  "edu-signals": {
   "convolution.html": "9883774798a27d9038a5504322eba512a16afaed4f01a58feacbe9226c651e39",
   "discrete.html": "76082471d4bf8857c4bb88ae563fabd33c5fc5b59cbd57a9def4c171b349b82f",
