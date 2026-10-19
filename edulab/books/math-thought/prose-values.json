@@ -72,5 +72,13 @@
   "tm_steps": "20",
   "tm_syms": "4",
   "uni_bits": "5"
+ },
+ "ch09": {
+  "h_skew:2": "1.60",
+  "h_uniform": "3",
+  "info_avg:2": "2.33",
+  "info_h:3": "2.278",
+  "info_over_pct:1": "2.3",
+  "info_waste_pct:1": "31.7"
  }
 }

@@ -2747,6 +2747,221 @@ FIGS.update({
 })
 
 
+# =====================================================================
+# 第 9 章插图：信息 —— 从消息到比特
+# =====================================================================
+import heapq as _heapq          # noqa: E402
+
+
+def _H2(p):
+    """二元熵函数 H(p) = −p log₂p − (1−p)log₂(1−p)（bit）。"""
+    if p <= 0.0 or p >= 1.0:
+        return 0.0
+    return -(p * math.log2(p) + (1.0 - p) * math.log2(1.0 - p))
+
+
+def _entropy(probs):
+    """一般熵 H = −Σ p log₂ p（bit）。"""
+    return -sum(p * math.log2(p) for p in probs if p > 0)
+
+
+def _huffman_lengths(probs):
+    """真跑霍夫曼贪心合并，返回每个符号的码长（列表）。"""
+    n = len(probs)
+    h = [(probs[i], [i]) for i in range(n)]
+    _heapq.heapify(h)
+    lens = [0] * n
+    while len(h) > 1:
+        a, ga = _heapq.heappop(h)
+        b, gb = _heapq.heappop(h)
+        for i in ga + gb:
+            lens[i] += 1
+        _heapq.heappush(h, (a + b, ga + gb))
+    return lens
+
+
+# 第 9 章用的符号表（约定：概率递减，便于看清「频繁的短、稀有的长」）
+INFO_SYMS = ["A", "B", "C", "D", "E", "F"]
+INFO_PROBS = [0.40, 0.20, 0.15, 0.12, 0.08, 0.05]
+INFO_LENS = _huffman_lengths(INFO_PROBS)
+INFO_H = _entropy(INFO_PROBS)
+INFO_FIXED = math.ceil(math.log2(len(INFO_SYMS)))            # 定长码长
+INFO_AVG = sum(p * L for p, L in zip(INFO_PROBS, INFO_LENS))
+
+
+def fig_entropy():
+    """熵：把「不确定」变成一个可以算的数。"""
+    # 左：二元熵曲线
+    curve = []
+    for i in range(0, 101):
+        p = i / 100.0
+        curve.append([0.55 + p * 4.0, 0.55 + _H2(p) * 1.85])
+    # 右：两种分布的熵
+    uni = [1 / 8.0] * 8
+    skew = [0.70, 0.12, 0.06, 0.04, 0.03, 0.02, 0.02, 0.01]
+    bars = []
+    for i, p in enumerate(uni):
+        bars.append({"x": 5.70 + i * 0.24, "y": 0.55 + p * 8.0, "w": 0.17, "fill": DIM})
+    for i, p in enumerate(skew):
+        bars.append({"x": 5.70 + i * 0.24, "y": 1.55 + p * 2.6, "w": 0.17, "fill": ACCENT})
+    layers = [
+        {"geom": "axis", "xRange": [0.0, 10.0], "yRange": [0.0, 3.0],
+         "xticks": [], "yticks": []},
+        {"geom": "line", "data": curve, "stroke": INK, "width": 2.6},
+        {"geom": "line", "data": [[0.55, 0.55], [4.55, 0.55]], "stroke": RULE, "width": 1.4},
+        {"geom": "line", "data": [[0.55, 2.40], [4.55, 2.40]], "stroke": RULE, "width": 1.2,
+         "dash": True},
+        {"geom": "text", "x": 0.55, "y": 2.62, "text": "熵 H(p)（bit）", "align": "left",
+         "size": 11, "color": INK, "dy": 0},
+        {"geom": "text", "x": 0.55, "y": 0.28, "text": "p（第一个结果出现的概率）", "align": "left",
+         "size": 10, "color": DIM, "dy": 0, "weight": "normal"},
+        {"geom": "point", "data": [{"x": 2.55, "y": 2.40, "r": 5.5, "fill": GOOD}]},
+        {"geom": "text", "x": 2.55, "y": 2.40, "text": "p = 0.5 时最大：1 bit", "align": "center",
+         "size": 10, "color": GOOD, "dx": 0, "dy": -16, "weight": "normal"},
+        {"geom": "text", "x": 0.55, "y": 1.05, "text": "两端为 0：结果已经确定，\n就没有信息可言",
+         "align": "left", "size": 10, "color": DIM, "dy": 0, "weight": "normal"},
+        {"geom": "line", "data": [[5.10, 0.30], [5.10, 2.85]], "stroke": RULE, "width": 1.4,
+         "dash": True},
+        {"geom": "text", "x": 5.70, "y": 2.62, "text": "两种八符号分布", "align": "left",
+         "size": 11, "color": INK, "dy": 0},
+        {"geom": "text", "x": 5.70, "y": 2.30, "text": "上：均匀 —— H = 3.00 bit", "align": "left",
+         "size": 10, "color": DIM, "dy": 0, "weight": "normal"},
+        {"geom": "text", "x": 5.70, "y": 1.30, "text": "下：一边倒 —— H = 1.60 bit", "align": "left",
+         "size": 10, "color": ACCENT, "dy": 0, "weight": "normal"},
+        {"geom": "text", "x": 5.70, "y": 0.95, "text": "同样八个符号，不确定性却差了一倍 ——\n"
+         "熵量的不是「有多少种可能」，\n而是「有多难猜」。",
+         "align": "left", "size": 10, "color": INK, "dy": 0, "weight": "normal"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [0.0, 10.0], "yRange": [0.0, 3.0],
+                                     "pad": {"l": 12, "r": 12, "b": 10, "t": 10}},
+            "layers": layers}
+
+
+def fig_code():
+    """编码：把概率换成比特长度。"""
+    layers = [
+        {"geom": "text", "x": 0.20, "y": 2.82, "text": "每个符号该分几位？", "align": "left",
+         "size": 12, "color": INK, "dy": 0},
+        {"geom": "text", "x": 0.20, "y": 2.52, "text": "定长：一律 3 位", "align": "left",
+         "size": 10, "color": DIM, "dy": 0, "weight": "normal"},
+        {"geom": "text", "x": 2.70, "y": 2.52, "text": "霍夫曼：频繁的短、稀有的长", "align": "left",
+         "size": 10, "color": ACCENT, "dy": 0, "weight": "normal"},
+        {"geom": "text", "x": 1.20, "y": 2.20, "text": "定长 3 位", "align": "left",
+         "size": 9.5, "color": DIM, "dy": 0, "weight": "normal"},
+        {"geom": "text", "x": 3.00, "y": 2.20, "text": "霍夫曼", "align": "left",
+         "size": 9.5, "color": ACCENT, "dy": 0, "weight": "normal"},
+        {"geom": "text", "x": 4.40, "y": 2.20, "text": "码长", "align": "left",
+         "size": 9.5, "color": DIM, "dy": 0, "weight": "normal"},
+    ]
+    y = 1.84
+    for i, s in enumerate(INFO_SYMS):
+        layers.append({"geom": "text", "x": 0.20, "y": y, "text": s, "align": "left",
+                       "size": 11, "color": INK, "dy": 0})
+        layers.append({"geom": "text", "x": 0.62, "y": y,
+                       "text": "%.2f" % INFO_PROBS[i], "align": "left", "size": 9.5,
+                       "color": DIM, "dy": 0, "weight": "normal"})
+        for k in range(INFO_FIXED):                      # 定长：3 个方块
+            layers.append({"geom": "region", "x": [1.20 + k * 0.30, 1.46 + k * 0.30],
+                           "y": [y - 0.13, y + 0.13], "fill": "#eeeae2",
+                           "outline": True, "stroke": RULE, "width": 1.0})
+        layers.append({"geom": "text", "x": 2.32, "y": y, "text": "3", "align": "left",
+                       "size": 10, "color": DIM, "dy": 0, "weight": "normal"})
+        for k in range(INFO_LENS[i]):                    # 霍夫曼：L 个方块
+            layers.append({"geom": "region", "x": [3.00 + k * 0.30, 3.26 + k * 0.30],
+                           "y": [y - 0.13, y + 0.13], "fill": "#f6e7d2",
+                           "outline": True, "stroke": ACCENT, "width": 1.0})
+        layers.append({"geom": "text", "x": 4.40, "y": y, "text": str(INFO_LENS[i]),
+                       "align": "left", "size": 10, "color": ACCENT, "dy": 0})
+        y -= 0.30
+    layers += [
+        {"geom": "line", "data": [[5.10, 0.30], [5.10, 2.85]], "stroke": RULE, "width": 1.4,
+         "dash": True},
+        {"geom": "text", "x": 5.60, "y": 2.72, "text": "三方对比（每符号平均位数）", "align": "left",
+         "size": 12, "color": INK, "dy": 0},
+    ]
+    rows = [("定长编码", INFO_FIXED, DIM),
+            ("霍夫曼编码", INFO_AVG, ACCENT),
+            ("熵（理论下界）", INFO_H, GOOD)]
+    yy = 2.20
+    for name, v, col in rows:
+        layers.append({"geom": "text", "x": 5.60, "y": yy, "text": name, "align": "left",
+                       "size": 10.5, "color": col, "dy": 0})
+        layers.append({"geom": "region", "x": [7.30, 7.30 + v * 0.60], "y": [yy - 0.11, yy + 0.11],
+                       "fill": col, "outline": False, "stroke": col, "width": 1.0})
+        layers.append({"geom": "text", "x": 9.90, "y": yy, "text": "%.2f" % v, "align": "right",
+                       "size": 10.5, "color": col, "dy": 0})
+        yy -= 0.46
+    layers += [
+        {"geom": "text", "x": 5.60, "y": 0.72,
+         "text": "霍夫曼只比熵多 2%：\n它已经贴到了理论下界。\n定长编码则白花了 30%。",
+         "align": "left", "size": 10, "color": INK, "dy": 0, "weight": "normal"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [0.0, 10.0], "yRange": [0.0, 3.0],
+                                     "pad": {"l": 12, "r": 12, "b": 10, "t": 10}},
+            "layers": layers}
+
+
+def fig_channel():
+    """信道容量：有噪声时还能可靠传多快。"""
+    cap, raw = [], []
+    for i in range(0, 101):
+        p = i / 100.0
+        cap.append([0.70 + p * 8.6, 0.60 + (1.0 - _H2(p)) * 1.85])
+        raw.append([0.70 + p * 8.6, 0.60 + (1.0 - p) * 1.85])
+    layers = [
+        {"geom": "axis", "xRange": [0.0, 10.0], "yRange": [0.0, 3.0],
+         "xticks": [], "yticks": []},
+        {"geom": "line", "data": raw, "stroke": DIM, "width": 1.8, "dash": True},
+        {"geom": "line", "data": cap, "stroke": INK, "width": 2.8},
+        {"geom": "line", "data": [[0.70, 2.45], [9.30, 2.45]], "stroke": RULE, "width": 1.2,
+         "dash": True},
+        {"geom": "text", "x": 0.70, "y": 2.66, "text": "信道容量 C(p)（bit/符号）", "align": "left",
+         "size": 11, "color": INK, "dy": 0},
+        {"geom": "text", "x": 0.70, "y": 0.30, "text": "误码率 p", "align": "left", "size": 10,
+         "color": DIM, "dy": 0, "weight": "normal"},
+        {"geom": "point", "data": [{"x": 0.70, "y": 2.45, "r": 5.5, "fill": GOOD}]},
+        {"geom": "text", "x": 0.70, "y": 2.45, "text": "p = 0：C = 1", "align": "left",
+         "size": 10, "color": GOOD, "dx": 8, "dy": -14, "weight": "normal"},
+        {"geom": "point", "data": [{"x": 5.00, "y": 0.60, "r": 5.5, "fill": BAD}]},
+        {"geom": "text", "x": 5.00, "y": 0.60, "text": "p = 0.5：C = 0（完全无用）", "align": "center",
+         "size": 10, "color": BAD, "dx": 0, "dy": -16, "weight": "normal"},
+        {"geom": "text", "x": 7.60, "y": 1.72,
+         "text": "p > 0.5 时容量回升：\n只要把 0 和 1 反过来读，\n就又变成了一条好信道。",
+         "align": "left", "size": 10, "color": ACCENT, "dy": 0, "weight": "normal"},
+        {"geom": "text", "x": 1.30, "y": 1.62,
+         "text": "灰虚线 = 不纠错时\n能指望的可靠率 1 − p\n\n实线 = 香农证明的极限：\n只要速率低于 C，\n总存在一种编码\n把错误率压到任意小。",
+         "align": "left", "size": 10, "color": DIM, "dy": 0, "weight": "normal"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [0.0, 10.0], "yRange": [0.0, 3.0],
+                                     "pad": {"l": 12, "r": 12, "b": 10, "t": 10}},
+            "layers": layers}
+
+
+def entropy_values():
+    return {"h_uniform": _entropy([1 / 8.0] * 8),
+            "h_skew": _entropy([0.70, 0.12, 0.06, 0.04, 0.03, 0.02, 0.02, 0.01])}
+
+
+def code_values():
+    """正文用的具名数值。展示单位（bit / %）由正文写，这里只给数值。"""
+    return {"info_fixed": INFO_FIXED, "info_avg": INFO_AVG, "info_h": INFO_H,
+            "info_ratio": INFO_AVG / INFO_H,
+            "info_waste": (INFO_FIXED - INFO_H) / INFO_H,
+            # 百分比口径（正文里直接写 %，不必再乘 100）
+            "info_over_pct": (INFO_AVG / INFO_H - 1.0) * 100.0,
+            "info_waste_pct": (INFO_FIXED - INFO_H) / INFO_H * 100.0}
+
+
+def channel_values():
+    return {"cap_half": 1.0 - _H2(0.5), "cap_01": 1.0 - _H2(0.1)}
+
+
+FIGS.update({
+    "fig-entropy": fig_entropy,
+    "fig-code": fig_code,
+    "fig-channel": fig_channel,
+})
+
 def build(ids=None):
     return {k: FIGS[k]() for k in (ids or FIGS)}
 
@@ -2779,6 +2994,12 @@ PROSE = {
     "fig-universal": universal_values,
     "fig-bertrand": bertrand_values,
 }
+
+PROSE.update({
+    "fig-entropy": entropy_values,
+    "fig-code": code_values,
+    "fig-channel": channel_values,
+})
 
 
 def prose_values(fig_ids):

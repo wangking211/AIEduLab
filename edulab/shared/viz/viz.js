@@ -175,7 +175,11 @@
     this.canvas.style.width = w + "px";
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.scale(dpr, dpr);
-    this.W = rect.width; this.H = rect.height;
+    // 逻辑尺寸用 CSS 空间（ctx 已按 dpr 缩放，绘制坐标就是 CSS px）。
+    // 这里曾经写成 `rect.width/height` —— 一个**从未定义**的变量，于是 resize 每次
+    // 都抛 ReferenceError，整张图挂不上去。而 Python 侧的 validate 只查数据、
+    // 不跑 JS，所以静态校验一路绿灯 —— 书稿的插图实际上从未在浏览器里渲染成功过。
+    this.W = w; this.H = h;
     this.compute();
   };
   Renderer.prototype.compute = function () {
