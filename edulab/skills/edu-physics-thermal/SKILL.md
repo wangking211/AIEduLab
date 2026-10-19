@@ -16,12 +16,12 @@ description: >-
   热力学第一定律, 内能, 绝热, 做功, 热机, 热机效率, 卡诺循环, 循环过程,
   近代物理, 光电效应, 光电效应方程, 逸出功, 截止频率, 遏止电压, 光子,
   氢原子, 能级, 跃迁, 巴耳末系, 莱曼系, 光谱, 电离能, 放射性, 衰变, 半衰期,
-  碳14测年, 解这道热学题, 解这道近代物理题, 随机出一道热学题, 这张图里的物理题;
+  碳14测年, 解这道热学题, 解这道近代物理题, 随机出一道热学题, 这张图里的热学题;
   thermal physics, kinetic theory, ideal gas law, isothermal process, p-V diagram,
   Maxwell speed distribution, root-mean-square speed, first law of thermodynamics,
   heat engine efficiency, Carnot, photoelectric effect, work function, threshold
   frequency, stopping voltage, hydrogen energy levels, Balmer series, radioactive
-  decay, half-life, interactive physics solution page.
+  decay, half-life, interactive thermal physics solution page.
 ---
 
 # 热学与近代物理交互教学网页 (edu-physics-thermal)
@@ -168,10 +168,10 @@ $N_A = 6.02\times10^{23}$、氢基态 $E_1 = -13.6\ \mathrm{eV}$。
 - 只要求**一个数值答案**（如「求剩多少个核」）——直接算并作答，不必做页。
 - 题目是**力学**——用 `edu-physics-senior` / `edu-physics-junior`。
 - 题目是**电磁学**——用 `edu-physics-em`。
-- 题目是**光学 / 机械波**——目前没有技能覆盖，请直接说明。
+- 题目是**光学 / 机械波**——用 `edu-physics-wave-optics`。
 - 题目是**化学**（化学方程式配平、溶液浓度）——用 `edu-chem-calc`。
 - 题目涉及**恒定电流的电路计算**——用 `edu-physics-em`（那边有电路场景）。
-
+- 题目是**振动 / 波 / 光**——用 `edu-physics-wave-optics`。
 ## 目录结构
 
 ```

@@ -180,7 +180,7 @@ Gram–Schmidt 的正交组。
   `edu-analytic-geometry` 或 `edu-plane-geometry`。
 - 题目是**高中范围内的矩阵初步**（二阶行列式、简单线性变换）——也可用
   `edu-math-sequences` 之后的高中体系；本技能的讲解深度是大学一年级。
-
+- 题目是**统计推断**（置信区间、假设检验、p 值、功效）——用 `edu-stat-inference`。
 ## 目录结构
 
 ```

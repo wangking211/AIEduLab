@@ -13,11 +13,11 @@ description: >-
   collide2d 七种场景）。触发词：动量, 冲量, 动量定理, 动量守恒, 冲量定理, 缓冲,
   安全气囊, 碰撞, 弹性碰撞, 完全非弹性碰撞, 非弹性碰撞, 正碰, 对心碰撞, 斜碰,
   反冲, 爆炸, 火箭, 后坐, 人船模型, 质心, 子弹打木块, 滑块木板, 动量与能量,
-  解这道动量题, 解这道碰撞题, 随机出一道动量题, 这张图里的物理题;
+  解这道动量题, 解这道碰撞题, 随机出一道动量题, 这张图里的动量题;
   momentum, impulse, impulse-momentum theorem, conservation of momentum, collision,
   elastic collision, perfectly inelastic collision, recoil, explosion, rocket,
   center of mass, bullet-block problem, 2D collision, right-angle theorem,
-  interactive physics solution page.
+  interactive momentum solution page.
 ---
 
 # 动量与碰撞交互教学网页 (edu-physics-momentum)
@@ -150,7 +150,7 @@ $g = 9.8\ \mathrm{m/s^2}$（教材常用值）。
 - 只要求**一个数值答案**（如「求共同速度」）——直接算并作答，不必做页。
 - 题目是**牛顿力学**（受力分析、运动学）——用 `edu-physics-senior`。
 - 题目是**振动 / 波 / 光**——用 `edu-physics-wave-optics`。
-- 题目是**电磁学 / 热学 / 近代物理**——用对应的 `edu-physics-*` 技能。
+- 题目是**电磁学 / 热学 / 近代物理**——用 `edu-physics-em`（电磁学）、`edu-physics-thermal`（热学与近代）、`edu-physics-wave-optics`（振动波光）。
 - 题目是**纯数学的向量运算**（不涉及质量与碰撞）——用 `edu-vector`。
 
 ## 目录结构

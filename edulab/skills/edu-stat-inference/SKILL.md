@@ -157,7 +157,7 @@ $z$ 与 $t$ 的临界值、正态与 t 分布的 CDF（都由内核数值计算�
 - 题目是**概率论**（已知总体求事件概率）——用 `edu-probability`。
 - 题目是**算法与数据结构**——用 `edu-cs`。
 - 题目是**一元/多元微积分**——用 `edu-function-derivative` / `edu-multivariable-calc`。
-
+- 题目是**线性代数的投影与正交化**（最小二乘的几何解释、法方程）——用 `edu-linear-algebra`。
 ## 目录结构
 
 ```

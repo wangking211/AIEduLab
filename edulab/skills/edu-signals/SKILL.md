@@ -15,8 +15,8 @@ description: >-
   fseries / alias / fdomain / freqresp / zplane 七种场景）。触发词：信号与系统,
   卷积, 连续卷积, 离散卷积, 脉冲响应, 单位冲激, 滑动平均, 傅里叶级数, 谐波,
   Gibbs 现象, 过冲, 方波, 采样, 采样定理, 奈奎斯特, 混叠, 折叠频率, 抗混叠,
-  时宽频宽积, 时频互易, 不确定性原理, 频谱, sinc, 主瓣, 频率响应, 幅频特性,
-  相频特性, 截止频率, 低通, 高通, RC 电路, 传递函数, 极点, 单位圆, 稳定性,
+  时宽频宽积, 时频互易, 时频不确定性原理, 频谱, sinc, 主瓣, 频率响应, 幅频特性,
+  相频特性, 滤波器截止频率, 低通, 高通, RC 电路, 传递函数, 极点, 单位圆, 稳定性,
   z 变换, 解这道信号题, 随机出一道信号与系统题, 这张图里的信号题;
   signals and systems, convolution, impulse response, Fourier series, harmonics,
   Gibbs phenomenon, overshoot, square wave, sampling, Nyquist, aliasing,
@@ -164,7 +164,8 @@ DFT/FFT 与窗函数、调制与解调、状态空间与可控可观性、随机
 - 题目属**常微分方程与相平面**（平衡点、稳定性、共振）——用 `edu-ode-dynamics`。
 - 题目属**概率与随机过程**（分布、大数定律、中心极限）——用 `edu-probability`。
 - 题目属**线性代数**（矩阵分解、特征值）——用 `edu-linear-algebra`。
-
+- 题目是**量子力学的不确定性原理**（海森堡、波函数）——用 `edu-quantum`。
+- 题目是**光电效应的截止频率**——用 `edu-physics-thermal`。
 ## 目录结构
 
 ```

@@ -14,7 +14,7 @@ description: >-
   模板骨架，并新增 charge / dipole / plates / circb / deff / circuit / induction /
   ampere 八种场景）。触发词：高中物理, 电磁学, 库仑定律, 库仑力, 电场强度, 场强叠加,
   合场强, 零场点, 电容器, 电容, 平行板电容器, 匀强电场, 带电粒子, 偏转, 类平抛,
-  带电粒子在磁场中, 回旋半径, 洛伦兹力, 周期, 闭合电路, 欧姆定律, 路端电压, 内阻,
+  带电粒子在磁场中, 回旋半径, 洛伦兹力, 交流电周期, 闭合电路, 欧姆定律, 路端电压, 内阻,
   输出功率, 最大输出功率, 电磁感应, 感应电动势, 磁通量, 法拉第电磁感应定律, 安培力,
   左手定则, 解这道电磁学题, 随机出一道高中物理电磁学题, 这张图里的电磁学题;
   senior high physics, electromagnetism, Coulomb force, electric field, field
@@ -171,7 +171,10 @@ python lib/em_kernel.py                             # kernel 内置自检（41 �
 - 题目要解**交流电路的相量、阻抗、谐振**——超出高中范围，直接说明。
 - 只要求一个数值答案——直接算并作答。
 - 用户明确要**视频**——用 `edu-physics-video`。
-
+- 题目是**力学**——用 `edu-physics-senior` / `edu-physics-junior`。
+- 题目是**热学与近代物理**——用 `edu-physics-thermal`。
+- 题目是**振动 / 波 / 光**——用 `edu-physics-wave-optics`。
+- 题目是**动量与碰撞**——用 `edu-physics-momentum`。
 ## 目录结构
 
 ```

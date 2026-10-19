@@ -121,6 +121,106 @@ def check_skill_docs(items=None):
         has_fallback = any(k in joined for k in ("直接回答", "直接算", "直接说明"))
         if not (has_sibling or has_fallback):
             bad.append((name, "「不该用」段没给替代去向（兄弟技能名，或「直接回答」）"))
+
+    bad.extend(check_trigger_routing())
+    return bad
+
+
+# ---- 触发词路由：冲突与悬空引用 ----------------------------------------
+# 「选错技能」的直接来源是**同一个触发词被多个技能声明**。只查「有没有边界段」
+# 是不够的 —— 两个技能可能各自都写了边界，但**没有指向对方**，路由照样会乱选。
+# 所以这里把两件事机器化：
+#   ① 触发词冲突是否已被边界声明消解（A 的不该用段里点了 B，或反之）；
+#   ② 边界段里提到的技能名是否真实存在（防重命名后留下悬空引用）。
+
+_TRIG_SPLIT = re.compile(r"[,，、]\s*")
+_SKILL_NAME = re.compile(r"\bedu-[a-z][a-z0-9-]*\b")
+
+
+def _parse_triggers(desc):
+    """从 description 里抽出 (中文触发词, 英文触发词)。"""
+    zh, en = set(), set()
+    i = desc.find("触发词：")
+    if i < 0:
+        return zh, en
+    body = desc[i + len("触发词："):]
+    j = body.find(";")
+    if j < 0:
+        j = body.find("；")
+    if j < 0:
+        for w in _TRIG_SPLIT.split(body):
+            w = w.strip().strip("。.")
+            if w:
+                zh.add(w)
+        return zh, en
+    for w in _TRIG_SPLIT.split(body[:j]):
+        w = w.strip().strip("。.")
+        if w:
+            zh.add(w)
+    for w in _TRIG_SPLIT.split(body[j + 1:]):
+        w = w.strip().strip("。.")
+        if w and not re.search(r"[\u4e00-\u9fff]", w):
+            en.add(w.lower())
+    return zh, en
+
+
+def _description_line(fm):
+    """把 description 的块标量拼成一行（跨行短语要拼起来才认得出）。"""
+    out, grab = [], False
+    for ln in fm.splitlines():
+        if ln.startswith("description:"):
+            grab = True
+            rest = ln.split(":", 1)[1].strip()
+            if rest and rest not in (">-", ">", "|", "|-"):
+                out.append(rest)
+            continue
+        if grab:
+            if ln and not ln.startswith((" ", "\t")):
+                break
+            out.append(ln.strip())
+    return " ".join(x for x in out if x)
+
+
+def check_trigger_routing():
+    """触发词冲突（未消解）与悬空技能引用。"""
+    bad = []
+    info = {}
+    for p in sorted(SKILLS_DIR.glob("*/SKILL.md")):
+        text = p.read_text(encoding="utf-8")
+        fm = text[3:text.find("\n---", 3)] if text.startswith("---") else ""
+        zh, en = _parse_triggers(_description_line(fm))
+        info[p.parent.name] = {
+            "trig": zh | en,
+            "notuse": section_body(text, DOC_HEADING) or "",
+            "desc": _description_line(fm),
+        }
+    names = set(info)
+
+    # ① 悬空引用
+    for n, d in info.items():
+        for ref in sorted(set(_SKILL_NAME.findall(d["notuse"]))):
+            if ref not in names and ref != n:
+                bad.append((n, f"边界段指向不存在的技能 {ref}"))
+
+    # ② 触发词冲突是否已消解
+    index = {}
+    for n, d in info.items():
+        for w in d["trig"]:
+            index.setdefault(w, set()).add(n)
+    for w, owners in sorted(index.items()):
+        if len(owners) < 2:
+            continue
+        owners = sorted(owners)
+        pairs = [(owners[i], owners[j])
+                 for i in range(len(owners)) for j in range(i + 1, len(owners))]
+
+        def ok(a, b):
+            return (b in info[a]["notuse"]) or (a in info[b]["notuse"])
+
+        un = [(a, b) for a, b in pairs if not ok(a, b)]
+        if un:
+            bad.append((", ".join(owners),
+                        f"触发词「{w}」冲突且未被边界声明消解（{un[0][0]} ↔ {un[0][1]}）"))
     return bad
 
 

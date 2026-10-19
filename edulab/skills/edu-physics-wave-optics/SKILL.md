@@ -16,12 +16,12 @@ description: >-
   光, 光的折射, 折射定律, 斯涅尔定律, 折射率, 全反射, 临界角, 光纤, 棱镜,
   双缝干涉, 条纹间距, 杨氏双缝, 光的干涉, 光的衍射, 光栅, 凸透镜成像, 像距,
   放大率, 实像, 虚像, 焦点, 焦距, 解这道振动题, 解这道光学题, 随机出一道物理题,
-  这张图里的物理题; mechanical vibration, simple harmonic motion, reference circle,
+  这张图里的光学题; mechanical vibration, simple harmonic motion, reference circle,
   mechanical wave, transverse wave, wavelength, wave speed, standing wave, node,
   antinode, beats, superposition, interference, double slit, fringe spacing,
   refraction, Snell's law, refractive index, total internal reflection, critical
   angle, optical fibre, thin lens, image distance, magnification, real image,
-  virtual image, interactive physics solution page.
+  virtual image, interactive wave optics solution page.
 ---
 
 # 机械振动 · 机械波 · 光 交互教学网页 (edu-physics-wave-optics)
@@ -162,10 +162,10 @@ $c = 3.00\times10^8\ \mathrm{m/s}$（教材三位有效数字，**不是** CODAT
 本技能产出的是**自包含的交互教学网页**，构建与校验都有成本。
 
 - 只要求**一个数值答案**（如「求临界角」）——直接算并作答，不必做页。
-- 题目是**力学 / 电磁学 / 热学与近代**——用对应的 `edu-physics-*` 技能。
-- 题目是**动量与碰撞**——目前未覆盖，请直接说明。
+- 题目是**力学 / 电磁学 / 热学与近代**——用 `edu-physics-senior`（力学）、`edu-physics-em`（电磁学）、`edu-physics-thermal`（热学与近代）、`edu-physics-momentum`（动量）。
+- 题目是**动量与碰撞**——用 `edu-physics-momentum`。
 - 题目是**纯数学的三角函数与图象**——用 `edu-math-sequences` / `edu-function-derivative`。
-
+- 题目是**动量与碰撞**——用 `edu-physics-momentum`。
 ## 目录结构
 
 ```

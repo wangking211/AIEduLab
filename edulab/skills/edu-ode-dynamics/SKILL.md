@@ -16,13 +16,13 @@ description: >-
   触发词：常微分方程, 微分方程, 动力系统, 方向场, 斜率场, 解曲线, 初值问题,
   欧拉法, RK4, 数值解, 步长, 误差阶, 阻尼振动, 欠阻尼, 临界阻尼, 过阻尼, 阻尼比,
   包络, 受迫振动, 共振, 共振频率, 幅频特性, 相平面, 相图, 平衡点, 稳定性, 鞍点,
-  结点, 焦点, 中心, 特征值, Logistic, 逻辑斯蒂, S曲线, 环境容纳量, 捕食者,
+  结点, 相图焦点, 中心, 特征值, Logistic, 逻辑斯蒂, S曲线, 环境容纳量, 捕食者,
   被捕食, Lotka-Volterra, 守恒量, 闭合轨道, 解这道微分方程题, 随机出一道微分方程题,
   这张图里的微分方程题; ordinary differential equations, ODE, dynamical systems,
   direction field, slope field, initial value problem, Euler method, RK4, numerical
   solution, step size, error order, damped oscillation, underdamped, critically
   damped, overdamped, damping ratio, forced oscillation, resonance, phase plane,
-  equilibrium, stability, saddle, node, spiral, center, Logistic equation, carrying
+  equilibrium, stability, saddle, equilibrium node, spiral, equilibrium center, Logistic equation, carrying
   capacity, predator-prey, Lotka-Volterra, conserved quantity, closed orbit,
   interactive differential equations solution page.
 ---
@@ -172,7 +172,7 @@ Lyapunov 函数构造。遇到请直接说明未覆盖。
 - 题目其实是**线性代数**（矩阵分解、特征值计算本身）——用 `edu-linear-algebra`。
 - 题目其实是**高中导数与切线**——用 `edu-function-derivative`。
 - 题目是**传染病 SIR 的阈值与峰值**——用 `edu-history`（那里有 R₀ 与群体免疫）。
-
+- 题目要的是**生物种群的生态学含义**（K 值的生态解释、种群调节机制）——用 `edu-biology`。
 ## 目录结构
 
 ```

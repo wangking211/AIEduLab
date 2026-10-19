@@ -170,7 +170,7 @@ $m_e = 9.1093837015\times10^{-31}$ kg、$e = 1.602176634\times10^{-19}$ C。
 - 题目是**经典力学**（牛顿定律、动量、圆周）——用 `edu-physics-senior` / `edu-physics-momentum`。
 - 题目是**多元微积分的方法**（拉格朗日乘数、格林公式）——用 `edu-multivariable-calc`。
 - 题目是**统计推断**（置信区间、p 值）——用 `edu-stat-inference`。
-
+- 题目是**信号处理里的时频不确定性**（Gabor 极限、短时傅里叶）——用 `edu-signals`。
 ## 目录结构
 
 ```

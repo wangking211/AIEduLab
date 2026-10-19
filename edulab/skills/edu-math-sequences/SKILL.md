@@ -12,10 +12,10 @@ description: >-
   edu-function-derivative 平行（复用其数据驱动 Canvas + KaTeX 模板骨架，并新增
   seq / wave / tri 三种数学场景）。触发词：数列, 等差数列, 等比数列, 通项公式,
   前n项和, 裂项相消, 错位相减, 递推数列, 数列求和, 求和公式, 三角函数, 正弦型函数,
-  周期, y=Asin(ωx+φ), 最值点, 和差化积, 三角恒等式, 两角和差公式, 余弦定理,
+  三角周期, y=Asin(ωx+φ), 最值点, 和差化积, 三角恒等式, 两角和差公式, 余弦定理,
   解三角形, SAS, 判定三角形, 解这道数列题, 解这道三角题, 随机出一道数列题,
   这张图里的数列题; sequences, arithmetic sequence, geometric sequence, telescoping,
-  partial sum, recursion, sine wave, amplitude, period, trigonometric identity,
+  partial sum, recurrence relation, sine wave, amplitude, period, trigonometric identity,
   cosine rule, solve triangle, interactive sequence and trig solution page.
 ---
 
@@ -94,7 +94,7 @@ A、ω、φ/两边及夹角…）、所求（通项、前 n 项和、周期、�
 - 题目是纯平面几何——用 `edu-plane-geometry`。
 - 只要求一个通项或前 n 项和的数值——直接算，不必出交互页。
 - 用户明确要**视频**——用 `edu-math-video`。
-
+- 题目是**算法的递归与分治**（调用树、记忆化、重复子问题）——用 `edu-cs`。
 ## 目录结构
 
 ```

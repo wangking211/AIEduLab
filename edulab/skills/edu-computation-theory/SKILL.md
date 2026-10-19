@@ -155,7 +155,7 @@ Myhill-Nerode 定理、正则语言的封闭性运算、
 - 题目是**算法与数据结构**（排序、树、图、DP）——用 `edu-cs`。
 - 题目是**概率与统计**——用 `edu-probability` / `edu-stat-inference`。
 - 题目是**多元微积分**——用 `edu-multivariable-calc`。
-
+- 题目是**矩阵对角化**（相似对角化、二次型、Jordan 形）——用 `edu-linear-algebra`。
 ## 目录结构
 
 ```

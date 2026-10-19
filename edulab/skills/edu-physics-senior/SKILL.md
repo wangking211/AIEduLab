@@ -16,8 +16,7 @@ description: >-
   绳模型, v-t 图像, 匀变速直线运动, 解这道高中物理题, 随机出一道高中物理题,
   这张图里的高中物理题; senior high physics, mechanics, conveyor belt, chase problem,
   inclined plane, projectile motion, Newton's second law, work-energy theorem,
-  vertical circular motion, critical speed, v-t graph, interactive physics
-  solution page.
+  vertical circular motion, critical speed, v-t graph, interactive mechanics solution page.
 ---
 
 # 高中物理·力学交互教学网页 (edu-physics-senior)
@@ -93,7 +92,10 @@ circle 圆周、vt v-t 图）。
 - 题目是电磁学（电场、磁场、电磁感应、交变电流）、光学、热学、原子物理——本技能只覆盖**必修一力学**，直接说明不覆盖。
 - 只要求一个数值答案——直接算并作答。
 - 用户明确要**视频**——用 `edu-physics-video`。
-
+- 题目是**电磁学**——用 `edu-physics-em`。
+- 题目是**热学与近代物理**——用 `edu-physics-thermal`。
+- 题目是**振动 / 波 / 光**——用 `edu-physics-wave-optics`。
+- 题目是**动量与碰撞**——用 `edu-physics-momentum`。
 ## 目录结构
 
 ```

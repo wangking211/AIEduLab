@@ -13,10 +13,9 @@ description: >-
   circuit 五种场景与 flowDots 电流动画、bars 双色能量条）。触发词：初中物理, 杠杆,
   杠杆平衡, 撬棒, 压强, 受力面积, 浮力, 阿基米德原理, 称重法, 弹簧测力计, 滑轮组,
   机械效率, 有用功, 总功, 欧姆定律, 串联, 并联, 分压, 分流, 电功率, 电热, 焦耳定律,
-  解这道物理题, 随机出一道初中物理题, 这张图里的物理题; junior high physics, lever
+  解这道物理题, 随机出一道初中物理题, 这张图里的初中物理题; junior high physics, lever
   balance, pressure, buoyancy, Archimedes, pulley, mechanical efficiency, Ohm's law,
-  series circuit, parallel circuit, electric power, Joule heating, interactive
-  physics solution page.
+  series circuit, parallel circuit, electric power, Joule heating, interactive junior high physics solution page.
 ---
 
 # 初中物理（力学与电学）交互教学网页 (edu-physics-junior)
@@ -92,7 +91,11 @@ circuit 的 single/series/parallel 三种电路）。
 - 题目是电磁学（电场、磁场、电磁感应）或光学、热学——本技能不覆盖，直接说明。
 - 只要求一个数值答案——直接算并作答。
 - 用户明确要**视频**——用 `edu-physics-video`。
-
+- 题目是**高中力学**（传送带、追及、斜面、平抛、圆周、v-t）——用 `edu-physics-senior`。
+- 题目是**电磁学**——用 `edu-physics-em`。
+- 题目是**热学与近代物理**——用 `edu-physics-thermal`。
+- 题目是**振动 / 波 / 光**——用 `edu-physics-wave-optics`。
+- 题目是**动量与碰撞**——用 `edu-physics-momentum`。
 ## 目录结构
 
 ```
