@@ -1196,8 +1196,39 @@ MODULES = {
                    "greedy_interval"],
 }
 
+# 学段：与「内容模块」**正交**的第二个维度。
+#
+# 为什么需要它：本技能的 23 个题型横跨初中信息技术启蒙 → 高中信息技术/信息学奥赛
+# → 大学数据结构与算法，只按内容模块分组时，用户（和 agent）无法判断某个题型
+# 该给哪个学段用。加上这一维之后，description 与 `list` 都能说清学段。
+#
+# 注意：这是**建议使用场景**的划分，不是「只能在这个学段讲」。
+# 同一个知识点（例如 BFS、二分查找）常在多个学段反复出现。
+STAGES = {
+    "初中 · 信息技术启蒙": ["base_convert", "encoding"],
+    "高中 · 信息技术与信息学奥赛": [
+        "complexity", "sort_bubble", "sort_merge", "sort_quick", "search_binary",
+        "stack_lifo", "queue_fifo", "linked_list", "tree_traversal", "bst_search",
+        "bfs", "recursion_tree", "dp_fib",
+    ],
+    "大学 · 数据结构与算法": [
+        "min_heap", "hash_table", "bitwise", "dijkstra", "mst",
+        "dp_knapsack", "greedy_coins", "greedy_interval",
+    ],
+}
+
 ORDER = [k for ks in MODULES.values() for k in ks]
 _ORDER_SET = set(ORDER)
+_STAGE_SET = {k for ks in STAGES.values() for k in ks}
+_STAGE_OF = {k: s for s, ks in STAGES.items() for k in ks}
+_MODULE_OF = {k: m for m, ks in MODULES.items() for k in ks}
+
+# 学段必须**恰好覆盖**全部题型（不重不漏）—— 漂移就让它红，别静默放过
+assert _STAGE_SET == _ORDER_SET, (
+    "STAGES 与 MODULES 的题型集合不一致："
+    f"STAGES 多出 {sorted(_STAGE_SET - _ORDER_SET)}，"
+    f"MODULES 多出 {sorted(_ORDER_SET - _STAGE_SET)}")
+assert len(ORDER) == len(_ORDER_SET) == len(_STAGE_SET), "题型在两个维度里都不得重复"
 
 
 def check_all():
@@ -1234,22 +1265,52 @@ def meta(key):
     return (d["module"], d["title"], d["subtitle"])
 
 
+def _stage_map():
+    """按学段打印全部题型（含内容模块），并附交叉统计表。"""
+    print(f"共 {len(ORDER)} 个题型 · {len(STAGES)} 个学段 · {len(MODULES)} 个内容模块\n")
+    for stage, keys in STAGES.items():
+        print(f"[{stage}]  {len(keys)} 个题型")
+        for k in keys:
+            d = REGISTRY[k]()
+            print(f"  {k:18s} {_MODULE_OF[k]:8s} {d['title']}")
+        print()
+    print("学段 × 模块 交叉统计")
+    hdr = "  " + "".join(f"{m:>10s}" for m in MODULES)
+    print(hdr + f"{'合计':>8s}")
+    for stage, keys in STAGES.items():
+        row = [sum(1 for k in keys if _MODULE_OF[k] == m) for m in MODULES]
+        print(f"  {stage[:6]:8s}" + "".join(f"{v:>10d}" for v in row) + f"{len(keys):>8d}")
+    tot = [sum(1 for k in ORDER if _MODULE_OF[k] == m) for m in MODULES]
+    print(f"  {'合计':8s}" + "".join(f"{v:>10d}" for v in tot) + f"{len(ORDER):>8d}")
+    return 0
+
+
 def build_index(out, built=None):
     built = built or {k: REGISTRY[k]() for k in ORDER}
     m = {k: (built[k]["module"], built[k]["title"], built[k]["subtitle"]) for k in ORDER}
     cards = []
-    for mod, keys in MODULES.items():
-        items = "".join(
-            f'<a href="{k}.html" class="block bg-white rounded-lg border border-slate-200 p-4 '
-            f'hover:border-teal-500 hover:shadow transition-all">'
-            f'<div class="text-[11px] font-bold text-teal-600 mb-1">{mod}</div>'
-            f'<div class="text-sm font-bold text-slate-900 leading-snug">{m[k][1]}</div>'
-            f'<div class="text-[11px] text-slate-500 mt-1">{m[k][2]}</div></a>'
-            for k in keys)
+    for stage, skeys in STAGES.items():
+        blocks = []
+        for mod, mkeys in MODULES.items():
+            keys = [k for k in mkeys if k in skeys]
+            if not keys:
+                continue
+            items = "".join(
+                f'<a href="{k}.html" class="block bg-white rounded-lg border border-slate-200 p-4 '
+                f'hover:border-teal-500 hover:shadow transition-all">'
+                f'<div class="text-[11px] font-bold text-teal-600 mb-1">{mod}</div>'
+                f'<div class="text-sm font-bold text-slate-900 leading-snug">{m[k][1]}</div>'
+                f'<div class="text-[11px] text-slate-500 mt-1">{m[k][2]}</div></a>'
+                for k in keys)
+            blocks.append(
+                f'<div class="mb-4"><div class="text-[11px] uppercase tracking-widest '
+                f'text-slate-400 font-bold mb-2">{mod}</div>'
+                f'<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{items}</div></div>')
         cards.append(
-            f'<div class="mb-6"><div class="text-xs uppercase tracking-widest text-slate-400 '
-            f'font-bold mb-2">{mod}</div><div class="grid grid-cols-1 sm:grid-cols-2 '
-            f'lg:grid-cols-3 gap-3">{items}</div></div>')
+            f'<div class="mb-8"><div class="text-sm font-bold text-slate-700 mb-3 '
+            f'border-l-4 border-teal-500 pl-3">{stage}'
+            f'<span class="ml-2 text-[11px] font-normal text-slate-400">'
+            f'{len(skeys)} 个题型</span></div>{"".join(blocks)}</div>')
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1261,7 +1322,7 @@ def build_index(out, built=None):
   <div class="text-[11px] uppercase tracking-widest text-teal-600 font-bold">Computer Science</div>
   <h1 class="text-2xl font-bold">计算机科学 · 交互课件</h1>
   <p class="text-sm text-slate-500 mt-1">全部由 cs_kernel.py 真实执行录得的步骤驱动 ——
-     动画里每一步都是算出来的。共 {len(REGISTRY)} 页。</p>
+     动画里每一步都是算出来的。共 {len(REGISTRY)} 页，按学段分三档，每档内按内容模块排列。</p>
   <div class="mt-6">{"".join(cards)}</div>
 </div></body></html>"""
     out = Path(out)
@@ -1284,25 +1345,48 @@ def _index(out_dir):
 
 
 def _verify(rest):
-    """verify 子命令：注册表 + 契约全量校验，并逐页打印概览。"""
+    """verify 子命令：注册表 + 契约全量校验，并**按学段**逐页打印概览。"""
     built = check_all()
     print(f"✓ 注册表与契约校验通过：{len(ORDER)} 个课件、{len(SCENE_KINDS)} 种场景")
-    for mod, keys in MODULES.items():
-        print(f"\n{mod}  ({len(keys)})")
+    for stage, keys in STAGES.items():
+        print(f"\n【{stage}】{len(keys)} 个题型")
         for k in keys:
             d = built[k]
             np_ = len((d.get("console") or {}).get("params", []))
-            print(f"  {k:18s} [{d['scene']['kind']:8s}] "
+            print(f"  {k:18s} {_MODULE_OF[k]:8s} [{d['scene']['kind']:8s}] "
                   f"{len(d['steps']):3d} 帧 · 控制台 {np_} 参数 · {d['title']}")
+    return 0
+
+
+def _stages(rest):
+    """stages 子命令：按学段列出题型（含内容模块），并给出学段 × 模块交叉统计。"""
+    print(f"共 {len(ORDER)} 个题型 · {len(STAGES)} 个学段 · {len(MODULES)} 个内容模块\n")
+    for stage, keys in STAGES.items():
+        print(f"【{stage}】{len(keys)} 个题型")
+        for k in keys:
+            print(f"  {k:18s} {_MODULE_OF[k]:8s} {REGISTRY[k]()['title']}")
+        print()
+    print("学段 × 内容模块 交叉统计")
+    short = {"① 算法可视化": "算法", "② 数据结构": "数据结构", "③ 图算法": "图算法",
+             "④ 计算原理": "计算原理", "⑤ 算法思想": "算法思想"}
+    print(f"  {'学段':<12s}" + "".join(f"{short[m]:>10s}" for m in MODULES) + f"{'合计':>6s}")
+    for stage, keys in STAGES.items():
+        row = [sum(1 for k in keys if _MODULE_OF[k] == m) for m in MODULES]
+        print(f"  {stage[:4]:<12s}" + "".join(f"{v:>10d}" for v in row) + f"{len(keys):>6d}")
+    tot = [sum(1 for k in ORDER if _MODULE_OF[k] == m) for m in MODULES]
+    print(f"  {'合计':<12s}" + "".join(f"{v:>10d}" for v in tot) + f"{len(ORDER):>6d}")
     return 0
 
 
 def main(argv=None):
     # 统一入口（edulab/shared/skillkit.py）：
-    #   python generate.py verify | list | all <目录> | random [seed] [输出] | <key> [输出]
-    return cli(REGISTRY, doc=__doc__, groups=MODULES, meta=meta,
+    #   python generate.py verify | stages | list | all <目录> | random [seed] [输出] | <key> [输出]
+    #
+    # list 按**学段**分组 —— 回答「这个题型该给哪个学段用」；
+    # 想看按**内容模块**分组的视图并附交叉统计表，用 stages 子命令。
+    return cli(REGISTRY, doc=__doc__, groups=STAGES, meta=meta,
                validate=_validate, index_writer=_index,
-               commands={"verify": _verify},
+               commands={"verify": _verify, "stages": _stages},
                template_name="board.html", token="__LESSON_DATA__",
                compact=True, escape_close=True, json_default=str,
                argv=argv if argv is not None else sys.argv[1:])

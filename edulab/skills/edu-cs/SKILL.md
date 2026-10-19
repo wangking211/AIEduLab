@@ -1,12 +1,15 @@
 ---
 name: edu-cs
 description: >-
-  把一道计算机科学题 / 一个算法知识点做成自包含的交互教学网页，覆盖五个模块：
-  ①算法可视化（冒泡·选择·插入·归并·快速排序、顺序与二分查找、复杂度曲线）；
-  ②数据结构（栈·队列·单链表、二叉树三种遍历、二叉搜索树、最小堆、哈希表链地址法）；
-  ③图算法（BFS·DFS、Dijkstra 最短路、Prim 最小生成树）；
-  ④计算原理（进制转换、位运算、字符编码与 UTF-8）；
-  ⑤算法思想（朴素递归的调用树与重复子问题、斐波那契 DP、0-1 背包、贪心找零与区间调度）。
+  把一道计算机科学题 / 一个算法知识点做成自包含的交互教学网页。
+  **本题型库按学段分三档**（23 个题型，每档再按内容模块组织）：
+  【初中 · 信息技术启蒙】进制转换、字符编码与 UTF-8；
+  【高中 · 信息技术与信息学奥赛】复杂度曲线、冒泡/归并/快速排序、二分查找、
+  栈·队列·单链表、二叉树三种遍历、二叉搜索树、BFS、递归调用树、斐波那契 DP；
+  【大学 · 数据结构与算法】最小堆、哈希表链地址法、位运算与补码、
+  Dijkstra 最短路、Prim 最小生成树、0-1 背包、贪心找零、区间调度。
+  （用 `generate.py list` 看按学段分组的完整清单，`generate.py stages` 看学段 × 模块交叉表。）
+  内容模块共五个：①算法可视化 ②数据结构 ③图算法 ④计算原理 ⑤算法思想。
   与其它 edu-* 技能不同：这里的动画不是画出来的，而是**算法真实跑一遍录下来的步骤**——
   lib/cs_kernel.py 用 Python 真切执行算法并存下每一步快照，右栏按进度滑块逐帧回放，
   保证动画里的每个状态都是算出来的，绝不编造。
@@ -15,24 +18,73 @@ description: >-
   中栏 KaTeX 分步解析（讲清「为什么这个策略是对的」并给出反例），右栏 Canvas 画板
   （11 类场景：数组柱状/复杂度曲线/栈队列/链表/树/图/表格/位/调用树/硬币/区间）。
   仅依赖标准库，无需 sympy。其它 agent 也可调用本技能生成此类网页。
+  **选学段提示**：给初中用 → 只取「初中」那一档；给高中信奥用 → 取「初中+高中」；
+  给大学数据结构课用 → 取「高中+大学」（大学的几个题型默认假设读者已会基本排序与遍历）。
   触发词：计算机科学, 算法, 算法可视化, 数据结构, 冒泡排序, 选择排序, 插入排序, 归并排序,
   快速排序, 二分查找, 顺序查找, 时间复杂度, 空间复杂度, 大O, 复杂度曲线, 递归, 调用栈, 调用树,
   重复子问题, 分治, 动态规划, DP, 记忆化, 斐波那契, 0-1背包, 贪心, 找零, 区间调度, 活动选择,
   栈, 队列, 链表, 单链表, 二叉树, 遍历, 前序, 中序, 后序, 二叉搜索树, BST, 堆, 最小堆, 优先队列,
   哈希表, 哈希函数, 冲突, 链地址法, 图, BFS, 广度优先, DFS, 深度优先, 最短路, Dijkstra, 最小生成树,
   Prim, Kruskal, 进制转换, 二进制, 十六进制, 位运算, 补码, 与或异或, 移位, 字符编码, UTF-8,
-  码点, ASCII, 信息学奥赛, 信奥, 高中信息技术, 算法入门, 解这道算法题, 随机出一道算法题,
-  这张图里的算法题; computer science, algorithms, algorithm visualization, data structures,
+  码点, ASCII, 信息学奥赛, 信奥, 高中信息技术, 初中信息技术, 算法入门, 大学数据结构,
+  解这道算法题, 随机出一道算法题, 这张图里的算法题;
+  computer science, algorithms, algorithm visualization, data structures,
   bubble sort, merge sort, quick sort, binary search, big-O, complexity, recursion, dynamic
   programming, knapsack, greedy, stack, queue, linked list, binary tree, BST, heap, hash table,
   graph, BFS, DFS, Dijkstra, minimum spanning tree, Prim, number base conversion, bitwise,
-  two's complement, UTF-8, character encoding, interactive algorithm animation.
+  two's complement, UTF-8, character encoding, junior high information technology,
+  senior high informatics olympiad, university data structures,
+  interactive algorithm animation.
 ---
 
 # edu-cs · 计算机科学交互课件
 
 把一道 CS 题做成**会自己跑**的三栏网页：左栏题面与动态控制台，中栏分步解析，
 右栏是一块**步骤回放**画板。
+
+## 学段分层（23 个题型分三档）
+
+本技能的题型横跨三个学段。**「学段」与「内容模块」是两个正交的维度**：
+同一个内容模块（例如「③ 图算法」）里的题型可能分属不同学段。
+`generate.py list` 按**学段**分组（回答「这个题型该给谁用」），
+`generate.py stages` 给出**学段 × 模块**的交叉表。
+
+| 学段 | 题型数 | 内容 |
+| --- | --- | --- |
+| **初中 · 信息技术启蒙** | 2 | `base_convert`（进制转换）、`encoding`（字符编码与 UTF-8） |
+| **高中 · 信息技术与信息学奥赛** | 13 | `complexity`、`sort_bubble`、`sort_merge`、`sort_quick`、`search_binary`、`stack_lifo`、`queue_fifo`、`linked_list`、`tree_traversal`、`bst_search`、`bfs`、`recursion_tree`、`dp_fib` |
+| **大学 · 数据结构与算法** | 8 | `min_heap`、`hash_table`、`bitwise`、`dijkstra`、`mst`、`dp_knapsack`、`greedy_coins`、`greedy_interval` |
+
+| 学段 ＼ 模块 | ①算法可视化 | ②数据结构 | ③图算法 | ④计算原理 | ⑤算法思想 | 合计 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 初中 | 0 | 0 | 0 | 2 | 0 | **2** |
+| 高中 | 5 | 5 | 1 | 0 | 2 | **13** |
+| 大学 | 0 | 2 | 2 | 1 | 3 | **8** |
+| **合计** | 5 | 7 | 3 | 3 | 5 | **23** |
+
+**怎么选**：
+
+- 给**初中**用 → 只取「初中」那一档（2 个题型）。
+- 给**高中信息技术 / 信奥**用 → 取「初中 + 高中」（15 个）。
+- 给**大学数据结构课**用 → 取「高中 + 大学」（21 个）——
+  大学的几个题型（最小堆、哈希表、Dijkstra、MST、背包）默认读者已会基本排序与遍历。
+
+> **诚实说明**：学段划分是**建议使用场景**，不是「只能在这个学段讲」。
+> 同一个知识点（二分查找、BFS、DP 入门）在不同教材里出现的学段并不一致，
+> 这里取的是**最常见的那一档**。如果用户的题面来自别的学段，按题面走即可。
+
+### 这个分层是**机器强制**的
+
+`scripts/generate.py` 在导入时就断言 `STAGES` 恰好覆盖 `REGISTRY`
+（不重不漏），并且与 `MODULES` 的题型集合一致：
+
+```python
+assert _STAGE_SET == _ORDER_SET, "STAGES 与 MODULES 的题型集合不一致：..."
+assert len(ORDER) == len(_ORDER_SET) == len(_STAGE_SET), "题型在两个维度里都不得重复"
+```
+
+也就是说：**以后新增题型却忘了归入学段，构建会直接红**，不会静默漂移。
+
 
 ## 与其它 edu-\* 技能的根本差异
 
@@ -121,12 +173,16 @@ r["pos"]          # 查找命中的下标
 
 ```bash
 python lib/cs_kernel.py                 # 内核自检（必须全部 OK ✓）
-python scripts/generate.py verify       # 注册表 + 契约校验（推荐先跑）
-python scripts/generate.py list         # 列出全部条目
-python scripts/generate.py all ./output # 生成全部 + index.html
+python scripts/generate.py verify       # 注册表 + 契约校验（推荐先跑），按学段列出
+python scripts/generate.py stages       # 学段 × 内容模块 交叉表 + 逐学段清单
+python scripts/generate.py list         # 列全部条目（**按学段分组**）
+python scripts/generate.py all ./output # 生成全部 + index.html（index 也按学段分组）
 python scripts/generate.py sort_bubble ./out/sort_bubble.html
 python scripts/generate.py random out.html
 ```
+
+> `list` 给的是**学段**视图（这个题型该给谁用）；想看**内容模块**视图用 `stages`。
+> 两者是正交的维度，同一模块的题型可能分属不同学段。
 
 ### 第 4 步：自检（改完必过）
 
@@ -143,13 +199,16 @@ python scripts/generate.py random out.html
 
 ## 覆盖的题型（23 个 build，五模块）
 
-| 模块 | 条目 | 右栏 |
-|---|---|---|
-| ① 算法可视化 | `sort_bubble` `sort_merge` `sort_quick` `search_binary` `complexity` | 柱状 / 曲线 |
-| ② 数据结构 | `stack_lifo` `queue_fifo` `linked_list` `tree_traversal` `bst_search` `min_heap` `hash_table` | 栈队列 / 链表 / 树 / 表格 |
-| ③ 图算法 | `bfs` `dijkstra` `mst` | 图 |
-| ④ 计算原理 | `base_convert` `bitwise` `encoding` | 位 |
-| ⑤ 算法思想 | `recursion_tree` `dp_fib` `dp_knapsack` `greedy_coins` `greedy_interval` | 调用树 / 表格 / 硬币 / 区间 |
+> 这一节是**内容模块**视图（看「讲什么」）。**学段**视图（看「给谁用」）见本文开头的
+> 「学段分层」一节；两者正交，`generate.py stages` 会给出交叉表。
+
+| 模块 | 条目 | 右栏 | 分属学段 |
+|---|---|---|---|
+| ① 算法可视化 | `sort_bubble` `sort_merge` `sort_quick` `search_binary` `complexity` | 柱状 / 曲线 | 全部高中 |
+| ② 数据结构 | `stack_lifo` `queue_fifo` `linked_list` `tree_traversal` `bst_search` `min_heap` `hash_table` | 栈队列 / 链表 / 树 / 表格 | 高中 5 + 大学 2 |
+| ③ 图算法 | `bfs` `dijkstra` `mst` | 图 | 高中 1 + 大学 2 |
+| ④ 计算原理 | `base_convert` `bitwise` `encoding` | 位 | 初中 2 + 大学 1 |
+| ⑤ 算法思想 | `recursion_tree` `dp_fib` `dp_knapsack` `greedy_coins` `greedy_interval` | 调用树 / 表格 / 硬币 / 区间 | 高中 2 + 大学 3 |
 
 ## 什么时候不该用本技能
 
