@@ -23,9 +23,11 @@ from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_DIR / "lib"))
+sys.path.insert(0, str(SKILL_DIR.parent / "edulab" / "shared"))
 
 import sympy as sp                    # noqa: E402
 import models_kernel as K             # noqa: E402
+from skillkit import inline_assets    # noqa: E402  （内联静态 CSS，去掉 Tailwind CDN）
 
 TEMPLATE = (SKILL_DIR / "template" / "board.html").read_text(encoding="utf-8")
 
@@ -61,7 +63,7 @@ def render_html(data, out):
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    out.write_text(TEMPLATE.replace("__LESSON_DATA__", payload), encoding="utf-8")
+    out.write_text(inline_assets(TEMPLATE.replace("__LESSON_DATA__", payload)), encoding="utf-8")
     return out
 
 
@@ -2034,7 +2036,7 @@ def build_index(out):
 <html lang="zh-CN"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>查理·芒格思维模型 · 量化演示</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<style>__TAILWIND_CSS__</style>
 <style>body{{font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;}}</style>
 </head>
 <body class="bg-stone-100 text-stone-900">
@@ -2063,7 +2065,7 @@ def build_index(out):
 </body></html>"""
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(html, encoding="utf-8")
+    out.write_text(inline_assets(html), encoding="utf-8")
     return out
 
 

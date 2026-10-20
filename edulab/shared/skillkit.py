@@ -331,6 +331,50 @@ def _verify_derived(report, derived, points, env, xy, tick_groups, tick_blind,
     # 这样它才能在一个 except 里同时处理「判定出错」与「判定本身崩了」。
 
 
+# ==================== 内联资源（离线自足） ====================
+# 页面曾经引 <script src="https://cdn.tailwindcss.com">：断网就整页排版塌掉。
+# 现在改为**构建期编译好的静态 CSS**内联进来（shared/board/tailwind.min.css，
+# 由 tools/build_tailwind_css.py 用 Tailwind CLI 生成）。
+# 占位符留在模板里而不是直接嵌 36KB CSS：32 个技能的 template/board.html
+# 否则各自复制一份，改一处要同步 32 处 —— 那种重复一定会漂移。
+TAILWIND_TOKEN = "__TAILWIND_CSS__"
+
+_tw_cache = {}
+
+
+def tailwind_css():
+    """读取共享的静态 Tailwind CSS（进程内缓存，只读一次）。"""
+    key = "css"
+    if key not in _tw_cache:
+        p = Path(__file__).resolve().parent / "board" / "tailwind.min.css"
+        _tw_cache[key] = p.read_text(encoding="utf-8")
+    return _tw_cache[key]
+
+
+def inline_assets(html):
+    """把模板里的资源占位符替换成真实内容（当前只有 Tailwind CSS）。
+
+    关键细节：**注入位置必须与 Play CDN 一致** —— 它把生成的 <style> 追加到
+    `<head>` 末尾，因此 Tailwind 的 preflight 与 utilities 会压过页面自带的
+    `<style>`。若把 CSS 放在原来 `<script>` 的位置（页面样式之前），优先级就
+    反过来：页面里 `figure{margin:2rem 0}` 会盖掉 preflight 的 `figure{margin:0}`，
+    整页高度当场漂移 85px（2026-10 实测）。所以这里先摘掉占位符，再统一插到
+    `</head>` 之前。
+    """
+    if TAILWIND_TOKEN not in html:
+        return html
+    css = tailwind_css()
+    block = "<style>" + css + "</style>"
+    # 占位符可能被 `<style>` 包着（模板里的常规写法），也可能裸着
+    if "<style>" + TAILWIND_TOKEN + "</style>" in html:
+        html = html.replace("<style>" + TAILWIND_TOKEN + "</style>", "", 1)
+    else:
+        html = html.replace(TAILWIND_TOKEN, "", 1)
+    if "</head>" in html:
+        return html.replace("</head>", block + "\n</head>", 1)
+    return html + block          # 没有 head 的极端情况：放到最前面也比丢失好
+
+
 def render_html(data, out_path, *, template=None, token="__LESSON_DATA__",
                 compact=False, escape_close=False, json_default=None,
                 ensure_parent=True, skill_dir=None,
@@ -368,6 +412,7 @@ def render_html(data, out_path, *, template=None, token="__LESSON_DATA__",
     if escape_close:
         payload = payload.replace("</", "<\\/")
     html = template.replace(token, payload)
+    html = inline_assets(html)
     out_path = Path(out_path)
     if ensure_parent:
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -380,7 +425,7 @@ _INDEX_TPL = """<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<style>__TAILWIND_CSS__</style>
 <style>body{{font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif}}</style>
 </head><body class="bg-slate-100 text-slate-900">
 <div class="max-w-5xl mx-auto px-6 py-8">
@@ -409,8 +454,8 @@ def write_index(out_path, entries, *, title, subtitle="", kicker="Interactive Le
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
-        _INDEX_TPL.format(title=title, kicker=kicker, subtitle=subtitle,
-                          accent=accent, cards="".join(cards)),
+        inline_assets(_INDEX_TPL.format(title=title, kicker=kicker, subtitle=subtitle,
+                                        accent=accent, cards="".join(cards))),
         encoding="utf-8")
     return out_path
 

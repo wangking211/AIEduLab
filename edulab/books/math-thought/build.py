@@ -29,8 +29,10 @@ PAGE_T = (ROOT / "shared" / "viz" / "page.html").read_text(encoding="utf-8-sig")
 
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT / "shared" / "viz"))
+sys.path.insert(0, str(ROOT / "shared"))
 import figures as FIGS                          # noqa: E402
 import vizkit as vk                             # noqa: E402
+from skillkit import inline_assets              # noqa: E402  （内联静态 CSS，去掉 Tailwind CDN）
 
 PAGE_CANVAS_W = vk.PAGE_CANVAS_W                             # 书页 canvas 真实内容宽度（实测，单一真源在 vizkit）
 
@@ -105,7 +107,7 @@ def build_chapter(book, ch, fig_specs, out_dir):
             .replace("__VIZ_JS__", VIZ_JS)
             .replace("__BOOK_DATA__", payload))
     out = out_dir / f"{ch['id']}.html"
-    out.write_text(html, encoding="utf-8-sig")
+    out.write_text(inline_assets(html), encoding="utf-8-sig")
     return out, seen
 
 
@@ -128,7 +130,7 @@ def build_index(book, fig_specs, out_dir):
 <html lang="zh-CN"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{esc(book['title'])}</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<style>__TAILWIND_CSS__</style>
 <style>
   body{{background:#faf7f2;color:#1f1b16;
         font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;}}
@@ -157,7 +159,7 @@ def build_index(book, fig_specs, out_dir):
 </div>
 </body></html>"""
     out = out_dir / "index.html"
-    out.write_text(html, encoding="utf-8-sig")
+    out.write_text(inline_assets(html), encoding="utf-8-sig")
     return out
 
 

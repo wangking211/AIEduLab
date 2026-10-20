@@ -178,8 +178,9 @@
 ## 四、三条筛选标准（以后按这个筛）
 
 1. **零构建期依赖 / 单文件 HTML** —— 产物双击可开，不需要构建、不需要本地服务
-   （**注意**：排版与公式目前走 CDN，断网时排版退化、公式退化为 LaTeX 源码。
-   这是**已批准的取舍**，不等于「断网可开」；见 `curriculum-roadmap.md` 第 16 条）
+   （**注意**：排版已离线（内联编译后的 Tailwind CSS）；仍走 CDN 的只有
+   KaTeX 公式与 Three.js 3D，断网时分别退化为 LaTeX 源码、空白。
+   见 `curriculum-roadmap.md` 第 16 条与 `shared/board/VENDOR.md`）
 2. **产物能被脚本校验** —— 不能靠"看着对"
 3. **license 明确 MIT / Apache / BSD** —— `NOASSERTION` 一律不碰
 

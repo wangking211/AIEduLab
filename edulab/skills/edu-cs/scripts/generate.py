@@ -27,7 +27,7 @@ sys.path.insert(0, str(SKILL_DIR.parent.parent / "shared"))   # 共享运行时�
 sys.path.insert(0, str(SKILL_DIR / "lib"))
 
 import cs_kernel as K                          # noqa: E402
-from skillkit import cli                       # noqa: E402
+from skillkit import cli, inline_assets                       # noqa: E402
 
 
 # ==================== 载荷构造 ====================
@@ -1315,7 +1315,7 @@ def build_index(out, built=None):
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>计算机科学 · 交互课件</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<style>__TAILWIND_CSS__</style>
 <style>body{{font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif}}</style>
 </head><body class="bg-slate-100 text-slate-900">
 <div class="max-w-5xl mx-auto px-6 py-8">
@@ -1327,7 +1327,7 @@ def build_index(out, built=None):
 </div></body></html>"""
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(html, encoding="utf-8")
+    out.write_text(inline_assets(html), encoding="utf-8")
     return out
 
 

@@ -27,7 +27,7 @@ sys.path.insert(0, str(SKILL_DIR / "lib"))
 import sympy as sp                       # noqa: E402
 import bio_kernel as K                   # noqa: E402
 import cell_library as CL                # noqa: E402
-from skillkit import cli, render_html as _render_html   # noqa: E402
+from skillkit import cli, inline_assets, render_html as _render_html   # noqa: E402
 
 BOARD_T = (SKILL_DIR / "template" / "board.html").read_text(encoding="utf-8")
 CELL_T = (SKILL_DIR / "template" / "cell.html").read_text(encoding="utf-8")
@@ -1149,7 +1149,7 @@ def build_index(out):
 <html lang="zh-CN"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>生物互动学习 · 目录</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<style>__TAILWIND_CSS__</style>
 <style>body{{font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;}}</style>
 </head>
 <body class="bg-slate-100 text-slate-900">
@@ -1166,7 +1166,7 @@ def build_index(out):
 </body></html>"""
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(html, encoding="utf-8")
+    out.write_text(inline_assets(html), encoding="utf-8")
     return out
 
 

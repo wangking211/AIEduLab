@@ -41,16 +41,15 @@ sys.path.insert(0, str(ROOT / "edulab" / "shared" / "viz"))
 import vizkit as vk                                     # noqa: E402
 
 CDN_ALLOW = {
-    "cdn.tailwindcss.com": "Tailwind 运行时（版面排版）",
     "cdn.jsdelivr.net": "KaTeX（数学公式）",
     "cdnjs.cloudflare.com": "Three.js r128（生物细胞 / 化学分子 3D）",
 }
-# 说明：这三项是**已知且已批准的取舍**，不是「断网也能开」。
-# 现状（2026-10 实测）：348 个产物、每页 4 个外部资源；断网时页面能打开、文字可读，
-# 但排版整体塌掉、公式显示为 LaTeX 源码，3D 页只剩空白。
-# 引这三个之外的主机一律报错（这一条是硬的）；引这三个之内**不算通过离线可用**，
-# main() 会在末尾汇总「N 个产物依赖外部资源」，让这项取舍始终可见。
-# 要真离线：内联编译后的 CSS + KaTeX 连字体自带（独立工程，需像素级视觉回归）。
+# 说明：这两项是**已知且已批准的取舍**，不是「断网也能开」。
+# Tailwind 已不再走 CDN：排版改为构建期编译的静态 CSS 内联
+# （shared/board/tailwind.min.css，36KB；由 tools/build_tailwind_css.py 生成），
+# 所以断网时**排版正常**，剩下的退化只有：公式显示为 LaTeX 源码、3D 页空白。
+# 引这两项之外的主机一律报错；引这两项之内不算「可离线」，
+# main() 末尾会汇总「N 个产物依赖外部资源」，让取舍始终可见。
 # 见 curriculum-roadmap.md 第 16 条。
 
 TAG_RE = re.compile(r"<(script|link|img|meta|canvas)\b([^>]*)/?>", re.I)
@@ -101,6 +100,11 @@ def check_file(path, declared_heights, verbose):
     if "__VIZ_JS__" in raw or "__BOOK_DATA__" in raw:
         errs.append(("O1", rel, "模板占位符没被替换（__VIZ_JS__ / __BOOK_DATA__）",
                      "build.py 没跑完；重跑并检查它是否提前退出"))
+    if "__TAILWIND_CSS__" in raw:
+        # 这是「内联静态 CSS」的注入点。漏了它，页面会**静默地没有样式**
+        # （浏览器忽略未知的 <style> 文本），比引 CDN 更难发现 —— CDN 至少联网就好。
+        errs.append(("O1", rel, "资源占位符 __TAILWIND_CSS__ 未被内联",
+                     "写盘前要走 skillkit.inline_assets()（render_html 已内置）"))
     # 刻意**不**检查 `{{ ... }}`：LaTeX 到处是双花括号（`{{U}}`、`\\frac{{a}}{{b}}`），
     # 拿它当模板标记只会每页报一堆假阳性。本项目也根本不用 `{{ }}` 模板——
     # 书稿用 __VIZ_JS__ / __BOOK_DATA__，技能用 __LESSON_DATA__，正文用 @@name@@。
@@ -255,8 +259,9 @@ def main(argv):
         # 这条汇总存在的意义：白名单最容易变成「批准了就没人再看」。
         # 每跑一次就把取舍摆到眼前，而不是让它只活在一行注释里。
         print(f"外部资源依赖：{len(ext_pages)}/{nfile} 个产物引用 CDN（{hosts}）")
-        print("  → 断网仍可打开、文字可读；但排版塌陷、公式显示为 LaTeX 源码、3D 页空白。")
-        print("    这是**已批准的取舍**，不等于「自包含到可离线」；见 curriculum-roadmap.md 第 16 条。")
+        print("  → 断网时排版与画板正常（Tailwind 已内联）；只有公式退化"
+              "为 LaTeX 源码、3D 页空白。")
+        print("    这是**已批准的取舍**，不等于「完全离线」；见 curriculum-roadmap.md 第 16 条。")
     return 1 if tot_err else 0
 
 
