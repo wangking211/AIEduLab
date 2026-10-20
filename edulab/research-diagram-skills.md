@@ -171,13 +171,15 @@
 | `kimlawtech/korean-patent-diagram` | 19 | 无 license |
 | `ystemsrx/sql_to_ER` / `libnyx/LT2MD` / `drawcms/drawcms` | 191 / 109 / 26 | AGPL-3.0，与本项目许可策略不合 |
 | 各类 `awesome-*` 清单、PPT 类 | — | 与"图解知识"无关 |
-| Mermaid / Excalidraw / draw.io 直接引为运行时 | — | 破坏"自包含、断网可开"的底线 |
+| Mermaid / Excalidraw / draw.io 直接引为运行时 | — | 破坏**单文件产物**（要额外引运行时库；本项目现有 CDN 依赖已是已知取舍，不能再加） |
 
 ---
 
 ## 四、三条筛选标准（以后按这个筛）
 
-1. **零运行时依赖 / 自包含 HTML** —— 产物双击可开，断网可开
+1. **零构建期依赖 / 单文件 HTML** —— 产物双击可开，不需要构建、不需要本地服务
+   （**注意**：排版与公式目前走 CDN，断网时排版退化、公式退化为 LaTeX 源码。
+   这是**已批准的取舍**，不等于「断网可开」；见 `curriculum-roadmap.md` 第 16 条）
 2. **产物能被脚本校验** —— 不能靠"看着对"
 3. **license 明确 MIT / Apache / BSD** —— `NOASSERTION` 一律不碰
 

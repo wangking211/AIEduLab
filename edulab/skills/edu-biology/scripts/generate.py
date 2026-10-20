@@ -17,7 +17,6 @@ generate.py — 生物学科：注入模板 + 范例 build_* + CLI + 随机出�
   python generate.py all ./out
 """
 
-import json
 import sys
 from pathlib import Path
 
@@ -55,12 +54,11 @@ def _ns(x):
     return f"{v:.4f}".rstrip("0").rstrip(".")
 
 
-def render_html(data, out, template=BOARD_T, token="__LESSON_DATA__"):
-    out = Path(out)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    out.write_text(template.replace(token, payload), encoding="utf-8")
-    return out
+# 注意：本文件**不得**自带 render_html。
+# 曾经这里有一个局部同名实现（直接 replace 写盘），它绕过了 skillkit.render_html
+# 里的记号守卫（verify_scene），只要有人顺手调用它，等长/直角记号就可能撒谎而
+# 没有任何闸门报警。它当时是死代码，但同名的“更好用”版本就是个陷阱 ——
+# 统一走 skillkit.render_html（本文件顶部已 import 为 _render_html）。
 
 
 # =====================================================================

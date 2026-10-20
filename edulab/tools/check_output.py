@@ -40,12 +40,18 @@ BOOK = ROOT / "edulab" / "books" / "math-thought"
 sys.path.insert(0, str(ROOT / "edulab" / "shared" / "viz"))
 import vizkit as vk                                     # noqa: E402
 
-# 允许的外部主机。多一个都算错 —— 产物必须断网可开，引了 CDN 就不是自包含。
 CDN_ALLOW = {
-    "cdn.tailwindcss.com": "Tailwind 运行时（书页排版）",
-    "cdn.jsdelivr.net": "KaTeX（数学排版）",
+    "cdn.tailwindcss.com": "Tailwind 运行时（版面排版）",
+    "cdn.jsdelivr.net": "KaTeX（数学公式）",
     "cdnjs.cloudflare.com": "Three.js r128（生物细胞 / 化学分子 3D）",
 }
+# 说明：这三项是**已知且已批准的取舍**，不是「断网也能开」。
+# 现状（2026-10 实测）：348 个产物、每页 4 个外部资源；断网时页面能打开、文字可读，
+# 但排版整体塌掉、公式显示为 LaTeX 源码，3D 页只剩空白。
+# 引这三个之外的主机一律报错（这一条是硬的）；引这三个之内**不算通过离线可用**，
+# main() 会在末尾汇总「N 个产物依赖外部资源」，让这项取舍始终可见。
+# 要真离线：内联编译后的 CSS + KaTeX 连字体自带（独立工程，需像素级视觉回归）。
+# 见 curriculum-roadmap.md 第 16 条。
 
 TAG_RE = re.compile(r"<(script|link|img|meta|canvas)\b([^>]*)/?>", re.I)
 ATTR_RE = re.compile(r"([a-zA-Z-]+)\s*=\s*\"([^\"]*)\"")
@@ -212,6 +218,7 @@ def main(argv):
 
     declared = chapter_figure_heights()
     nfile = tot_err = tot_warn = 0
+    ext_pages, ext_hosts = set(), {}
     for d in dirs:
         if not d.is_dir():
             print(f"[跳过] {d} 不存在（未构建）")
@@ -226,6 +233,12 @@ def main(argv):
             nfile += 1
             tot_err += len(errs)
             tot_warn += len(warns)
+            for code, _where, msg, _fix in infos:
+                if code == "O2":
+                    m = re.match(r"外链\s+(\S+)", msg)
+                    if m:
+                        ext_pages.add(str(f))
+                        ext_hosts[m.group(1)] = ext_hosts.get(m.group(1), 0) + 1
             tag = "OK  " if not errs else "FAIL"
             print(f"[{tag}] {f.name:16s} 错误 {len(errs)}  警告 {len(warns)}")
             show = errs + (warns if verbose else [])
@@ -237,6 +250,13 @@ def main(argv):
                 for code, where, msg, fix in infos:
                     print(f"       {code}·  {msg}")
     print(f"\n合计：{nfile} 个产物，{tot_err} 个错误，{tot_warn} 个警告")
+    if ext_pages:
+        hosts = "、".join(f"{h}×{n}" for h, n in sorted(ext_hosts.items(), key=lambda kv: -kv[1]))
+        # 这条汇总存在的意义：白名单最容易变成「批准了就没人再看」。
+        # 每跑一次就把取舍摆到眼前，而不是让它只活在一行注释里。
+        print(f"外部资源依赖：{len(ext_pages)}/{nfile} 个产物引用 CDN（{hosts}）")
+        print("  → 断网仍可打开、文字可读；但排版塌陷、公式显示为 LaTeX 源码、3D 页空白。")
+        print("    这是**已批准的取舍**，不等于「自包含到可离线」；见 curriculum-roadmap.md 第 16 条。")
     return 1 if tot_err else 0
 
 

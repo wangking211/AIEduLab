@@ -152,5 +152,12 @@ python edulab/shared/viz/bridge.py serve --port 8810   # 起实时通道
 
 ## 环境
 
-Python 3.14 + sympy（精确内核）、Node 18+（语法检查）。技能与图书**不依赖第三方前端框架**，
-产出都是自包含的单文件 HTML（KaTeX 走 CDN，可离线降级）。
+Python 3.14 + sympy（精确内核）、Node 18+（渲染冒烟与语法检查）。
+产出是**单文件 HTML**：双击即开，不需要构建、不需要本地服务。
+
+但**不是完全离线**：排版走 Tailwind CDN、公式走 KaTeX CDN（3D 页另需 Three.js）。
+断网时页面照样能打开、文字读得懂，但排版会塌、公式显示为 LaTeX 源码、3D 页空白。
+这三类外部主机在 `tools/check_output.py` 里是**显式白名单**（引别的会报错），
+每次跑闸门还会汇总「N 个产物依赖外部资源」——取舍必须一直可见。
+要真离线需要内联编译后的 CSS 并把 KaTeX 字体一起自带，属独立工程；
+见 `edulab/curriculum-roadmap.md` 第 16 条。
