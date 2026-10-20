@@ -126,7 +126,9 @@ python bridge.py log                   # 看已推的补丁
 
 ## 自检清单（改完必过）
 
-- [ ] `node --check viz.js` 语法通过
+- [ ] `python ../../tools/check_render.py --source viz --selftest` → **执行级**冒烟通过：
+  真跑一遍 `mount → resize → render → 逐档回放`，比 `node --check` 强 ——
+  语法错与运行时错一并抓住（`rect is not defined` 那次就是静态闸门全绿、页面全白）
 - [ ] `python vizkit.py selftest` → 校验器自测通过
 - [ ] `python vizkit.py patchtest` → 补丁引擎自测通过
 - [ ] 书稿 `python check.py` → 全部图 0 错误 0 警告

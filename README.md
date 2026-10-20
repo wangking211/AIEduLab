@@ -18,14 +18,19 @@ AIEduLab/
 │   │   └── video/          ★ 视频技能共享素材真源（中文字体；副本不入库）
 │   ├── tools/
 │   │   ├── check_skills.py     技能闸门：可运行 + 可复现（跨哈希种子）+ 与基线一致
+│   │   │                       + 产物自检 + **执行级渲染冒烟**（第 8 项）
+│   │   ├── check_render.py  ★ 执行级渲染闸门：用 node 桩**真跑**渲染路径
+│   │   │                       （不抛异常 / 尺寸合法 / 有绘制 / 多帧指纹互异）
+│   │   ├── viz_smoke.js         上面的 viz 层 harness（渲染引擎 × 图层 spec）
+│   │   ├── page_smoke.js        上面的 page 层 harness（已构建 HTML + 最小 DOM 桩）
 │   │   ├── compose_templates.py 用「共享骨架 + 各自片段」组装 template/board.html
 │   │   ├── sync_video_assets.py 把 shared/video 真源同步进各视频技能的 template/
 │   │   ├── check_semantics.py  语义校验：图注里的数字必须在内核/画布上找得到出处
 │   │   │                       （含回归测试与校准记录；见 semantics-report.md）
 │   │   ├── check_generated_prose.py 生成覆盖率：哪些数字是插值来的、哪些是手写的
 │   │   └── audit_diagramability.py 「图解能覆盖多少知识」的可行性审计（见 coverage-audit.md）
-│   ├── books/math-thought/ 第一本书《数学思想：从计数到无穷》（8 章 36 图）
-│   ├── skills/             13 个学科技能（数理化生 + 初高中物理/几何 + 视频 + CS）
+│   ├── books/math-thought/ 第一本书《数学思想：从计数到无穷》（9 章 39 图）
+│   ├── skills/             32 个学科技能（数理化生 + 初高中 + 大学 + 视频 + CS）
 │   ├── coverage-audit.md   「图解能覆盖多少知识」的可行性审计（现算，可重跑）
 │   └── demos/ out/         手写 HTML 演示
 ├── .agents/skills/         技能安装副本（**本地目录，不进版本库**；真源是 edulab/skills/）

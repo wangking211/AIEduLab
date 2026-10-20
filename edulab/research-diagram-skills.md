@@ -205,7 +205,7 @@
 | 4 | A4 出处分级 | **已完成**（`mental-models/lib/provenance.py`；18 个模型分「现算 / 实测 / 假设」，假设逐条列出，报告与代码不同步即闸门失败） |
 | 5 | A5 "什么时候不该用本技能" × 13 | **已完成**（`ef53e07` + 闸门；含 3 个视频技能） |
 | 6 | B1 知识结构图新技能 | **已完成**（`0a94626`，`edu-knowledge-map`） |
-| 7 | A6 视觉自检 | 受环境限制（无 chromium / `browser.screenshot` 不可用）；已用 `browser.evaluate` 采样 canvas 像素替代 |
+| 7 | A6 视觉自检 | **部分机器化**：`tools/check_render.py`（+ `viz_smoke.js` / `page_smoke.js`）用 node 桩**真执行**渲染路径，验「不抛异常 / 有绘制 / 多帧指纹互异」；但它**不是像素级视觉检查**（无 GPU、无真实字体排版），3D 页仍需真机浏览器；环境限制（无 chromium）下用 `browser.evaluate` 采样像素曾是唯一替代 |
 
 ---
 

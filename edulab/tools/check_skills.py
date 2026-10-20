@@ -26,6 +26,12 @@ check_skills.py —— 技能与根级产品的一致性 / 可复现性闸门。
 7. **产物自检**：每个技能生成的 `.html` 都要过一遍 `check_output.py` 的检查项
    （残留模板记号、外链白名单、本地引用断链、渲染残留的 undefined/NaN）。
    哈希只回答「产物变没变」，不回答「产物对不对」。
+8. **执行级渲染冒烟**：把刚生成的产物**真的在 node 里跑一遍**（`page_smoke.js`）——
+   画板能不能 boot、有没有真的产生绘制调用、推进多帧时画面指纹是否互异。
+   第 7 项仍是静态检查，看不见「脚本运行时抛异常」与「跑完了但一个像素没画」，
+   而那正是本项目真实踩过的坑：viz.js 的 `rect is not defined` 让书稿 36 张图
+   全部白屏，静态闸门却一路绿灯（见 curriculum-roadmap.md 第 15 条）。
+   跑临时产物而不是 `skills/*/output/`，这样**全新克隆**（产物不入库）也能执行。
 
 用法：
     python edulab/tools/check_skills.py            # 闸门（差异即失败）
@@ -343,6 +349,48 @@ def artifact_problems(out_dir):
     return bad
 
 
+def render_problems(out_dir):
+    """对刚生成的产物做**执行级**渲染冒烟 —— 真跑一遍页面脚本，不是静态看。
+
+    与 `artifact_problems` 的分工：
+        artifact_problems（check_output）读文本 → 看得见残留记号、断链、undefined；
+        render_problems（check_render）真执行 → 看得见运行时异常、画布全白、
+        以及「推进了几十帧画面纹丝不动」这类**只有跑起来才知道**的故障。
+
+    判据（详见 tools/page_smoke.js）：不抛异常；有 canvas 就必须真的产生绘制调用；
+    推进多帧时每帧指纹必须互不相同。需要 Three.js/WebGL 的 3D 页面会被显式标 skipped
+    并计数——本机桩既无网络也无 GPU，那是**桩的局限**，不能记成页面的错，
+    但也不许悄悄放过，它们仍需真机浏览器验证。
+    """
+    import tempfile
+
+    sys.path.insert(0, str(HERE))
+    import check_render as CR
+
+    pages = sorted(str(p) for p in Path(out_dir).glob("*.html"))
+    if not pages:
+        return [], 0
+    node = CR.find_node()
+    if not node:
+        if os.environ.get("RENDER_SMOKE_SKIP") == "1":
+            return [], len(pages)
+        return ["找不到 node —— 执行级渲染冒烟无法运行（静态检查查不出渲染器坏掉；"
+                "确实在无 node 环境请显式设 RENDER_SMOKE_SKIP=1）"], 0
+    with tempfile.TemporaryDirectory() as tmp:
+        data, _rc = CR.run_page_smoke(pages, node, tmp)
+    if data.get("fatal"):
+        return [f"冒烟驱动失败：{data['fatal']}"], 0
+    bad, skipped = [], 0
+    for r in data.get("results", []):
+        if r.get("skipped"):
+            skipped += 1
+            continue
+        if not r.get("ok"):
+            name = Path(r.get("path") or "?").name
+            bad.append(f"{name}: {r.get('error')}")
+    return bad, skipped
+
+
 def run_all(sdir, out_dir, hash_seed=None):
     """跑 `<产品>/scripts/generate.py all <out_dir>`，返回 (exit_code, {相对路径: sha256})。"""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -418,7 +466,7 @@ def main(argv):
     if BASELINE.exists():
         baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
 
-    failures, fresh = [], {}
+    failures, fresh, skipped_3d = [], {}, 0
     for s, sdir in items:
         base = TMP / s
         for sub in ("a", "b"):
@@ -445,6 +493,7 @@ def main(argv):
 
         nondet = [k for k in set(h1) | set(h2) if h1.get(k) != h2.get(k)]
         art = artifact_problems(base / "a")
+        rsm, rskip = render_problems(base / "a")
         # 新增项**没有基线记录时不能默认通过**：否则加一个新技能闸门就自动对它
         # 变绿，等于形同虚设。缺少记录视为未通过，提示用 --update 建立。
         nobase = s not in baseline
@@ -456,6 +505,11 @@ def main(argv):
             flags.append(f"不可复现 {nondet}")
         if art:
             flags.append(f"产物有问题 {art}")
+        if rsm:
+            flags.append(f"渲染冒烟失败 {rsm}")
+        if rskip:
+            # 计数只做「不许静默漏掉」用：明细在 check_render 的 [SKIP] 行里逐个点名
+            skipped_3d += rskip
         if blind:
             flags.append(f"记号有 {len(blind)} 处无法判定（盲区不许静默通过）")
         if nobase:
@@ -497,8 +551,13 @@ def main(argv):
         print("\n  若确认新产物正确，用 `--update` 刷新基线；"
               "模板用 compose_templates.py、素材用 sync_video_assets.py 重新组装。")
         return 1
-    print(f"✓ 全部 {len(items)} 项：可运行、可复现、与基线一致、产物自检通过；"
-          f"模板与素材均与真源一致；文档边界齐全；出处分级一致")
+    msg = (f"✓ 全部 {len(items)} 项：可运行、可复现、与基线一致、产物自检通过、"
+           f"渲染冒烟通过；模板与素材均与真源一致；文档边界齐全；出处分级一致")
+    if skipped_3d:
+        # 漏洞不许悄悄溜过去：点名并指明它必须由谁来补验
+        msg += (f"\n  另有 {skipped_3d} 个 3D 页需 Three.js/WebGL，冒烟覆盖不到 —— "
+                f"仍需真机浏览器验证")
+    print(msg)
     return 0
 
 
