@@ -36,6 +36,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 BOOK = ROOT / "edulab" / "books" / "math-thought"
+BOOKS = sorted(p for p in (ROOT / "edulab" / "books").iterdir() if (p / "book.json").exists())
 
 sys.path.insert(0, str(ROOT / "edulab" / "shared" / "viz"))
 import vizkit as vk                                     # noqa: E402
@@ -69,13 +70,14 @@ def attrs_of(tag_text):
 
 
 def chapter_figure_heights():
-    """章节 JSON 里声明的 figure 高度。"""
+    """章节 JSON 里声明的 figure 高度（所有书合并；图 id 全局唯一）。"""
     out = {}
-    for p in sorted((BOOK / "chapters").glob("*.json")):
-        ch = json.loads(p.read_text(encoding="utf-8-sig"))
-        for b in ch.get("blocks", []):
-            if b.get("type") == "figure":
-                out[b["id"]] = int(b.get("height") or 300)
+    for book in BOOKS:
+        for p in sorted((book / "chapters").glob("*.json")):
+            ch = json.loads(p.read_text(encoding="utf-8-sig"))
+            for b in ch.get("blocks", []):
+                if b.get("type") == "figure":
+                    out[b["id"]] = int(b.get("height") or 300)
     return out
 
 
@@ -217,7 +219,7 @@ def main(argv):
         d = argv[argv.index("--dir") + 1]
         dirs.append(Path(d))
     else:
-        dirs.append(BOOK / "output")
+        dirs.extend(b / "output" for b in BOOKS)
         dirs.append(ROOT / "mental-models" / "output")
 
     declared = chapter_figure_heights()

@@ -50,6 +50,7 @@ page 层的三个渲染源：`skills`（各技能 `output/`）、`bookpages`（�
 """
 
 import argparse
+import importlib.util
 import json
 import os
 import shutil
@@ -66,6 +67,14 @@ PAGE_SMOKE_JS = HERE / "page_smoke.js"
 BOOK = ROOT / "books" / "math-thought"
 SHARED_VIZ = ROOT / "shared" / "viz"
 SHARED_BOARD = ROOT / "shared" / "board"
+# 共享装配模块：改了它们，所有书稿产物都算旧（否则闸门会去测旧货）
+SHARED_BOOK = [ROOT / "shared" / "bookbuild.py", ROOT / "shared" / "bookcheck.py"]
+
+
+def book_dirs():
+    """所有带 book.json 的书目录（不再硬编码 math-thought）。"""
+    base = ROOT / "books"
+    return sorted(p for p in base.iterdir() if (p / "book.json").exists()) if base.exists() else []
 
 RED, GRN, YEL, DIM, END = "\033[31m", "\033[32m", "\033[33m", "\033[2m", "\033[0m"
 if not sys.stdout.isatty() or os.name == "nt":
@@ -76,13 +85,21 @@ if not sys.stdout.isatty() or os.name == "nt":
 # 渲染源注册表：名字 -> (类型, 集合函数)。新的可执行渲染物往这里加一行。
 # =====================================================================
 def collect_book_specs():
-    """[viz] 书稿 chapters/*.json 引用的全部插图 spec（figures.build() 现算）。"""
-    if not BOOK.exists():
-        return {}
+    """[viz] 各书稿 chapters/*.json 引用的全部插图 spec（figures.build() 现算）。"""
+    out = {}
     sys.path.insert(0, str(ROOT / "shared" / "viz"))
-    sys.path.insert(0, str(BOOK))
-    import figures                                    # noqa: WPS433 —— 有意延后 import
-    return figures.build()
+    for book in book_dirs():
+        p = book / "figures.py"
+        if not p.exists():
+            continue
+        # 按路径 + 唯一模块名加载：两本书都有 figures.py，用 `import figures`
+        # 会命中 sys.modules 里的第一个，第二本书就悄悄用了别人的内核。
+        spec = importlib.util.spec_from_file_location(f"figures_{book.name}", p)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = mod
+        spec.loader.exec_module(mod)
+        out.update(mod.build())
+    return out
 
 
 def _built_pages(patterns):
@@ -98,8 +115,8 @@ def collect_skill_pages():
 
 
 def collect_book_pages():
-    """[page] 书稿已构建页面（含 index 导航页）。"""
-    return _built_pages(["books/math-thought/output/*.html"])
+    """[page] 各书稿已构建页面（含 index 导航页）。"""
+    return _built_pages(["books/*/output/*.html"])
 
 
 def collect_mental_pages():
@@ -149,9 +166,13 @@ def page_source_mtime(page_path):
     p = Path(page_path).resolve()
     best = 0.0
     try:
-        if p.is_relative_to(BOOK.resolve()):
-            best = max(best, _newest_mtime(BOOK, ["figures.py", "build.py", "patch.py"]))
-            best = max(best, _newest_mtime(BOOK, ["chapters/*"], CODE_EXTS))
+        book = next((b for b in book_dirs() if p.is_relative_to(b.resolve())), None)
+        if book is not None:
+            best = max(best, _newest_mtime(book, ["figures.py", "facts.py", "build.py", "patch.py"]))
+            best = max(best, _newest_mtime(book, ["chapters/*"], CODE_EXTS))
+            # 装配/校验逻辑已经抽到 shared/：改了它们，这本书的产物同样算旧
+            best = max(best, _newest_mtime(ROOT / "shared", ["bookbuild.py", "bookcheck.py",
+                                                             "factreg.py", "datasets.py"]))
         else:
             # <产品>/output/<页面>.html —— 技能与根级产品（mental-models）同构
             prod = p.parents[1]

@@ -29,11 +29,12 @@ AIEduLab/
 │   │   │                       （含回归测试与校准记录；见 semantics-report.md）
 │   │   ├── check_generated_prose.py 生成覆盖率：哪些数字是插值来的、哪些是手写的
 │   │   ├── check_facts.py   事实核查闸门：正文里的每个数都要有等级与出处
-│   │   │                       （现算/实测/文献/约定；连年份也不放过；见 shared/facts.md）
+│   │   │                       （现算/实测/文献/约定；连年份也不放过；见 shared/factreg.md）
 │   │   ├── check_licenses.py 数据许可闸门：出处 / 许可 / 指纹三关
 │   │   │                       （无 license 默认保留权利；指纹每次真算；见 shared/datasets.md）
 │   │   └── audit_diagramability.py 「图解能覆盖多少知识」的可行性审计（见 coverage-audit.md）
 │   ├── books/math-thought/ 第一本书《数学思想：从计数到无穷》（10 章 43 图）
+│   ├── books/cosmos/       第二本书《万物尺度》样章（对数尺度图 + 事实登记表）
 │   ├── skills/             32 个学科技能（数理化生 + 初高中 + 大学 + 视频 + CS）
 │   ├── coverage-audit.md   「图解能覆盖多少知识」的可行性审计（现算，可重跑）
 │   └── demos/ out/         手写 HTML 演示

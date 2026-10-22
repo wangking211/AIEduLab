@@ -150,7 +150,7 @@ class Registry:
         return [(c["id"], t) for c in self.items.values() for t in c["texts"]]
 
     # ---------------- 判据 ----------------
-    def check(self, referenced=None, chapters=None):
+    def check(self, referenced=None, chapters=None, code_text=None):
         r = Report()
         # F1 等级必填项（构造时已挡；这里兜底防「手改 dict 绕过构造」）
         for cid, c in self.items.items():
@@ -182,8 +182,16 @@ class Registry:
                 r.err("F3", "正文", f"引用了未登记的记号 @@{cid}@@",
                       "在 facts 里登记它，或改用别处已登记的记号")
             for cid in sorted(set(self.items) - set(referenced)):
-                r.warn("F3", f"claim[{cid}]", "登记了但正文从未引用（死条目）",
-                       "删掉它，或在正文里引用")
+                # 正文没引用 ≠ 死条目：插图与「上游登记」都可以直接读它。
+                # 判据用「出现次数 ≥ 2」：定义处一次 + 至少被别处引用一次。
+                # （只数一次就够，但必须**数到定义之外的那一次**，否则每条登记都算被用。）
+                if code_text:
+                    n = code_text.count(f'"{cid}"') + code_text.count(f"'{cid}'")
+                    if n >= 2:
+                        continue
+                r.warn("F3", f"claim[{cid}]",
+                       "登记了但正文、插图与上游登记都没用到（死条目）",
+                       "删掉它，或在正文/插图里引用")
         # F4 正文里的未登记数字
         if chapters is not None:
             for where, text in _prose_texts(chapters):

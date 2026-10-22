@@ -1,4 +1,4 @@
-# facts.py —— 事实登记守则
+# factreg.py —— 事实登记守则（库）+ 每本书的 facts.py（数据）
 
 > 一句话：**书里每个数都要能回答「你是从哪来的」。**
 > 答不上来的，要么改成 `@@记号@@` 由内核现算，要么在登记表里登记清楚。
@@ -28,9 +28,9 @@
 ## 用法
 
 ```python
-from facts import Registry, claim
+from factreg import Registry, claim
 
-REGISTRY = Registry("宇宙尺度")
+REGISTRY = Registry("宇宙尺度")  # 放在 books/<书>/facts.py 里
 
 REGISTRY.add(claim(
     "age_universe", 13.797e9, "年", grade="实测",

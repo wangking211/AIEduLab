@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 check_facts.py — 事实核查闸门（退出码可入 CI）。
 
@@ -26,7 +26,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(ROOT / "shared"))
 
-import facts as F                                    # noqa: E402
+import factreg as F                                    # noqa: E402
 
 TOKEN = re.compile(r"@@([a-z_][a-z0-9_]*)(?::\d+)?@@")
 
@@ -86,7 +86,12 @@ def main(argv=None):
     bad = 0
     for book in books:
         reg = load_registry(book / "facts.py")
-        rep = reg.check(referenced=referenced_tokens(book), chapters=chapter_blobs(book))
+        # 插图、上游登记（facts.py 内部互相引用）都算「在用」
+        code_text = "\n".join(
+            p.read_text(encoding="utf-8-sig", errors="replace")
+            for p in sorted(book.glob("*.py")))
+        rep = reg.check(referenced=referenced_tokens(book), chapters=chapter_blobs(book),
+                        code_text=code_text)
         tag = "OK  " if rep.ok else "FAIL"
         print(f"[{tag}] {book.name:20s} 登记 {len(reg.items)} 条  "
               f"错误 {len(rep.errors)}  警告 {len(rep.warnings)}")
