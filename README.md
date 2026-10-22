@@ -28,6 +28,8 @@ AIEduLab/
 │   │   ├── check_semantics.py  语义校验：图注里的数字必须在内核/画布上找得到出处
 │   │   │                       （含回归测试与校准记录；见 semantics-report.md）
 │   │   ├── check_generated_prose.py 生成覆盖率：哪些数字是插值来的、哪些是手写的
+│   │   ├── check_facts.py   事实核查闸门：正文里的每个数都要有等级与出处
+│   │   │                       （现算/实测/文献/约定；连年份也不放过；见 shared/facts.md）
 │   │   └── audit_diagramability.py 「图解能覆盖多少知识」的可行性审计（见 coverage-audit.md）
 │   ├── books/math-thought/ 第一本书《数学思想：从计数到无穷》（10 章 43 图）
 │   ├── skills/             32 个学科技能（数理化生 + 初高中 + 大学 + 视频 + CS）
@@ -86,6 +88,8 @@ python edulab/tools/sync_video_assets.py      # 补上视频技能的字体副�
 ```bash
 python edulab/tools/check_skills.py            # 差异即失败
 python edulab/tools/check_skills.py --update   # 确认新产物正确后刷新基线
+python edulab/tools/check_facts.py --selftest  # 事实核查闸门的负向测试（每条判据都要能红）
+python edulab/tools/check_facts.py             # 核查所有带 facts.py 的书稿（未接入的会点名）
 ```
 
 闸门覆盖 `edulab/skills/` 下的 10 个技能，外加仓库根的独立产品 `mental-models`
