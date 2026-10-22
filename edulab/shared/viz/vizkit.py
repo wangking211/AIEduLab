@@ -100,7 +100,8 @@ GEOM_NAMES = {"axis", "grid", "bar", "line", "point", "node", "edge", "arrow",
               "card", "region", "text", "matrix", "glyph", "timeline", "array", "linear"}
 
 KNOWN_FIELDS = {  # 每个图元的「已知字段」，未知字段会告警（拼错字段名的兜底）
-    "axis": {"geom", "xRange", "yRange", "xticks", "yticks", "xlab", "ylab", "xn", "yn", "xfmt", "yfmt", "when"},
+    "axis": {"geom", "xRange", "yRange", "xticks", "yticks", "xticklabels", "yticklabels",
+             "xlab", "ylab", "xn", "yn", "xfmt", "yfmt", "when"},
     "grid": {"geom", "xRange", "yRange", "xticks", "yticks", "xn", "yn", "x", "y", "color", "when"},
     "bar": {"geom", "data", "width", "fill", "fillBy", "palette", "baseline", "orient", "labelOpt", "when"},
     "line": {"geom", "fn", "from", "n", "data", "stroke", "width", "dash", "area", "fill", "baseline", "when"},
@@ -453,7 +454,19 @@ def validate(spec_, W=PAGE_CANVAS_W, H=350):
     if not r.ok:
         return r
     pad = view.get("pad") or {"l": 58, "r": 14, "b": 34, "t": 16}
-    spanx, spany = xr[1] - xr[0], yr[1] - yr[0]
+    # 对数轴：与 viz.js compute() 逐字对齐 —— 先在 log10 空间线性映射。
+    xlog, ylog = bool(view.get("xlog")), bool(view.get("ylog"))
+    if xlog and xr[0] <= 0:
+        r.err("E7", "spec.view", f"xlog 轴要求 xRange 全为正，现在是 {xr}",
+              "把 xRange 改成正数区间，或去掉 view.xlog")
+    if ylog and yr[0] <= 0:
+        r.err("E7", "spec.view", f"ylog 轴要求 yRange 全为正，现在是 {yr}",
+              "把 yRange 改成正数区间，或去掉 view.ylog")
+    if not r.ok:
+        return r
+    lx = math.log10 if xlog else (lambda t: t)
+    ly = math.log10 if ylog else (lambda t: t)
+    spanx, spany = lx(xr[1]) - lx(xr[0]), ly(yr[1]) - ly(yr[0])
     sx = (W - pad.get("l", 58) - pad.get("r", 14)) / spanx
     sy = (H - pad.get("t", 16) - pad.get("b", 34)) / spany
     if view.get("equalAspect"):
@@ -462,14 +475,14 @@ def validate(spec_, W=PAGE_CANVAS_W, H=350):
         # 与 viz.js `compute()` 的 equalAspect 分支逐字对齐：等比时两个方向都富余，
         # 富余量要**居中**分掉。漏掉这个居中偏移，所有等比图的坐标映射都会系统性
         # 偏移（宽图偏、窄图不偏），底下的越界/重叠判断就都建在错的坐标上。
-        ox = pad.get("l", 58) + ((W - pad.get("l", 58) - pad.get("r", 14)) - spanx * sx) / 2 - xr[0] * sx
+        ox = pad.get("l", 58) + ((W - pad.get("l", 58) - pad.get("r", 14)) - spanx * sx) / 2 - lx(xr[0]) * sx
         oy = pad.get("t", 16) + ((H - pad.get("t", 16) - pad.get("b", 34)) - spany * sy) / 2 \
-             + spany * sy + yr[0] * sy
+             + spany * sy + ly(yr[0]) * sy
     else:
-        ox = pad.get("l", 58) - xr[0] * sx
-        oy = (H - pad.get("b", 34)) + yr[0] * sy
-    X = lambda x: ox + x * sx
-    Y = lambda y: oy - y * sy
+        ox = pad.get("l", 58) - lx(xr[0]) * sx
+        oy = (H - pad.get("b", 34)) + ly(yr[0]) * sy
+    X = lambda x: ox + lx(x) * sx
+    Y = lambda y: oy - ly(y) * sy
 
     allowed = _ident_ctx(spec_)
     layers = spec_.get("layers")
@@ -547,12 +560,23 @@ def validate(spec_, W=PAGE_CANVAS_W, H=350):
         # ---- 几何越界 ----
         def chk_pt(x, y, tag):
             try:
-                px, py = X(float(x)), Y(float(y))
+                fx, fy = float(x), float(y)
             except Exception:
                 # 坐标不是数（字符串、None、NaN 字符串…）就换算不出来。
                 # 以前这里静默 return，等于「算不出来的点默认合法」。
                 r.blind(where + tag, f"坐标 ({x!r}, {y!r}) 无法换算成像素，未做越界检查")
                 return
+            # 对数轴上的非正数没有定义（log 0 → −∞、log 负数 → NaN）。
+            # 必须报错：静默跳过等于画出一个「看不见但合规」的图。
+            if xlog and fx <= 0:
+                r.err("E7", where + tag, f"xlog 轴上出现非正 x = {x}",
+                      "对数轴只能画正数；改用线性轴，或把该点挪到正区间")
+                return
+            if ylog and fy <= 0:
+                r.err("E7", where + tag, f"ylog 轴上出现非正 y = {y}",
+                      "对数轴只能画正数；改用线性轴，或把该点挪到正区间")
+                return
+            px, py = X(fx), Y(fy)
             if px < -2 or px > W + 2 or py < -2 or py > H + 2:
                 r.err("E5", where + tag,
                       f"世界坐标 ({x}, {y}) 落在画布外（像素 {px:.0f},{py:.0f}）",
@@ -604,6 +628,49 @@ def validate(spec_, W=PAGE_CANVAS_W, H=350):
             # 轴名是 axis 图元自己画的（不是 text 图层），也要登记进来做遮挡检测
             xr2 = g.get("xRange") or xr
             yr2 = g.get("yRange") or yr
+            # 对数轴：自动刻度是按线性算的（niceTicks），log 轴上会给出等距而非等比的刻度，
+            # 所以必须显式给 ticks；自定义刻度文字则要与 ticks 等长。
+            for axname, on, tk, tl in (("x", xlog, g.get("xticks"), g.get("xticklabels")),
+                                       ("y", ylog, g.get("yticks"), g.get("yticklabels"))):
+                if not on:
+                    continue
+                if not isinstance(tk, list):
+                    r.err("E7", where + f".{axname}ticks",
+                          f"{axname}log 轴必须显式给 {axname}ticks："
+                          f"自动刻度按线性间距算，在对数轴上位置是错的",
+                          f"写成 {axname}ticks=[1, 10, 100, 1000] 这样的等比序列")
+                elif tl is not None:
+                    if not (isinstance(tl, list) and len(tl) == len(tk)):
+                        r.err("E7", where + f".{axname}ticklabels",
+                              f"{axname}ticklabels 必须是与 {axname}ticks 等长的数组",
+                              "给每个刻度一个字符串，顺序与 ticks 一致")
+            # 自定义刻度文字的越界（fmtTick 的长数字问题正是靠它替代的，
+            # 所以这些标签同样要过 E6）
+            for tl_key, is_y in (("xticklabels", False), ("yticklabels", True)):
+                tl = g.get(tl_key)
+                if not isinstance(tl, list):
+                    continue
+                tk = g.get("yticks" if is_y else "xticks")
+                if not isinstance(tk, list):
+                    continue
+                for t, lab in zip(tk, tl):
+                    wpx = est_text_width(str(lab), 10)
+                    if is_y:
+                        if X(xr2[0]) - 6 - wpx < 0:
+                            r.err("E6", where + f".{tl_key}",
+                                  f"刻度文字 {str(lab)[:12]!r} 估宽 {wpx:.0f}px，"
+                                  f"冲出左边界（轴在 x={X(xr2[0]):.0f}px）",
+                                  "缩短文字或加大 pad.l")
+                    else:
+                        try:
+                            cx = X(float(t))
+                        except Exception:
+                            continue
+                        if cx - wpx / 2 < 0 or cx + wpx / 2 > W:
+                            r.err("E6", where + f".{tl_key}",
+                                  f"刻度文字 {str(lab)[:12]!r} 估宽 {wpx:.0f}px，"
+                                  f"以 x={cx:.0f}px 居中会出界",
+                                  "缩短文字或减少刻度")
             if g.get("xlab"):
                 wpx = est_text_width(g["xlab"], 11)
                 px = (X(xr2[0]) + X(xr2[1])) / 2
@@ -888,6 +955,26 @@ def selftest():
     rep_unk = _two("k >= 1 && k <= 3", "k == 2")
     cases.append(("W1" in codes(rep_unk), "认不出的 when 仍参与遮挡检测（保守）",
                   "W1", sorted(codes(rep_unk))))
+
+    # E7 对数轴：三条前提（范围为正 / 显式刻度 / 刻度文字等长）必须都能红，
+    # 外加一条必须绿的对照 —— 只测红不测绿，等于不知道判据会不会误伤。
+    AX = {"theme": "paper", "view": {"xRange": [1, 1000], "yRange": [0, 10], "xlog": True},
+          "layers": [{"geom": "axis", "xticks": [1, 10, 100, 1000], "xlab": "时间"},
+                     {"geom": "point", "data": [{"x": 10, "y": 5}]}]}
+    rep_log_ok = validate(AX, W=800, H=350)
+    cases.append((rep_log_ok.ok, "合法的对数轴必须通过", "ok", rep_log_ok.format()[:40]))
+    rep_log_zero = validate(dict(AX, layers=[AX["layers"][0],
+                                             {"geom": "point", "data": [{"x": 0, "y": 5}]}]),
+                            W=800, H=350)
+    cases.append(("E7" in codes(rep_log_zero), "对数轴上的 0 必须报 E7",
+                  "E7", sorted(codes(rep_log_zero))))
+    rep_log_tick = validate(dict(AX, layers=[{"geom": "axis", "xlab": "时间"}]), W=800, H=350)
+    cases.append(("E7" in codes(rep_log_tick), "对数轴缺显式刻度必须报 E7",
+                  "E7", sorted(codes(rep_log_tick))))
+    rep_log_lab = validate(dict(AX, layers=[{"geom": "axis", "xticks": [1, 10, 100, 1000],
+                                             "xticklabels": ["1", "10"]}]), W=800, H=350)
+    cases.append(("E7" in codes(rep_log_lab), "刻度文字与刻度不等长必须报 E7",
+                  "E7", sorted(codes(rep_log_lab))))
     # W2 方块类没开等比例
     case("缺 equalAspect", {"theme": "paper", "view": {"xRange": [0, 10], "yRange": [0, 10]},
                             "layers": [{"geom": "glyph", "data": [{"x": 1, "y": 1}]}]}, "W2")

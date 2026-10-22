@@ -153,6 +153,8 @@
     this.view = Object.assign({ xRange: [0, 1], yRange: [0, 1], pad: { l: 58, r: 14, b: 34, t: 16 }, equalAspect: false }, spec.view || {});
     if (spec.equalAspect) this.view.equalAspect = true;
     this.W = 0; this.H = 0; this.scX = 1; this.scY = 1; this.ox = 0; this.oy = 0;
+    // 对数轴的坐标变换（compute() 里按 view.xlog/ylog 换成 log10；默认恒等）
+    this._lx = (t) => t; this._ly = (t) => t;
     this._boxes = [];   // 供审计：记录绘制过的图元包围盒
   }
   Renderer.prototype.resize = function () {
@@ -184,20 +186,27 @@
   };
   Renderer.prototype.compute = function () {
     const v = this.view, p = v.pad;
-    const spanX = v.xRange[1] - v.xRange[0], spanY = v.yRange[1] - v.yRange[0];
+    // 对数轴：先把数据取 log10，再在 log 空间里线性映射。
+    // 这样所有图元（点/线/文字/刻度）都只认数据值，不需要各自再换算一次。
+    // 前提是范围与数据全为正 —— 校验器会拦下非正数（E7），渲染器不做兜底。
+    this._lx = v.xlog ? Math.log10 : (t) => t;
+    this._ly = v.ylog ? Math.log10 : (t) => t;
+    const x0 = this._lx(v.xRange[0]), x1 = this._lx(v.xRange[1]);
+    const y0 = this._ly(v.yRange[0]), y1 = this._ly(v.yRange[1]);
+    const spanX = x1 - x0, spanY = y1 - y0;
     let sx = (this.W - p.l - p.r) / spanX, sy = (this.H - p.t - p.b) / spanY;
     if (v.equalAspect) { const s = Math.min(sx, sy); sx = sy = s; }
     this.scX = sx; this.scY = sy;
     if (v.equalAspect) {
-      this.ox = p.l + ((this.W - p.l - p.r) - spanX * sx) / 2 - v.xRange[0] * sx;
-      this.oy = p.t + ((this.H - p.t - p.b) - spanY * sy) / 2 + spanY * sy + v.yRange[0] * sy;
+      this.ox = p.l + ((this.W - p.l - p.r) - spanX * sx) / 2 - x0 * sx;
+      this.oy = p.t + ((this.H - p.t - p.b) - spanY * sy) / 2 + spanY * sy + y0 * sy;
     } else {
-      this.ox = p.l - v.xRange[0] * sx;
-      this.oy = (this.H - p.b) + v.yRange[0] * sy;
+      this.ox = p.l - x0 * sx;
+      this.oy = (this.H - p.b) + y0 * sy;
     }
   };
-  Renderer.prototype.X = function (x) { return this.ox + x * this.scX; };
-  Renderer.prototype.Y = function (y) { return this.oy - y * this.scY; };
+  Renderer.prototype.X = function (x) { return this.ox + this._lx(x) * this.scX; };
+  Renderer.prototype.Y = function (y) { return this.oy - this._ly(y) * this.scY; };
   // 像素方向长度（用于半径/线宽等与比例尺无关的尺寸）
   Renderer.prototype.ux = function (u) { return u * this.scX; };
   Renderer.prototype.uy = function (u) { return u * this.scY; };
@@ -280,10 +289,15 @@
     const xstep = Array.isArray(xtRaw) ? 1 : (xtRaw.step || 1);
     const ystep = Array.isArray(ytRaw) ? 1 : (ytRaw.step || 1);
     ctx.font = "normal " + T.font.size.xs + "px " + T.font.family; ctx.fillStyle = c.dim;
+    // 自定义刻度文字（对数轴上 1e9 会被 fmtTick 写成「100000万」，所以允许直接给字符串）
+    const xtl = Array.isArray(g.xticklabels) ? g.xticklabels : null;
+    const ytl = Array.isArray(g.yticklabels) ? g.yticklabels : null;
     ctx.textAlign = "center"; ctx.textBaseline = "top";
-    xs.forEach((t) => ctx.fillText(g.xfmt ? g.xfmt(t) : fmtTick(t, xstep), this.X(t), ay + 7));
+    xs.forEach((t, i) => ctx.fillText(
+      xtl && xtl[i] != null ? String(xtl[i]) : (g.xfmt ? g.xfmt(t) : fmtTick(t, xstep)), this.X(t), ay + 7));
     ctx.textAlign = "right"; ctx.textBaseline = "middle";
-    ys.forEach((t) => ctx.fillText(g.yfmt ? g.yfmt(t) : fmtTick(t, ystep), ax - 6, this.Y(t)));
+    ys.forEach((t, i) => ctx.fillText(
+      ytl && ytl[i] != null ? String(ytl[i]) : (g.yfmt ? g.yfmt(t) : fmtTick(t, ystep)), ax - 6, this.Y(t)));
     if (g.xlab) {
       ctx.font = "bold " + T.font.size.sm + "px " + T.font.family;
       ctx.fillStyle = c.dim; ctx.textAlign = "center"; ctx.textBaseline = "top";

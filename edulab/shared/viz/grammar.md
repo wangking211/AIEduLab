@@ -48,6 +48,14 @@ if not rep.ok:
   自行缩小时小心文字出框。
 - `equalAspect: true` 让 x/y 等比例。**只要图里有方块类图元（`glyph` / `matrix`）就必须开**，
   否则方块会被拉成长方形（W2）。棋盘格、坐标图同理。
+- `xlog: true` / `ylog: true` 把该轴换成**对数轴**（内部先取 `log10` 再线性映射，
+  所有图元只写数据值，不用自己换算）。三条硬前提，违反即 E7：
+  1. `xRange` / `yRange` 必须**全为正**（`log 0 = −∞`）；
+  2. 该轴的 `ticks` **必须显式给**（自动刻度 `niceTicks` 按线性间距算，在对数轴上位置是错的）；
+  3. 给了 `xticklabels` / `yticklabels` 就必须与 `ticks` **等长**。
+  刻度文字建议直接给字符串（`fmtTick` 会把 `1e9` 写成「100000万」）：
+  `axis(xticks=[1,1e3,1e6,1e9], xticklabels=["1 秒","10³ 秒","10⁶ 秒","10⁹ 秒"])`。
+  注意 `ux/uy`（像素长度，用于 `card`/`node` 的 w/h）**仍是线性**的，对数轴上不要用它们定尺寸。
 
 ---
 
@@ -75,7 +83,7 @@ if not rep.ok:
 
 | geom | 必填 | 常用字段 | 用途 |
 |---|---|---|---|
-| `axis` | — | `xlab, ylab, xticks, yticks, xn, yn` | 坐标轴 + 刻度（刻度自动取"漂亮值"） |
+| `axis` | — | `xlab, ylab, xticks, yticks, xticklabels, yticklabels, xn, yn` | 坐标轴 + 刻度（刻度自动取"漂亮值"） |
 | `grid` | — | `xticks, yticks, x, y` | 网格线（`x:false` 只画横线） |
 | `line` | `fn` 或 `data` | `from_=[x0,x1], n` 采样数, `stroke, width, dash, area, fill, baseline` | 曲线 / 折线 / 带填充的区域图 |
 | `bar` | `data` | `width, fill, fillBy, palette, baseline, orient:"h"` | 条形。`data:[{x,y,w?,base?,fill?,label?}]` |
@@ -185,6 +193,7 @@ readouts=[
 | 表达式变量必须已定义 | 该层显示不出来（NaN） | E4 |
 | `card`/`node`/`point`/`region` 坐标必须在 `view` 内 | 内容跑到画布外 | E5 |
 | 文本不能超出画布 | 被裁掉 | E6 |
+| 对数轴：范围/数据全为正、刻度显式、刻度文字等长 | 点画不出来或画在错位置 | E7 |
 | 同水平带的文本不能横向重叠 | 叠字看不清 | W1 |
 | 方块类图元要开 `equalAspect` | 方块变形 | W2 |
 | 每步要有 `note` | 读者不知道在讲什么 | W3 |
