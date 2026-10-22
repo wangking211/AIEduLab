@@ -303,6 +303,50 @@ def est_text_width(s, size):
     return best
 
 
+# ---- when 条件的互斥判定（W1 用）----
+# viz.js 的 drawScene 逐层门控：`when` 为假时**整层不画**（viz.js:719-721）。
+# 所以两个互斥门控的文本永远不会同屏，把它们报成「同一水平带互相遮挡」是假阳性。
+# 这里只认**闭区间**写法（== / >= / <=），认不出的一律当作「可能同屏」——
+# 宁可多报一条，也不放过真的遮挡。
+_WHEN_RE = re.compile(r"^\s*k\s*(==|>=|<=)\s*(-?\d+(?:\.\d+)?)\s*$")
+
+
+def _when_span(w):
+    """把 when 条件解析成 k 的闭区间 (lo, hi)；None 表示「认不出」。
+
+    区间端点为 None 表示该侧无界。空条件 = 永远可见，由 _when_exclusive 先处理。
+    """
+    if not isinstance(w, str):
+        return None
+    m = _WHEN_RE.match(w)
+    if not m:
+        return None
+    op, v = m.group(1), float(m.group(2))
+    if op == "==":
+        return (v, v)
+    if op == ">=":
+        return (v, None)
+    return (None, v)          # "<="
+
+
+def _when_exclusive(a, b):
+    """两个 when 条件是否**不可能同时成立**（于是两层不会同屏）。
+
+    认不出的写法返回 False（保守：照旧参与遮挡检测）。
+    """
+    if a is None or b is None:
+        return False                      # 任一层永远可见
+    sa, sb = _when_span(a), _when_span(b)
+    if sa is None or sb is None:
+        return False
+    (la, ha), (lb, hb) = sa, sb
+    lo = la if lb is None else (lb if la is None else max(la, lb))
+    hi = ha if hb is None else (hb if ha is None else min(ha, hb))
+    if lo is None or hi is None:
+        return False                      # 至少一侧无界 → 必有交集
+    return lo > hi
+
+
 class Report:
     def __init__(self):
         self.errors = []
@@ -604,6 +648,10 @@ def validate(spec_, W=PAGE_CANVAS_W, H=350):
     for a in range(len(texts)):
         for b in range(a + 1, len(texts)):
             A, B = texts[a], texts[b]
+            # 两层由 when 互斥 → 永远不会同屏，不构成遮挡（viz.js 逐层门控）
+            if A["i"] != B["i"] and _when_exclusive(layers[A["i"]].get("when"),
+                                                    layers[B["i"]].get("when")):
+                continue
             if abs(A["y"] - B["y"]) > max(A["h"], B["h"]) * 0.7:
                 continue
             ov = min(A["r"], B["r"]) - max(A["l"], B["l"])
@@ -813,6 +861,33 @@ def selftest():
     case("文本重叠", {"theme": "paper", "view": {"xRange": [0, 10], "yRange": [0, 10]},
                       "layers": [{"geom": "text", "x": 5, "y": 5, "text": "标签甲甲乙"},
                                  {"geom": "text", "x": 5.05, "y": 5.02, "text": "标签丙丁戊"}]}, "W1")
+
+    # W1 的 when 门控：viz.js 逐层门控，互斥的两层永不同屏 —— 报成遮挡就是假阳性。
+    # 必须**两边都测**：互斥的不报（否则假阳性淹没真问题），同屏的照报
+    # （否则等于把 W1 关掉）。
+    def _two(w1, w2):
+        lay = [{"geom": "text", "x": 5, "y": 5, "text": "标签甲甲乙"},
+               {"geom": "text", "x": 5.05, "y": 5.02, "text": "标签丙丁戊"}]
+        for L, w in zip(lay, (w1, w2)):
+            if w is not None:
+                L["when"] = w
+        return validate({"theme": "paper", "view": {"xRange": [0, 10], "yRange": [0, 10]},
+                         "layers": lay,
+                         "steps": [{"k": 1, "note": "a"}, {"k": 2, "note": "b"},
+                                   {"k": 3, "note": "c"}]}, W=800, H=350)
+
+    rep_ex = _two("k == 1", "k == 2")
+    cases.append(("W1" not in codes(rep_ex) and rep_ex.ok, "互斥步骤的文本不算遮挡",
+                  "无 W1", sorted(codes(rep_ex))))
+    rep_co = _two("k >= 1", "k >= 2")
+    cases.append(("W1" in codes(rep_co), "同屏的文本照样报 W1",
+                  "W1", sorted(codes(rep_co))))
+    rep_mix = _two("k >= 2", "k == 1")
+    cases.append(("W1" not in codes(rep_mix), "k>=2 与 k==1 判为互斥",
+                  "无 W1", sorted(codes(rep_mix))))
+    rep_unk = _two("k >= 1 && k <= 3", "k == 2")
+    cases.append(("W1" in codes(rep_unk), "认不出的 when 仍参与遮挡检测（保守）",
+                  "W1", sorted(codes(rep_unk))))
     # W2 方块类没开等比例
     case("缺 equalAspect", {"theme": "paper", "view": {"xRange": [0, 10], "yRange": [0, 10]},
                             "layers": [{"geom": "glyph", "data": [{"x": 1, "y": 1}]}]}, "W2")

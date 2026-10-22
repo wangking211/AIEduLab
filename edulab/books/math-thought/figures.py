@@ -2962,6 +2962,516 @@ FIGS.update({
     "fig-channel": fig_channel,
 })
 
+# =====================================================================
+# 第 10 章插图：确定性 —— 从可预测到混沌
+# =====================================================================
+# 全章只用一个映射 x ← r·x·(1−x)。分岔点、Lyapunov 指数、分离步数全部现算，
+# 正文记号（PROSE）与图注引用同一份结果。
+
+
+def _f(r, x):
+    """逻辑斯蒂映射 f(x) = r·x·(1−x)。"""
+    return r * x * (1.0 - x)
+
+
+def _fp(r, x, n):
+    """f 的 n 次迭代 f^n(x)。"""
+    for _ in range(n):
+        x = _f(r, x)
+    return x
+
+
+def _orbit(r, x0, n):
+    """轨道 [x0, x1, …, x_n]。"""
+    xs = [x0]
+    for _ in range(n):
+        xs.append(_f(r, xs[-1]))
+    return xs
+
+
+def _n_cycle(r, n, x0=0.371, warm=8000, iters=40, res=1e-11, sep=1e-9):
+    """(恰为 n 周期的轨道点, 带符号乘子)；不满足「恰为 n 周期且吸引」则 (None, None)。
+
+    三步缺一不可，每一步都有实测教训（记在 roadmap 第 18 条）：
+      ① 普通迭代定盆 —— 种子落在**当前吸引子**旁边，是哪个周期没有歧义；
+      ② 牛顿精修 g(x)=f^n(x)−x —— 二次收敛到该处的**精确**轨道，牛顿不关心稳定与否；
+      ③ 验收三连 —— |g|<1e-11（确是 f^n 的不动点）、n 个点互不相同（恰为 n 周期）、
+         |乘子|<1（且吸引）。
+
+    两条此路不通的方案（都是撞过墙才换的）：
+      · 「普通迭代直接数周期」—— 临界慢化：分岔点附近乘子 → −1，收敛速度趋于零，
+        谓词的过渡带宽达 1e-4，分岔点会被算歪；
+      · Aitken Δ² 加速 —— 它是有理映射，能把**不稳定**根变稳定：r = 3.1 明明在二周期
+        窗口内，Aitken 却收敛到不稳定不动点 x*，谓词当场失去单调性。
+    """
+    x = x0
+    for _ in range(warm):
+        x = _f(r, x)
+    y, ok = x, False
+    for _ in range(iters):
+        g = _fp(r, y, n) - y
+        if abs(g) < res:
+            ok = True
+            break
+        h = 1e-7 * max(1.0, abs(y))
+        gp = (_fp(r, y + h, n) - (y + h) - g) / h
+        if gp == 0.0 or not math.isfinite(gp):
+            return None, None
+        y -= g / gp
+    if not ok:
+        return None, None
+    pts, z = [y], y
+    for _ in range(n - 1):
+        z = _f(r, z)
+        pts.append(z)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if abs(pts[i] - pts[j]) < sep:
+                return None, None
+    m = 1.0
+    for v in pts:
+        m *= r * (1.0 - 2.0 * v)
+    return pts, m
+
+
+def _in_window(r, n):
+    """该 r 处「n-周期轨道存在且吸引」。"""
+    pts, m = _n_cycle(r, n)
+    return pts is not None and abs(m) < 1.0
+
+
+def _flip_point(n, lo, hi, iters=56):
+    """周期 n 窗口的右端点（吸引子从 n 翻到 2n 的那个 r），二分。"""
+    assert _in_window(lo, n), f"lo={lo} 处不是 {n}-周期吸引"
+    assert not _in_window(hi, n), f"hi={hi} 处仍是 {n}-周期吸引"
+    for _ in range(iters):
+        mid = 0.5 * (lo + hi)
+        if _in_window(mid, n):
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+_FLIP = None
+
+
+def flip_points():
+    """倍周期分岔点 r_1..r_7 与相邻间隔之比（模块级缓存，首算约 0.3s）。
+
+    验收不靠「跟文献对一遍」，靠两条**内生**判据：分岔点严格递增；回代算出的乘子
+    精确等于 −1 —— 后者是翻倍分岔的**定义**，与二分过程完全独立。
+    """
+    global _FLIP
+    if _FLIP is None:
+        rs, prev, gap = [], 2.9, 0.3
+        lo, hi = 2.9, 3.2
+        for n in (1, 2, 4, 8, 16, 32, 64):
+            if n > 1:
+                lo, hi = prev + 1e-6, prev + max(gap * 0.6, 1e-4)
+                while _in_window(hi, n):
+                    lo = hi
+                    gap *= 2
+                    hi = prev + gap
+                    if hi > 4.2:
+                        raise RuntimeError(f"周期 {n} 找不到窗口右端")
+            r_n = _flip_point(n, lo, hi)
+            assert r_n > prev, f"周期 {n} 的分岔点 {r_n} ≤ 上一个 {prev}"
+            pts, m = _n_cycle(r_n, n)
+            assert pts is not None and abs(m + 1.0) < 1e-6, \
+                f"周期 {n} 的端点乘子 {m} ≠ −1，找到的不是翻倍分岔"
+            gap = r_n - prev
+            rs.append(r_n)
+            prev = r_n
+        ratios = [(rs[i - 1] - rs[i - 2]) / (rs[i] - rs[i - 1]) for i in range(2, len(rs))]
+        _FLIP = (rs, ratios)
+    return _FLIP
+
+
+def lyapunov(r, x0=0.371, warm=3000, n=6000):
+    """Lyapunov 指数 λ = ln|r| + ⟨ln|1−2x|⟩，沿真实轨道取平均。
+
+    自校验：r = 4 的理论值恰为 ln 2 = 0.693147…，实算偏差就是采样误差。
+    """
+    x = x0
+    for _ in range(warm):
+        x = _f(r, x)
+    s = 0.0
+    for _ in range(n):
+        s += math.log(abs(1.0 - 2.0 * x))
+        x = _f(r, x)
+    return math.log(abs(r)) + s / n
+
+
+_LYAP = None
+
+
+def lyapunov_curve():
+    """λ(r) 在 [2.4, 4] 上 200 点采样（模块级缓存，首算约 1s）。"""
+    global _LYAP
+    if _LYAP is None:
+        pts = []
+        for i in range(200):
+            r = 2.4 + 1.6 * i / 199
+            pts.append((r, lyapunov(r)))
+        _LYAP = pts
+    return _LYAP
+
+
+def _attractor(r, x0=0.371, warm=1500, tail=96, sep=1e-6):
+    """(周期 p, 该画的 x 值)；p = 0 表示混沌（画尾段采样点）。
+
+    周期轨道只画**互不相同**的点（画 96 个重复点是浪费）；混沌每列画 24 个采样点。
+    三周期窗口会被归进混沌列（p 只列 2 的幂），但点本身落在三条干净的竖线上 ——
+    这正是「周期窗口在分岔图里看着像干净竖线」的原因。
+    """
+    x = x0
+    for _ in range(warm):
+        x = _f(r, x)
+    xs = []
+    for _ in range(tail):
+        x = _f(r, x)
+        xs.append(x)
+    for p in (1, 2, 4, 8, 16, 32):
+        if abs(xs[p] - xs[0]) < sep and abs(xs[2 * p] - xs[0]) < sep:
+            vals = []
+            for v in xs[:p]:
+                if not any(abs(v - u) < sep for u in vals):
+                    vals.append(v)
+            return p, vals
+    return 0, xs[::4]
+
+
+def _cycle_values(r, p):
+    """r 处周期 p 吸引子的取值（升序）；找不到返回 []。"""
+    pts, _ = _n_cycle(r, p)
+    return sorted(pts) if pts else []
+
+
+def fig_logistic():
+    """蛛网图：同一族规则，r 调四个档 —— 不动点 → 二周期 → 四周期 → 混沌。"""
+    x0 = 0.2
+    cfg = [(2.8, 1, 24, "收敛到一个值"),
+           (3.2, 2, 36, "周期 2"),
+           (3.55, 4, 48, "周期 4"),
+           (3.9, 0, 72, "混沌")]
+    vals = {r: (_cycle_values(r, p) if p else []) for r, p, _, _ in cfg}
+    layers = [
+        {"geom": "axis", "xRange": [0, 1], "yRange": [0, 1], "xlab": "输入 x",
+         "ylab": "输出 f(x)", "xticks": [0, 0.25, 0.5, 0.75, 1],
+         "yticks": [0, 0.25, 0.5, 0.75, 1]},
+        {"geom": "line", "data": [[0, 0], [1, 1]], "stroke": DIM, "width": 1.1,
+         "dash": True},
+        {"geom": "text", "x": 0.97, "y": 0.93, "text": "y = x：把输出接回输入",
+         "align": "right", "size": 9.5, "color": DIM},
+    ]
+    notes = []
+    for i, (r, p, n, tag) in enumerate(cfg, start=1):
+        xs = _orbit(r, x0, n)
+        cob = []
+        for a, b in zip(xs, xs[1:]):
+            cob += [[a, a], [a, b]]
+        cob.append([xs[-1], xs[-1]])
+        layers += [
+            {"geom": "line", "when": f"k == {i}", "fn": f"{r:g}*x*(1-x)",
+             "stroke": INK, "width": 2.0},
+            {"geom": "line", "when": f"k == {i}", "data": cob, "stroke": ACCENT,
+             "width": 1.1},
+            {"geom": "text", "when": f"k == {i}", "x": 0.03, "y": 0.965,
+             "text": f"r = {r:g}", "align": "left", "size": 13, "color": INK,
+             "weight": "bold"},
+            {"geom": "text", "when": f"k == {i}", "x": 0.03, "y": 0.905, "text": tag,
+             "align": "left", "size": 10, "color": DIM},
+        ]
+        if p:
+            layers += [
+                {"geom": "point", "when": f"k == {i}", "r": 4.5, "fill": GOOD,
+                 "data": [{"x": v, "y": v} for v in vals[r]]},
+                {"geom": "text", "when": f"k == {i}", "x": 0.03, "y": 0.05,
+                 "text": (f"停在 x* = {vals[r][0]:.4f}" if p == 1 else
+                          f"{p} 个值轮流：" + " ↔ ".join(f"{v:.4f}" for v in vals[r])),
+                 "align": "left", "size": 10, "color": GOOD},
+            ]
+            if p == 1:
+                notes.append(f"r = {r:g}：折线一路爬向不动点 x* = {vals[r][0]:.4f}，"
+                             f"停住不再动 —— 系统只有一个归宿。")
+            elif p == 2:
+                notes.append(f"r = {r:g}：不动点失稳，轨道在 {vals[r][0]:.4f} ↔ "
+                             f"{vals[r][1]:.4f} 两个值之间来回跳（周期 2）。"
+                             f"规则没变，归宿却从一个点变成了两个点。")
+            else:
+                notes.append(f"r = {r:g}：又裂一次，四个值轮流 "
+                             + " ↔ ".join(f"{v:.4f}" for v in vals[r])
+                             + "（周期 4）。裂得越来越快。")
+        else:
+            fx = 1 - 1 / r
+            layers += [
+                {"geom": "point", "when": f"k == {i}", "r": 4.5, "fill": DIM,
+                 "data": [{"x": fx, "y": fx}]},
+                {"geom": "text", "when": f"k == {i}", "x": 0.03, "y": 0.05,
+                 "text": f"x* = {fx:.4f} 还在，但已不稳定", "align": "left",
+                 "size": 10, "color": BAD},
+            ]
+            notes.append(f"r = {r:g}：轨道把 [0,1] 走遍、永不重复；不动点 x* = {fx:.4f} "
+                         f"仍然存在，只是不再吸引任何轨道 —— 确定性规则没变，"
+                         f"可预测性却没了。")
+    steps = [{"k": i + 1, "note": t} for i, t in enumerate(notes)]
+    return {"theme": PAPER, "view": {"xRange": [0, 1], "yRange": [0, 1],
+                                     "pad": {"l": 44, "r": 16, "b": 30, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
+def fig_bifurcation():
+    """分岔图：每个 r 的长期取值画成点，看一条线怎么裂成一片。"""
+    cols = ([round(2.4 + 0.02 * i, 4) for i in range(31)]
+            + [round(3.0 + 0.005 * i, 4) for i in range(1, 201)])
+    groups = {"1": [], "2": [], "mid": [], "chaos": []}
+
+    def _dedupe(vals, eps=2e-3):
+        """同一列里把「同一个点」画多次的采样去掉。
+
+        周期窗口（如 r = 1+√8 的三周期）会被归进混沌列（p 只列 2 的幂），
+        24 个采样点其实只有 3 个值 —— 不去重就会在同一坐标重复画 8 遍。
+        """
+        keep = []
+        for v in sorted(vals):
+            if not keep or v - keep[-1] > eps:
+                keep.append(v)
+        return keep
+
+    for r in cols:
+        p, vs = _attractor(r)
+        key = "1" if p == 1 else "2" if p == 2 else "mid" if p else "chaos"
+        groups[key].extend({"x": r, "y": round(v, 4)} for v in _dedupe(vs))
+    rs, ratios = flip_points()
+    p3 = 1 + math.sqrt(8)
+    layers = [
+        {"geom": "axis", "xRange": [2.4, 4.0], "yRange": [0, 1], "xlab": "参数 r",
+         "ylab": "迭代充分多次后的 x", "xticks": [2.4, 2.8, 3.2, 3.6, 4.0],
+         "yticks": [0, 0.5, 1]},
+        {"geom": "point", "when": "k >= 1", "r": 1.2, "fill": GOOD,
+         "data": groups["1"]},
+        {"geom": "point", "when": "k >= 2", "r": 1.2, "fill": TEAL,
+         "data": groups["2"]},
+        {"geom": "point", "when": "k >= 3", "r": 1.2, "fill": ACCENT2,
+         "data": groups["mid"]},
+        {"geom": "point", "when": "k >= 4", "r": 0.9, "fill": ACCENT,
+         "data": groups["chaos"]},
+    ]
+    for i, rr in enumerate(rs[:3]):
+        layers += [
+            {"geom": "line", "when": "k >= 3", "data": [[rr, 0], [rr, 1]],
+             "stroke": DIM, "width": 1.0, "dash": True},
+            {"geom": "text", "when": "k >= 3", "x": rr, "y": 1.0,
+             "text": f"r = {rr:g}" if i == 0 else f"r = {rr:.4f}",
+             # 三个标签都在 k>=3 同屏：r2 右对齐，否则它的尾巴会撞上 r3 的头部
+             "align": "right" if i == 1 else "left",
+             "size": 9.5, "color": DIM, "dy": -15 if i % 2 == 0 else -28},
+        ]
+    layers += [
+        {"geom": "line", "when": "k >= 4", "data": [[p3, 0], [p3, 1]],
+         "stroke": BAD, "width": 1.2, "dash": True},
+        {"geom": "text", "when": "k >= 4", "x": p3, "y": 1.0, "text": "周期 3 窗口",
+         "align": "right", "size": 9.5, "color": BAD, "dy": -15},
+    ]
+    steps = [
+        {"k": 1, "note": "只有不动点：每个 r 都收敛到一个值，图上是一条线 —— "
+                       "系统行为完全由这条线回答。"},
+        {"k": 2, "note": f"r 越过 {rs[0]:g}（现算 {rs[0]:.6f}），一条线裂成两条："
+                       f"轨道在两个值之间跳，周期 2。"},
+        {"k": 3, "note": f"再裂成四条、八条……每裂一次，相邻分岔点的间隔缩到前一次的 "
+                       f"1/{ratios[0]:.2f}、1/{ratios[1]:.2f} …… 比值 "
+                       f"{ratios[0]:.3f} → {ratios[1]:.3f} → {ratios[2]:.3f} → "
+                       f"{ratios[-1]:.3f}，收敛到 4.669 附近 —— 这就是费根鲍姆常数，"
+                       f"它只与「单峰」这个形状有关，与方程无关。"},
+        {"k": 4, "note": f"裂到头（最后一个能算清的分岔点 r ≈ {rs[-1]:.4f}）之后是混沌带；"
+                       f"带子里还有干净的竖线 —— 周期窗口，比如 r = 1+√8 ≈ {p3:.4f} "
+                       f"处的三周期。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [2.4, 4.0], "yRange": [0, 1],
+                                     "pad": {"l": 44, "r": 16, "b": 30, "t": 40}},
+            "layers": layers, "steps": steps}
+
+
+def fig_lyapunov():
+    """Lyapunov 指数曲线：一条曲线同时回答「哪里混沌、哪里可预测、哪里在分岔」。"""
+    curve = lyapunov_curve()
+    data = [[round(r, 4), round(max(v, -2.0), 4)] for r, v in curve]
+    runs, start = [], None
+    for i, (r, v) in enumerate(curve):
+        if v > 0 and start is None:
+            start = r
+        elif v <= 0 and start is not None:
+            runs.append((start, curve[i - 1][0]))
+            start = None
+    if start is not None:
+        runs.append((start, curve[-1][0]))
+    rs, _ = flip_points()
+    p3 = 1 + math.sqrt(8)
+    l32, l39 = lyapunov(3.2), lyapunov(3.9)
+    layers = [
+        {"geom": "axis", "xRange": [2.4, 4.0], "yRange": [-2, 1], "xlab": "参数 r",
+         "ylab": "Lyapunov 指数 λ", "xticks": [2.4, 2.8, 3.2, 3.6, 4.0],
+         "yticks": [-2, -1, 0, 1]},
+    ]
+    layers += [{"geom": "region", "when": "k >= 2", "x": [a, b], "y": [0, 1],
+                "fill": "#fdeceb", "outline": False} for a, b in runs]
+    layers += [
+        {"geom": "line", "data": [[2.4, 0], [4.0, 0]], "stroke": BAD, "width": 1.4,
+         "dash": True},
+        {"geom": "text", "x": 2.45, "y": 0, "text": "λ = 0：混沌与可预测的分界",
+         "align": "left", "size": 9.5, "color": BAD, "dy": -7},
+        {"geom": "line", "data": data, "stroke": INK, "width": 1.6},
+        {"geom": "text", "when": "k >= 2", "x": 3.10, "y": -1.80,
+         "text": f"r = 3.2：λ = {l32:+.2f}", "align": "left", "size": 10,
+         "color": GOOD},
+        {"geom": "text", "when": "k >= 2", "x": 3.72, "y": 0.70,
+         "text": f"r = 3.9：λ = {l39:+.2f}", "align": "left", "size": 10,
+         "color": BAD},
+    ]
+    for i, rr in enumerate(rs[:3]):
+        layers += [
+            {"geom": "line", "when": "k >= 3", "data": [[rr, -2], [rr, 1]],
+             "stroke": DIM, "width": 1.0, "dash": True},
+            {"geom": "text", "when": "k >= 3", "x": rr, "y": 1.0,
+             "text": f"r = {rr:g}" if i == 0 else f"r = {rr:.4f}",
+             # 三个标签都在 k>=3 同屏：r2 右对齐，否则它的尾巴会撞上 r3 的头部
+             "align": "right" if i == 1 else "left",
+             "size": 9.5, "color": DIM, "dy": -15 if i % 2 == 0 else -28},
+        ]
+    layers += [
+        {"geom": "line", "when": "k >= 4", "data": [[p3, -2], [p3, 1]],
+         "stroke": BAD, "width": 1.2, "dash": True},
+        {"geom": "text", "when": "k >= 4", "x": p3, "y": -1.95, "text": "三周期窗口",
+         "align": "right", "size": 9.5, "color": BAD},
+    ]
+    steps = [
+        {"k": 1, "note": "λ(r) 是「初值误差每步被放大多少倍」取对数后的长期平均："
+                       "在 0 线下方，误差指数缩小（可预测）；升到 0 线上方，"
+                       "误差指数放大（混沌）。"},
+        {"k": 2, "note": f"填出 λ>0 的区间，再读两个点：r = 3.2 时 λ = {l32:+.3f}，"
+                       f"差距每步乘 e^λ = {math.exp(l32):.3f}；r = 3.9 时 λ = {l39:+.3f}，"
+                       f"每步乘 {math.exp(l39):.3f}。"},
+        {"k": 3, "note": f"把三个分岔点（r = {rs[0]:g}、{rs[1]:.4f}、{rs[2]:.4f}）标出来："
+                       f"每个分岔点上 λ 恰好擦过 0 —— 分岔就是稳定性交棒的位置。"},
+        {"k": 4, "note": f"混沌带里也有干净的凹陷：r = 1+√8 ≈ {p3:.4f} 处冒出三周期窗口，"
+                       f"λ 掉回 0 以下 —— 混沌不是「处处乱」，而是乱与不乱交替。"
+                       f"（λ < −2 的尖峰为读图截断在 −2。）"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [2.4, 4.0], "yRange": [-2, 1],
+                                     "pad": {"l": 46, "r": 16, "b": 30, "t": 40}},
+            "layers": layers, "steps": steps}
+
+
+def fig_sensitivity():
+    """初值敏感：两条只差 1e-6 的轨道，一个越缩越小、一个指数放大到饱和。"""
+    d0, nmax = 1e-6, 40
+
+    def delta_curve(rr):
+        a, b = 0.371, 0.371 + d0
+        out = []
+        for n in range(nmax + 1):
+            out.append([n, round(math.log10(abs(a - b)), 3)])
+            if n < nmax:
+                a, b = _f(rr, a), _f(rr, b)
+        return out
+
+    c28, c39 = delta_curve(2.8), delta_curve(3.9)
+    sep = next(n for n, v in c39 if v > -1.0)     # log10|Δ| 首次越过 −1 ⇔ |Δ| > 0.1
+    sat = max(v for n, v in c39 if n >= 30)
+    l28, l39 = lyapunov(2.8), lyapunov(3.9)
+    layers = [
+        {"geom": "axis", "xRange": [0, 40], "yRange": [-11, 0], "xlab": "迭代步数 n",
+         "ylab": "log10 |x − y|", "xticks": [0, 10, 20, 30, 40], "yticks": [0, -4, -8]},
+        {"geom": "line", "data": [[0, -6], [40, -6]], "stroke": DIM, "width": 1.0,
+         "dash": True},
+        {"geom": "text", "x": 0.6, "y": -6, "text": "起点只差百万分之一",
+         "align": "left", "size": 9.5, "color": DIM, "dy": -7},
+        {"geom": "line", "data": c28, "stroke": TEAL, "width": 1.9},
+        {"geom": "text", "x": 39.5, "y": c28[-1][1],
+         "text": f"r = 2.8：λ = {l28:+.2f}，越缩越小", "align": "right", "size": 10,
+         "color": TEAL, "dy": 15},
+        {"geom": "line", "when": "k >= 2", "data": c39, "stroke": BAD, "width": 1.9},
+        {"geom": "text", "when": "k >= 2", "x": 24, "y": -6.2,
+         "text": f"r = 3.9：λ = {l39:+.2f}，指数放大", "align": "right", "size": 10,
+         "color": BAD},
+        {"geom": "line", "when": "k >= 3", "data": [[sep, -11], [sep, 0]],
+         "stroke": BAD, "width": 1.1, "dash": True},
+        {"geom": "point", "when": "k >= 3", "r": 4.0, "fill": BAD,
+         "data": [{"x": sep, "y": -1.0}]},
+        {"geom": "text", "when": "k >= 3", "x": sep + 1.2, "y": -10.4,
+         "text": f"第 {sep} 步差到 0.1", "align": "left", "size": 10, "color": BAD},
+        {"geom": "line", "when": "k >= 4", "data": [[0, sat], [40, sat]],
+         "stroke": ACCENT2, "width": 1.2, "dash": True},
+        {"geom": "text", "when": "k >= 4", "x": 1, "y": sat,
+         "text": f"封顶：|Δ| ≈ {10 ** sat:.2f}", "align": "left", "size": 10,
+         "color": ACCENT2, "dy": -8},
+    ]
+    steps = [
+        {"k": 1, "note": f"r = 2.8（λ = {l28:+.3f}）：两条起点只差百万分之一的轨道，"
+                       f"差距每步乘 e^λ = {math.exp(l28):.3f}，一路下滑 —— "
+                       f"初值误差不会长大，系统可预测。"},
+        {"k": 2, "note": f"换成 r = 3.9（λ = {l39:+.3f}）：同一件事掉头向上，"
+                       f"每步乘 e^λ ≈ {math.exp(l39):.2f}。前 20 步两条轨道还几乎重合。"},
+        {"k": 3, "note": f"第 {sep} 步差距第一次越过 0.1 —— 从此「当初那一点差别」"
+                       f"变成「完全不同的两件事」。放大 e 倍只要 {1 / l39:.2f} 步，"
+                       f"翻一倍只要 ln2/λ = {math.log(2) / l39:.2f} 步。"},
+        {"k": 4, "note": f"但差距不会无限涨：封顶在 {10 ** sat:.2f} 附近（轨道关在 [0,1] 内，"
+                       f"|Δ| ≤ 1）。**指数分离只发生在有界区域里** —— 拉伸之后必须折叠，"
+                       f"这正是混沌与「指数增长」的区别。"},
+    ]
+    return {"theme": PAPER, "view": {"xRange": [0, 40], "yRange": [-11, 0],
+                                     "pad": {"l": 52, "r": 16, "b": 30, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
+def logistic_values():
+    """fig-logistic 供正文引用的数值（全部现算）。"""
+    cy = _cycle_values(3.2, 2)
+    assert len(cy) == 2, "r = 3.2 的二周期轨道没找到"
+    return {"fixed_28": 1 - 1 / 2.8, "fixed_39": 1 - 1 / 3.9,
+            "cycle_a": cy[0], "cycle_b": cy[1]}
+
+
+def bifurcation_values():
+    """fig-bifurcation 供正文引用的数值。"""
+    rs, ratios = flip_points()
+    return {"r_first": rs[0], "r_second": rs[1], "r_third": rs[2], "r_last": rs[-1],
+            "delta_first": ratios[0], "delta_last": ratios[-1],
+            "p3_window": 1 + math.sqrt(8)}
+
+
+def lyapunov_values():
+    """fig-lyapunov 供正文引用的数值。"""
+    return {"lyap28": lyapunov(2.8), "lyap32": lyapunov(3.2),
+            "lyap39": lyapunov(3.9), "lyap4": lyapunov(4.0)}
+
+
+def sensitivity_values():
+    """fig-sensitivity 供正文引用的数值。"""
+    a, b = 0.371, 0.371 + 1e-6
+    sep01 = sep001 = None
+    for n in range(41):
+        d = abs(a - b)
+        if sep001 is None and d > 0.01:
+            sep001 = n
+        if sep01 is None and d > 0.1:
+            sep01 = n
+        a, b = _f(3.9, a), _f(3.9, b)
+    assert sep01 is not None, "初值敏感：差距从未越过 0.1，参数不对"
+    l39 = lyapunov(3.9)
+    return {"sep_001": sep001, "sep_01": sep01, "doubling": math.log(2) / l39,
+            "expand_e": 1 / l39}
+
+
+FIGS.update({
+    "fig-logistic": fig_logistic,
+    "fig-bifurcation": fig_bifurcation,
+    "fig-lyapunov": fig_lyapunov,
+    "fig-sensitivity": fig_sensitivity,
+})
+
+
 def build(ids=None):
     return {k: FIGS[k]() for k in (ids or FIGS)}
 
@@ -2999,6 +3509,14 @@ PROSE.update({
     "fig-entropy": entropy_values,
     "fig-code": code_values,
     "fig-channel": channel_values,
+})
+
+# 第 10 章（混沌）：分岔点、Lyapunov 指数、分离步数全部由上面的内核现算。
+PROSE.update({
+    "fig-logistic": logistic_values,
+    "fig-bifurcation": bifurcation_values,
+    "fig-lyapunov": lyapunov_values,
+    "fig-sensitivity": sensitivity_values,
 })
 
 

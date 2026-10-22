@@ -29,7 +29,7 @@ AIEduLab/
 │   │   │                       （含回归测试与校准记录；见 semantics-report.md）
 │   │   ├── check_generated_prose.py 生成覆盖率：哪些数字是插值来的、哪些是手写的
 │   │   └── audit_diagramability.py 「图解能覆盖多少知识」的可行性审计（见 coverage-audit.md）
-│   ├── books/math-thought/ 第一本书《数学思想：从计数到无穷》（9 章 39 图）
+│   ├── books/math-thought/ 第一本书《数学思想：从计数到无穷》（10 章 43 图）
 │   ├── skills/             32 个学科技能（数理化生 + 初高中 + 大学 + 视频 + CS）
 │   ├── coverage-audit.md   「图解能覆盖多少知识」的可行性审计（现算，可重跑）
 │   └── demos/ out/         手写 HTML 演示
@@ -131,7 +131,7 @@ python edulab/tools/compose_templates.py --check   # 只校验是否与骨架一
 
 ```bash
 python edulab/books/math-thought/build.py     # 出书（校验不通过会中止）
-python edulab/books/math-thought/check.py     # 36 张图 0 错 0 警
+python edulab/books/math-thought/check.py     # 43 张图 0 错 0 警
 python edulab/books/math-thought/test_gates.py# 坏补丁闸门回归（双链路）
 python edulab/shared/viz/vizkit.py selftest   # 校验器自测
 python edulab/shared/viz/bridge.py serve --port 8810   # 起实时通道

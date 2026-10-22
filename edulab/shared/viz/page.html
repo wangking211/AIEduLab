@@ -373,7 +373,14 @@
       liveStep[id] = i;
       sl.value = i;
       if (cnt) cnt.textContent = `${i+1}/${spec.steps.length}`;
-      if (note) note.textContent = spec.steps[i].note || '';
+      if (note) {
+        // 步骤说明本来就是按 HTML 写的（figures.py 里大量用 <b>…</b>），
+        // 也有一些写成 **粗体**。此前直接写 textContent，于是页面上把标签与星号
+        // 原样显示出来（ch07 有 5 处 <b>、ch04/ch05 有 **）。这里按 HTML 渲染，
+        // 并把 **x** 折成 <strong>。
+        const raw = String(spec.steps[i].note || '');
+        note.innerHTML = raw.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      }
       if (pv) pv.disabled = i === 0;
       if (nx) nx.disabled = i === spec.steps.length-1;
     };
