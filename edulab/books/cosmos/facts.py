@@ -424,3 +424,66 @@ REGISTRY.add(claim(
     "sun_core_e7", V("sun_core_k") / 1e7, "×10⁷ K", grade="现算",
     recompute=lambda: V("sun_core_k") / 1e7, texts=["10⁷"],
 ))
+# =====================================================================
+# 第 6 章：能量（为什么它能被放在一条轴上）
+# =====================================================================
+REGISTRY.add(claim(
+    "breath_j", 1.0, "J", grade="约定",
+    note="「一次平静呼吸约 1 焦耳」是量级示意（机械功与代谢能不是一回事，这里只取量级）",
+))
+REGISTRY.add(claim(
+    "bullet_j", 2.0e3, "J", grade="约定",
+    note="步枪子弹的枪口动能按 2 千焦取整（量级示意，随弹种变化很大）",
+))
+REGISTRY.add(claim(
+    "meal_j", 2.0e6, "J", grade="约定",
+    note="一顿饭按 500 千卡（约 2 兆焦）计，演示值",
+))
+REGISTRY.add(claim(
+    "lightning_j", 1.0e9, "J", grade="文献",
+    source="Dwyer & Uman 2014, Physics Reports 534, 147–241（闪电物理综述）",
+    url="https://doi.org/10.1016/j.physrep.2013.12.002",
+    locator="典型云地闪电释放能量约 10⁹ J（量级）",
+))
+REGISTRY.add(claim(
+    "tnt_ton_j", 4.184e9, "J", grade="约定",
+    note="1 吨 TNT 当量 = 4.184×10⁹ J：这是**约定**，不是测量 —— 它是为了把核爆能量"
+         "换算成「多少吨炸药」而人为固定的换算率",
+))
+REGISTRY.add(claim(
+    "hiroshima_kt", 15.0, "千吨 TNT", grade="文献",
+    source="广岛「小男孩」的当量估计（约 15 千吨 TNT，通行的历史估算值）",
+    url="https://www.atomicheritage.org/history/little-boy",
+    locator="通行为 13–18 千吨，本文取 15 千吨",
+))
+REGISTRY.add(claim(
+    "hiroshima_j", V("hiroshima_kt") * 1000.0 * V("tnt_ton_j"), "J", grade="现算",
+    recompute=lambda: V("hiroshima_kt") * 1000.0 * V("tnt_ton_j"),
+    note="当量 × 每吨 TNT 的焦耳数：两个登记值相乘，没有另查「广岛释放多少焦耳」",
+))
+REGISTRY.add(claim(
+    "sun_luminosity_w", 3.828e26, "W", grade="约定",
+    note="IAU 2015 把太阳名义光度**定义**为 3.828×10²⁶ W（名义值）",
+))
+REGISTRY.add(claim(
+    "supernova_j", 1.0e44, "J", grade="文献",
+    source="核坍缩超新星释放能量的通行量级估计（中微子带走绝大部分）",
+    url="https://doi.org/10.1146/annurev.astro.46.060407.145143",
+    locator="量级约 10⁴⁴ J（不同文献取 10⁴⁴–10⁴⁶ J）",
+))
+REGISTRY.add(claim(
+    "energy_span",
+    math.log10(V("supernova_j")) - math.log10(V("breath_j")), "个数量级", grade="现算",
+    recompute=lambda: math.log10(V("supernova_j")) - math.log10(V("breath_j")),
+))
+
+REGISTRY.add(claim("meal_e6", V("meal_j") / 1e6, "×10⁶ 焦耳", grade="现算",
+                   recompute=lambda: V("meal_j") / 1e6, texts=["10⁶"]))
+REGISTRY.add(claim("lightning_e9", V("lightning_j") / 1e9, "×10⁹ 焦耳", grade="现算",
+                   recompute=lambda: V("lightning_j") / 1e9, texts=["10⁹"]))
+REGISTRY.add(claim("hiroshima_e13", V("hiroshima_j") / 1e13, "×10¹³ 焦耳", grade="现算",
+                   recompute=lambda: V("hiroshima_j") / 1e13, texts=["10¹³"]))
+REGISTRY.add(claim("sun_e26", V("sun_luminosity_w") / 1e26, "×10²⁶ 瓦", grade="现算",
+                   recompute=lambda: V("sun_luminosity_w") / 1e26, texts=["10²⁶"]))
+REGISTRY.add(claim("supernova_e44", V("supernova_j") / 1e44, "×10⁴⁴ 焦耳", grade="现算",
+                   recompute=lambda: V("supernova_j") / 1e44, texts=["10⁴⁴"]))

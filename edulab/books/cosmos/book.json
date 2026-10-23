@@ -44,6 +44,14 @@
       "file": "ch05.html",
       "subtitle": "从绝对零度到普朗克温度 —— 而其中一堵墙根本画不出来",
       "figs": ["fig-temp"]
+    },
+    {
+      "id": "ch06",
+      "num": "06",
+      "title": "能量：为什么它能被排成一条轴",
+      "file": "ch06.html",
+      "subtitle": "守恒定律给出的统一度量 —— 换成「复杂度」就做不到",
+      "figs": ["fig-energy"]
     }
   ]
 }

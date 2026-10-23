@@ -419,5 +419,76 @@ def fig_temperature():
 FIGS["fig-temp"] = fig_temperature
 
 
+def _joule(v):
+    if v < 1e4:
+        return f"{v:,.0f} 焦耳"
+    if v < 1e8:
+        return f"{v / 1e4:,.0f} 万焦耳"
+    return f"{_mant(v)} 焦耳"
+
+
+def fig_energy():
+    """第 6 章：能量的阶梯。
+
+    能量之所以能被排成一条轴，是因为它有**守恒定律**给出统一度量 ——
+    换成「复杂度」或「信息」就做不到。这一页图的存在本身就是论据。
+    """
+    X0, X1 = 1.0, 1e45
+    rows = [
+        ("一次呼吸", _v("breath_j"), DIM),
+        ("步枪子弹", _v("bullet_j"), DIM),
+        ("一顿饭", _v("meal_j"), DIM),
+        ("一次闪电", _v("lightning_j"), ACCENT2),
+        ("广岛原子弹", _v("hiroshima_j"), GOOD),
+        ("太阳每秒的辐射", _v("sun_luminosity_w"), DIM),
+        ("超新星", _v("supernova_j"), ACCENT2),
+    ]
+    layers = [
+        {"geom": "axis", "xRange": [X0, X1], "yRange": [-0.7, 6.9],
+         "xticks": [1.0, 1e8, 1e16, 1e24, 1e32, 1e40],
+         "xticklabels": ["1 焦耳", "1 亿", "1 亿亿", "1 亿亿亿", "1 亿亿亿亿",
+                         "1 亿亿亿亿亿"],
+         "yticks": False,
+         "xlab": "能量（对数尺度：图上等距 = 相差 10 倍）"},
+        {"geom": "region", "when": "k >= 2", "x": [1.0, 1e7], "y": [-0.6, 6.8],
+         "fill": "#eef7f0", "outline": False},
+        {"geom": "text", "when": "k >= 2", "x": 1.0, "y": 6.55,
+         "text": "← 人的全部日常活动都在这一段里", "align": "left", "size": 9.5,
+         "color": GOOD},
+    ]
+    steps_k = [1, 1, 1, 2, 2, 3, 4]
+    for i, (name, val, color) in enumerate(rows):
+        y = float(i)
+        k = steps_k[i]
+        layers += [
+            {"geom": "line", "when": f"k >= {k}", "data": [[X0, y], [val, y]],
+             "stroke": color, "width": 6},
+            {"geom": "point", "when": f"k >= {k}", "data": [{"x": val, "y": y}],
+             "r": 3.6, "fill": color},
+            {"geom": "text", "when": f"k >= {k}", "x": val, "y": y,
+             "text": f"{name}  {_joule(val)}",
+             "align": "right" if math.log10(val) > 38 else "left",
+             "size": 10, "color": color, "dy": -11},
+        ]
+    steps = [
+        {"k": 1, "note": f"从人的尺度开始：呼吸约 {_joule(_v('breath_j'))}、"
+                         f"子弹 {_joule(_v('bullet_j'))}、一顿饭 {_joule(_v('meal_j'))}。"},
+        {"k": 2, "note": f"再往上是「灾难性」的能量：闪电 {_joule(_v('lightning_j'))}、"
+                         f"广岛 {_joule(_v('hiroshima_j'))}。后者是**算**出来的："
+                         f"当量 × 每吨 TNT 的焦耳数。"},
+        {"k": 3, "note": f"太阳每秒辐射 {_joule(_v('sun_luminosity_w'))} —— "
+                         f"人类一年消耗的总能量，还不到它一秒的百万分之一。"},
+        {"k": 4, "note": f"超新星 {_joule(_v('supernova_j'))}。从呼吸到这里，"
+                         f"一共 {_v('energy_span'):.0f} 个数量级。"},
+    ]
+    return {"theme": PAPER,
+            "view": {"xRange": [X0, X1], "yRange": [-0.7, 6.9], "xlog": True,
+                     "pad": {"l": 30, "r": 26, "b": 46, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
+FIGS["fig-energy"] = fig_energy
+
+
 def build(ids=None):
     return {k: FIGS[k]() for k in (ids or FIGS)}
