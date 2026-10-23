@@ -202,6 +202,16 @@ def fig_length():
 FIGS["fig-length"] = fig_length
 
 
+def _mant(v):
+    """写成「2.9×10^9」：只给 10 的幂会失掉尾数（2.9e9 写成 10^9 差了 3 倍）。"""
+    n = math.floor(math.log10(v))
+    m = v / (10.0 ** n)
+    if m >= 9.95:                      # 2.999… → 别写成 10.0×10^8
+        n += 1
+        m /= 10.0
+    return f"{m:.1f}×10^{n}"
+
+
 def fig_count():
     """第 3 章：数量的阶梯。横轴是「多少个」（对数），最右一格是宇宙的原子数。
 
@@ -234,7 +244,7 @@ def fig_count():
             {"geom": "point", "when": f"k >= {k}", "data": [{"x": val, "y": y}],
              "r": 3.6, "fill": color},
             {"geom": "text", "when": f"k >= {k}", "x": val, "y": y,
-             "text": f"{name}  10^{math.log10(val):.0f} 个",
+             "text": f"{name}  {_mant(val)} 个",
              "align": "right" if math.log10(val) > 60 else "left",
              "size": 10, "color": color, "dy": -11},
         ]
@@ -244,13 +254,13 @@ def fig_count():
                    "align": "left", "size": 9.5, "color": DIM})
     steps = [
         {"k": 1, "note": f"先从能数得清的开始：按演示寿命 80 年、每分钟 70 次，"
-                         f"一生的心跳约 10^{math.log10(_v('heartbeats_lifetime')):.0f} 次。"},
-        {"k": 2, "note": f"再往上就得靠估了：人脑神经元约 10^{math.log10(_v('neurons')):.0f} 个、"
-                         f"银河系恒星约 10^{math.log10(_v('stars_milkyway')):.0f} 颗、"
-                         f"地球上的沙粒约 10^{math.log10(_v('sand_grains')):.0f} 粒。"},
-        {"k": 3, "note": f"一杯水里的分子约 10^{math.log10(_v('molecules_cup')):.0f} 个 —— "
+                         f"一生的心跳约 {_mant(_v('heartbeats_lifetime'))} 次。"},
+        {"k": 2, "note": f"再往上就得靠估了：人脑神经元约 {_mant(_v('neurons'))} 个、"
+                         f"银河系恒星约 {_mant(_v('stars_milkyway'))} 颗、"
+                         f"地球上的沙粒约 {_mant(_v('sand_grains'))} 粒。"},
+        {"k": 3, "note": f"一杯水里的分子约 {_mant(_v('molecules_cup'))} 个 —— "
                          f"它是算出来的（体积 ÷ 摩尔体积 × 阿伏伽德罗常数），不是数出来的。"},
-        {"k": 4, "note": f"最后一格：可观测宇宙的原子约 10^{math.log10(_v('atoms_universe')):.0f} 个。"
+        {"k": 4, "note": f"最后一格：可观测宇宙的原子约 {_mant(_v('atoms_universe'))} 个。"
                          f"从一杯水到这里，还差 {_v('gap_cup_to_universe'):.0f} 个数量级 —— "
                          f"这一段没有任何直觉可用，只能靠推理。"},
     ]
@@ -261,6 +271,17 @@ def fig_count():
 
 
 FIGS["fig-count"] = fig_count
+
+
+def _spd(v):
+    """把速度写成人话。注意 0.001 这种小量：用 :,.0f 会渲染成「0」。"""
+    if v < 1:
+        return f"{v:.3g} 米每秒"
+    if v < 1e3:
+        return f"{v:g} 米每秒"
+    if v < 1e5:
+        return f"{v / 1e3:.1f} 公里每秒"
+    return f"{v / 1e7:.2f} 万公里每秒"
 
 
 def fig_speed():
@@ -295,7 +316,7 @@ def fig_speed():
             {"geom": "point", "when": f"k >= {k}", "data": [{"x": val, "y": y}],
              "r": 3.6, "fill": color},
             {"geom": "text", "when": f"k >= {k}", "x": val, "y": y,
-             "text": f"{name}  {val:,.0f} 米每秒",
+             "text": f"{name}  {_spd(val)}",
              "align": "right" if math.log10(val) > 7 else "left",
              "size": 10, "color": color, "dy": -11},
         ]
