@@ -12,6 +12,14 @@
       "file": "ch01.html",
       "subtitle": "从普朗克时间到今天：为什么人脑必须换一把尺子",
       "figs": ["fig-scale"]
+    },
+    {
+      "id": "ch02",
+      "num": "02",
+      "title": "物质：从原子到可观测宇宙",
+      "file": "ch02.html",
+      "subtitle": "同一条对数轴上，整个太阳系只是一行",
+      "figs": ["fig-length"]
     }
   ]
 }

@@ -5,5 +5,10 @@
   "planck_time_e44:3": "5.391",
   "span_decades:0": "61",
   "universe_age_yi:2": "137.97"
+ },
+ "ch02": {
+  "bohr_pm:1": "52.9",
+  "span_len_decades:0": "37",
+  "universe_dia_e26:1": "8.8"
  }
 }

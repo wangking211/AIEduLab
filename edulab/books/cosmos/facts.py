@@ -142,3 +142,100 @@ REGISTRY.add(claim(
     recompute=lambda: math.log10(V("universe_age_sec")) - math.log10(V("planck_time_s")),
     note="图上的横轴跨度：从普朗克时间到宇宙年龄，共这么多个数量级",
 ))
+
+# =====================================================================
+# 第 2 章：长度的尺度（同样的分工：能推到定义就推到定义）
+# =====================================================================
+REGISTRY.add(claim(
+    "au_m", 1.495978707e11, "m", grade="约定",
+    note="天文单位由 IAU 2012 年定义为这个整数米（此前的测量值被固定下来），"
+         "所以它现在是定义值",
+))
+REGISTRY.add(claim(
+    "parsec_m", 648000.0 / math.pi * V("au_m"), "m", grade="现算",
+    recompute=lambda: 648000.0 / math.pi * V("au_m"),
+    note="秒差距的定义：1 au 张角 1 角秒时的距离 = (648000/π) au —— 纯几何，无实测成分",
+))
+REGISTRY.add(claim(
+    "megaparsec_m", 1e6 * V("parsec_m"), "m", grade="现算",
+    recompute=lambda: 1e6 * V("parsec_m"),
+))
+REGISTRY.add(claim(
+    "alpha_em", 7.2973525693e-3, "", grade="实测",
+    source="CODATA 2018 推荐值（精细结构常数，无量纲）",
+    url="https://physics.nist.gov/cgi-bin/cuu/Value?alph",
+    uncertainty=0.0000000011e-3,
+))
+REGISTRY.add(claim(
+    "m_electron", 9.1093837015e-31, "kg", grade="实测",
+    source="CODATA 2018 推荐值（电子静止质量）",
+    url="https://physics.nist.gov/cgi-bin/cuu/Value?me",
+    uncertainty=2.8e-40,
+))
+REGISTRY.add(claim(
+    "bohr_radius_m", V("hbar") / (V("m_electron") * V("c_light") * V("alpha_em")), "m",
+    grade="现算",
+    recompute=lambda: V("hbar") / (V("m_electron") * V("c_light") * V("alpha_em")),
+    note="玻尔半径 a₀ = ħ/(mₑcα)：由三条登记（ħ 定义、mₑ 与 α 实测）推出来，"
+         "本身没有被直接尺量过",
+))
+REGISTRY.add(claim(
+    "virus_m", 1.0e-7, "m", grade="约定",
+    note="「病毒直径约 100 纳米」是量级示意（不同病毒相差数倍），只用来定位数量级",
+))
+REGISTRY.add(claim(
+    "cell_m", 1.0e-5, "m", grade="约定",
+    note="「细胞直径约 10 微米」同样是量级示意",
+))
+REGISTRY.add(claim(
+    "human_h_m", 1.7, "m", grade="约定",
+    note="「一个人的高度取 1.7 米」是演示值",
+))
+REGISTRY.add(claim(
+    "moon_distance_m", 3.844e8, "m", grade="实测",
+    source="NASA（地月平均距离 384,400 km）",
+    url="https://science.nasa.gov/moon/facts/",
+    uncertainty=0.001e8,
+))
+REGISTRY.add(claim(
+    "sun_radius_m", 6.957e8, "m", grade="约定",
+    note="IAU 2015 年把太阳名义半径**定义**为 6.957×10⁸ 米（名义值，不是某一时刻的测量）",
+))
+REGISTRY.add(claim(
+    "sun_diameter_m", 2 * V("sun_radius_m"), "m", grade="现算",
+    recompute=lambda: 2 * V("sun_radius_m"),
+))
+REGISTRY.add(claim(
+    "comoving_radius_mpc", 14300.0, "Mpc", grade="文献",
+    source="Planck 2018 宇宙学参数推出的可观测宇宙共动半径（约 14.3 Gpc ≈ 46.5 Gly）",
+    url="https://doi.org/10.1051/0004-6361/201833910",
+    locator="Planck 2018 结果 VI 的宇宙学参数（Ω_m、H₀）代入共动距离积分",
+))
+REGISTRY.add(claim(
+    "universe_diameter_m", 2 * V("comoving_radius_mpc") * V("megaparsec_m"), "m",
+    grade="现算",
+    recompute=lambda: 2 * V("comoving_radius_mpc") * V("megaparsec_m"),
+    note="直径 = 2 × 共动半径 × 每 Mpc 的米数：把文献给的参数换成米，换算是现算的",
+))
+
+# ---- 给正文用的派生根 ----
+REGISTRY.add(claim(
+    "bohr_pm", V("bohr_radius_m") * 1e12, "皮米", grade="现算",
+    recompute=lambda: V("bohr_radius_m") * 1e12,
+))
+REGISTRY.add(claim(
+    "universe_dia_e26", V("universe_diameter_m") / 1e26, "×10²⁶ 米", grade="现算",
+    recompute=lambda: V("universe_diameter_m") / 1e26,
+    texts=["10²⁶ 米"],
+))
+REGISTRY.add(claim(
+    "span_len_decades",
+    math.log10(V("universe_diameter_m")) - math.log10(V("bohr_radius_m")),
+    "个数量级", grade="现算",
+    recompute=lambda: math.log10(V("universe_diameter_m")) - math.log10(V("bohr_radius_m")),
+))
+REGISTRY.add(claim(
+    "light_year_m", V("c_light") * V("year_sec"), "m", grade="现算",
+    recompute=lambda: V("c_light") * V("year_sec"),
+    note="光年 = 光速 × 儒略年：一个长度单位，不是时间单位",
+))

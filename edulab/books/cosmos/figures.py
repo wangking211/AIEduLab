@@ -119,5 +119,88 @@ def fig_scale():
 FIGS = {"fig-scale": fig_scale}
 
 
+def _hum_m(v):
+    """把长度写成人话（由登记值算出来：光年也是算的）。"""
+    ly = _v("light_year_m")
+    if v < 1e-6:
+        return f"{v * 1e9:.1f} 纳米"
+    if v < 1e-2:
+        return f"{v * 1e3:.2f} 毫米"
+    if v < 1e3:
+        return f"{v:.2f} 米"
+    if v < 1e12:
+        return f"{v / 1e3:,.0f} 公里"
+    if v < 1e15:
+        return f"{v / 1e9:.2f} 亿公里"
+    if v < 1e24:
+        return f"{v / ly:.2f} 光年"
+    return f"{v / ly / 1e9:.1f} 十亿光年"
+
+
+def fig_length():
+    """第 2 章：长度的阶梯。横轴是米（对数），每一行是一个尺度。
+
+    为什么按「行」排、不按真实位置排：地月距离与太阳直径只差半个数量级，
+    照真实位置画会叠成一点 —— 而这恰恰是这张图想说的（见第 3 步的说明）。
+    """
+    X0, X1 = 1e-12, 1e28
+    rows = [
+        ("氢原子（玻尔半径）", _v("bohr_radius_m"), GOOD),
+        ("病毒（量级示意）", _v("virus_m"), DIM),
+        ("细胞（量级示意）", _v("cell_m"), DIM),
+        ("一个人", _v("human_h_m"), DIM),
+        ("地月距离", _v("moon_distance_m"), ACCENT),
+        ("太阳直径", _v("sun_diameter_m"), DIM),
+        ("天文单位", _v("au_m"), DIM),
+        ("一光年", _v("light_year_m"), GOOD),
+        ("可观测宇宙", _v("universe_diameter_m"), ACCENT2),
+    ]
+    layers = [
+        {"geom": "axis", "xRange": [X0, X1], "yRange": [-0.7, 8.7],
+         "xticks": [1e-9, 1e-3, 1.0, 1e6, _v("light_year_m")],
+         "xticklabels": ["1 纳米", "1 毫米", "1 米", "一千公里", "1 光年"],
+         "yticks": False,
+         "xlab": "长度（对数尺度：图上等距 = 相差 10 倍）"},
+        {"geom": "region", "when": "k >= 2", "x": [1e-3, 1e3], "y": [-0.6, 8.6],
+         "fill": "#eef7f0", "outline": False},
+        {"geom": "text", "when": "k >= 2", "x": 1e-3, "y": 8.35,
+         "text": "← 人能直接感知的范围", "align": "left", "size": 9.5, "color": GOOD},
+    ]
+    steps_k = [1, 1, 1, 2, 3, 3, 3, 4, 4]
+    for i, (name, val, color) in enumerate(rows):
+        y = float(i)
+        k = steps_k[i]
+        layers += [
+            {"geom": "line", "when": f"k >= {k}", "data": [[X0, y], [val, y]],
+             "stroke": color, "width": 6},
+            {"geom": "point", "when": f"k >= {k}", "data": [{"x": val, "y": y}],
+             "r": 3.6, "fill": color},
+            {"geom": "text", "when": f"k >= {k}", "x": val, "y": y,
+             "text": f"{name}  {_hum_m(val)}",
+             # 靠近右边界的那一行必须右对齐，否则标签冲出画布
+             "align": "right" if math.log10(val) > 22 else "left",
+             "size": 10, "color": color, "dy": -11},
+        ]
+    steps = [
+        {"k": 1, "note": f"从原子这一头开始：氢原子的玻尔半径 {_hum_m(_v('bohr_radius_m'))}。"
+                         f"它不是被尺子量出来的 —— 由 ħ、电子质量、精细结构常数推出来。"},
+        {"k": 2, "note": f"人的尺度落在绿色带里：{_hum_m(_v('human_h_m'))}。"
+                         f"这条带子（1 毫米到 1 公里）几乎就是人凭感官能直接把握的全部范围。"},
+        {"k": 3, "note": f"太阳系：地月距离 {_hum_m(_v('moon_distance_m'))}，太阳直径 "
+                         f"{_hum_m(_v('sun_diameter_m'))} —— 两者只差半个数量级，"
+                         f"在这张图上几乎叠成一行。天文单位 {_hum_m(_v('au_m'))}。"},
+        {"k": 4, "note": f"最后一跨：一光年 {_hum_m(_v('light_year_m'))}，"
+                         f"可观测宇宙 {_hum_m(_v('universe_diameter_m'))}。整条轴 "
+                         f"{_v('span_len_decades'):.1f} 个数量级。"},
+    ]
+    return {"theme": PAPER,
+            "view": {"xRange": [X0, X1], "yRange": [-0.7, 8.7], "xlog": True,
+                     "pad": {"l": 30, "r": 24, "b": 46, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
+FIGS["fig-length"] = fig_length
+
+
 def build(ids=None):
     return {k: FIGS[k]() for k in (ids or FIGS)}
