@@ -239,3 +239,73 @@ REGISTRY.add(claim(
     recompute=lambda: V("c_light") * V("year_sec"),
     note="光年 = 光速 × 儒略年：一个长度单位，不是时间单位",
 ))
+# =====================================================================
+# 第 3 章：数量（没有单位，只有「多少个」）
+# =====================================================================
+REGISTRY.add(claim(
+    "n_avogadro", 6.02214076e23, "1/mol", grade="约定",
+    note="2019 年 SI 修订把阿伏伽德罗常数**定义**为这个值（摩尔由此定出），不是测量结果",
+))
+REGISTRY.add(claim(
+    "water_molar_mass", 18.015, "g/mol", grade="约定",
+    note="水的摩尔质量按 H₂O 的原子量取 18.015 g/mol（演示值）",
+))
+REGISTRY.add(claim(
+    "cup_volume_l", 0.25, "L", grade="约定",
+    note="「一杯水」按 250 毫升计（演示值）",
+))
+REGISTRY.add(claim(
+    "molecules_cup",
+    V("cup_volume_l") * 1000.0 / V("water_molar_mass") * V("n_avogadro"), "个", grade="现算",
+    recompute=lambda: V("cup_volume_l") * 1000.0 / V("water_molar_mass") * V("n_avogadro"),
+    note="分子数 = 体积 × 密度/摩尔质量 × 阿伏伽德罗常数；密度按 1 g/mL 取整数 1000 g/L",
+))
+REGISTRY.add(claim(
+    "neurons", 8.6e10, "个", grade="文献",
+    source="Azevedo et al. 2009, J. Comp. Neurol. 513, 532–541（人脑神经元计数）",
+    url="https://doi.org/10.1002/cne.21974",
+    locator="摘要：平均 86.1 ± 8.1 billion neurons（本文取 8.6×10¹⁰）",
+))
+REGISTRY.add(claim(
+    "stars_milkyway", 1.0e11, "个", grade="文献",
+    source="银河系恒星数量的常用估计（量级）",
+    url="https://science.nasa.gov/universe/galaxies/",
+    locator="NASA 科普页给出的量级为「千亿颗量级」",
+))
+REGISTRY.add(claim(
+    "sand_grains", 7.5e18, "个", grade="文献",
+    source="夏威夷大学的地球沙粒估算（广为引用的量级估计）",
+    url="https://www.hawaii.edu/malamalama/2012/09/sand-grains/",
+    locator="「seven quintillion, five hundred quadrillion grains」= 7.5×10¹⁸",
+))
+REGISTRY.add(claim(
+    "atoms_universe", 1.0e80, "个", grade="文献",
+    source="可观测宇宙原子数的标准量级估算（由重子密度与宇宙体积推出）",
+    url="https://doi.org/10.1051/0004-6361/201833910",
+    locator="Planck 2018 重子密度 × 可观测宇宙体积 → 约 10⁸⁰ 个核子（量级）",
+))
+REGISTRY.add(claim(
+    "heartbeats_lifetime",
+    V("lifespan_year") * 365.25 * 24.0 * 60.0 * 70.0, "次", grade="现算",
+    recompute=lambda: V("lifespan_year") * 365.25 * 24.0 * 60.0 * 70.0,
+    note="按演示寿命 80 年、每分钟 70 次估算：这两个数都是约定值，所以结果也只是量级",
+))
+REGISTRY.add(claim(
+    "gap_cup_to_universe",
+    math.log10(V("atoms_universe")) - math.log10(V("molecules_cup")), "个数量级",
+    grade="现算",
+    recompute=lambda: math.log10(V("atoms_universe")) - math.log10(V("molecules_cup")),
+))
+# ---- 第 3 章正文用的「尾数 × 10ⁿ」派生根（指数写在上标里，尾数由登记表算）----
+REGISTRY.add(claim("beats_e9", V("heartbeats_lifetime") / 1e9, "", grade="现算",
+                   recompute=lambda: V("heartbeats_lifetime") / 1e9, texts=["10⁹"]))
+REGISTRY.add(claim("neurons_e10", V("neurons") / 1e10, "", grade="现算",
+                   recompute=lambda: V("neurons") / 1e10, texts=["10¹⁰"]))
+REGISTRY.add(claim("stars_e11", V("stars_milkyway") / 1e11, "", grade="现算",
+                   recompute=lambda: V("stars_milkyway") / 1e11, texts=["10¹¹"]))
+REGISTRY.add(claim("cup_e24", V("molecules_cup") / 1e24, "", grade="现算",
+                   recompute=lambda: V("molecules_cup") / 1e24, texts=["10²⁴"]))
+REGISTRY.add(claim("avogadro_e23", V("n_avogadro") / 1e23, "", grade="现算",
+                   recompute=lambda: V("n_avogadro") / 1e23, texts=["10²³"]))
+REGISTRY.add(claim("atoms_e80", V("atoms_universe") / 1e80, "", grade="现算",
+                   recompute=lambda: V("atoms_universe") / 1e80, texts=["10⁸⁰"]))

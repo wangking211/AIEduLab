@@ -20,6 +20,14 @@
       "file": "ch02.html",
       "subtitle": "同一条对数轴上，整个太阳系只是一行",
       "figs": ["fig-length"]
+    },
+    {
+      "id": "ch03",
+      "num": "03",
+      "title": "数量：大到没法用中文说",
+      "file": "ch03.html",
+      "subtitle": "从一生的心跳到宇宙的原子：中间那一段没有直觉可用",
+      "figs": ["fig-count"]
     }
   ]
 }

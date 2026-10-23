@@ -10,5 +10,14 @@
   "bohr_pm:1": "52.9",
   "span_len_decades:0": "37",
   "universe_dia_e26:1": "8.8"
+ },
+ "ch03": {
+  "atoms_e80": "1",
+  "avogadro_e23:1": "6.0",
+  "beats_e9:1": "2.9",
+  "cup_e24:1": "8.4",
+  "gap_cup_to_universe:0": "55",
+  "neurons_e10:1": "8.6",
+  "stars_e11:1": "1.0"
  }
 }

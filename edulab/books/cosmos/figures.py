@@ -202,5 +202,66 @@ def fig_length():
 FIGS["fig-length"] = fig_length
 
 
+def fig_count():
+    """第 3 章：数量的阶梯。横轴是「多少个」（对数），最右一格是宇宙的原子数。
+
+    这一章真正的问题不是「大到什么程度」，而是**大到一定程度就没法用中文说了**：
+    日常只有「万」「亿」两个常用量级，再往上只能把「亿」叠起来用。
+    """
+    X0, X1 = 1.0, 1e81
+    rows = [
+        ("一生的心跳", _v("heartbeats_lifetime"), GOOD),
+        ("人脑神经元", _v("neurons"), ACCENT2),
+        ("银河系恒星", _v("stars_milkyway"), ACCENT2),
+        ("地球上的沙粒", _v("sand_grains"), ACCENT2),
+        ("一杯水里的分子", _v("molecules_cup"), GOOD),
+        ("可观测宇宙的原子", _v("atoms_universe"), ACCENT2),
+    ]
+    layers = [
+        {"geom": "axis", "xRange": [X0, X1], "yRange": [-0.7, 5.9],
+         "xticks": [1.0, 1e8, 1e16, 1e24, 1e32],
+         "xticklabels": ["1", "1 亿", "1 亿亿", "1 亿亿亿", "1 亿亿亿亿"],
+         "yticks": False,
+         "xlab": "数量（对数尺度：图上等距 = 相差 10 倍）"},
+    ]
+    steps_k = [1, 2, 2, 2, 3, 4]
+    for i, (name, val, color) in enumerate(rows):
+        y = float(i)
+        k = steps_k[i]
+        layers += [
+            {"geom": "line", "when": f"k >= {k}", "data": [[X0, y], [val, y]],
+             "stroke": color, "width": 6},
+            {"geom": "point", "when": f"k >= {k}", "data": [{"x": val, "y": y}],
+             "r": 3.6, "fill": color},
+            {"geom": "text", "when": f"k >= {k}", "x": val, "y": y,
+             "text": f"{name}  10^{math.log10(val):.0f} 个",
+             "align": "right" if math.log10(val) > 60 else "left",
+             "size": 10, "color": color, "dy": -11},
+        ]
+    # 「10 的幂」这个说法本身也要说明：不然读者会以为 10^80 是 10 乘 80 次
+    layers.append({"geom": "text", "when": "k >= 4", "x": 1.0, "y": -0.45,
+                   "text": "10^80 意思是 1 后面跟 80 个 0，不是 10 乘 80 次",
+                   "align": "left", "size": 9.5, "color": DIM})
+    steps = [
+        {"k": 1, "note": f"先从能数得清的开始：按演示寿命 80 年、每分钟 70 次，"
+                         f"一生的心跳约 10^{math.log10(_v('heartbeats_lifetime')):.0f} 次。"},
+        {"k": 2, "note": f"再往上就得靠估了：人脑神经元约 10^{math.log10(_v('neurons')):.0f} 个、"
+                         f"银河系恒星约 10^{math.log10(_v('stars_milkyway')):.0f} 颗、"
+                         f"地球上的沙粒约 10^{math.log10(_v('sand_grains')):.0f} 粒。"},
+        {"k": 3, "note": f"一杯水里的分子约 10^{math.log10(_v('molecules_cup')):.0f} 个 —— "
+                         f"它是算出来的（体积 ÷ 摩尔体积 × 阿伏伽德罗常数），不是数出来的。"},
+        {"k": 4, "note": f"最后一格：可观测宇宙的原子约 10^{math.log10(_v('atoms_universe')):.0f} 个。"
+                         f"从一杯水到这里，还差 {_v('gap_cup_to_universe'):.0f} 个数量级 —— "
+                         f"这一段没有任何直觉可用，只能靠推理。"},
+    ]
+    return {"theme": PAPER,
+            "view": {"xRange": [X0, X1], "yRange": [-0.7, 5.9], "xlog": True,
+                     "pad": {"l": 30, "r": 26, "b": 46, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
+FIGS["fig-count"] = fig_count
+
+
 def build(ids=None):
     return {k: FIGS[k]() for k in (ids or FIGS)}
