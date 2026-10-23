@@ -487,3 +487,70 @@ REGISTRY.add(claim("sun_e26", V("sun_luminosity_w") / 1e26, "×10²⁶ 瓦", gra
                    recompute=lambda: V("sun_luminosity_w") / 1e26, texts=["10²⁶"]))
 REGISTRY.add(claim("supernova_e44", V("supernova_j") / 1e44, "×10⁴⁴ 焦耳", grade="现算",
                    recompute=lambda: V("supernova_j") / 1e44, texts=["10⁴⁴"]))
+# =====================================================================
+# 第 7 章：概率（它不能被排成一条轴 —— 需要两个数才能定位）
+# =====================================================================
+
+REGISTRY.add(claim(
+    "ssq_tickets",
+    math.comb(33, 6) * 16, "种", grade="现算",
+    recompute=lambda: math.comb(33, 6) * 16,
+    note="头奖组合数 = C(33,6) × 16：规则是约定，组合数是现算",
+))
+REGISTRY.add(claim(
+    "jackpot_p", 1.0 / V("ssq_tickets"), "1/注", grade="现算",
+    recompute=lambda: 1.0 / V("ssq_tickets"),
+    note="单注中头奖概率 = 1 / 组合数（假设每一注等可能，且只买一注不重复）",
+))
+REGISTRY.add(claim(
+    "jackpot_p_e8", V("jackpot_p") * 1e8, "×10⁻⁸", grade="现算",
+    recompute=lambda: V("jackpot_p") * 1e8, texts=["10⁻⁸"],
+))
+REGISTRY.add(claim(
+    "tickets_50y", 52.0 * 50.0, "注", grade="现算",
+    recompute=lambda: 52.0 * 50.0,
+    note="每周买一注、坚持 50 年 = 2600 注（约定：每周一注、坚持 50 年）",
+))
+REGISTRY.add(claim(
+    "p_at_least_once_2600",
+    -math.expm1(V("tickets_50y") * math.log1p(-V("jackpot_p"))), "", grade="现算",
+    recompute=lambda: -math.expm1(V("tickets_50y") * math.log1p(-V("jackpot_p"))),
+    note="至少中一次 = 1 −(1−p)^N；用 expm1/log1p 算，避免小概率下的数值抵消",
+))
+REGISTRY.add(claim(
+    "p_2600_e4", V("p_at_least_once_2600") * 1e4, "×10⁻⁴", grade="现算",
+    recompute=lambda: V("p_at_least_once_2600") * 1e4, texts=["10⁻⁴"],
+))
+REGISTRY.add(claim(
+    "tickets_for_63", 1.0 / V("jackpot_p"), "注", grade="现算",
+    recompute=lambda: 1.0 / V("jackpot_p"),
+    note="买 N ≈ 1/p 注时，至少中一次的概率约为 1−1/e ≈ 0.63",
+))
+REGISTRY.add(claim(
+    "birthday_people", 23, "人", grade="约定",
+    note="生日问题取 23 人（教科书里的经典参数）",
+))
+REGISTRY.add(claim(
+    "birthday_pairs",
+    V("birthday_people") * (V("birthday_people") - 1) / 2.0, "对", grade="现算",
+    recompute=lambda: V("birthday_people") * (V("birthday_people") - 1) / 2.0,
+    note="23 个人两两配对共 253 对 —— 「暴露量」不是人数，是配对数",
+))
+REGISTRY.add(claim(
+    "birthday_p",
+    1.0 - math.exp(sum(math.log1p(-k / 365.0) for k in range(int(V("birthday_people"))))),
+    "", grade="现算",
+    recompute=lambda: 1.0 - math.exp(sum(math.log1p(-k / 365.0)
+                                          for k in range(int(V("birthday_people"))))),
+    note="至少一对同生日 = 1 − ∏(1−k/365)，取 365 天、忽略闰年（约定）",
+    texts=["365 天"],
+))
+REGISTRY.add(claim(
+    "birthday_pct", V("birthday_p") * 100.0, "%", grade="现算",
+    recompute=lambda: V("birthday_p") * 100.0,
+))
+REGISTRY.add(claim(
+    "e_inv_complement", 1.0 - math.exp(-1.0), "", grade="现算",
+    recompute=lambda: 1.0 - math.exp(-1.0),
+    note="N = 1/p 时至少一次的概率 1 − 1/e ≈ 0.632：这张图的水平参考线",
+))

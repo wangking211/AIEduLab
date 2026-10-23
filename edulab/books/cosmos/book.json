@@ -52,6 +52,14 @@
       "file": "ch06.html",
       "subtitle": "守恒定律给出的统一度量 —— 换成「复杂度」就做不到",
       "figs": ["fig-energy"]
+    },
+    {
+      "id": "ch07",
+      "num": "07",
+      "title": "概率：它不能被排成一条轴",
+      "file": "ch07.html",
+      "subtitle": "同一个 10⁻⁶，在不同场景里分量完全不同",
+      "figs": ["fig-prob"]
     }
   ]
 }

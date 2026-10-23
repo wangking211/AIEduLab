@@ -490,5 +490,76 @@ def fig_energy():
 FIGS["fig-energy"] = fig_energy
 
 
+def _at_least_once_curve(p, n_min=1.0, n_max=1e12, npts=170):
+    """P(至少一次) = 1 −(1−p)^N，在对数间隔的 N 上采样。
+
+    用 expm1/log1p 而不是 (1-p)**N：小概率 × 大 N 时前者不会出现
+    「1 减去一个几乎等于 1 的数」的灾难性抵消。
+    """
+    out = []
+    l0, l1 = math.log10(n_min), math.log10(n_max)
+    for i in range(npts):
+        n = 10.0 ** (l0 + (l1 - l0) * i / (npts - 1))
+        out.append([round(n, 6), round(-math.expm1(n * math.log1p(-p)), 6)])
+    return out
+
+
+def fig_probability():
+    """第 7 章：概率不是一条轴，而是一族曲线。
+
+    同一个概率，配上不同的「试了多少次」，含义完全不同 ——
+    所以概率需要**两个数**才能定位，它不能被排成前六章那样的单轴阶梯。
+    """
+    X0, X1 = 1.0, 1e12
+    series = [
+        ("p = 10⁻⁹", 1e-9, DIM, 1.8),
+        ("p = 5.6×10⁻⁸（双色球头奖）", _v("jackpot_p"), ACCENT, 2.4),
+        ("p = 10⁻⁶", 1e-6, DIM, 1.8),
+        ("p = 10⁻³", 1e-3, DIM, 1.8),
+    ]
+    layers = [
+        {"geom": "axis", "xRange": [X0, X1], "yRange": [0, 1.02],
+         "xticks": [1.0, 1e2, 1e4, 1e6, 1e8, 1e10, 1e12],
+         "xticklabels": ["1", "100", "1 万", "1 亿", "1 亿亿", "1 亿亿亿",
+                         "1 亿亿亿亿"],
+         "yticks": [0, 0.5, 1],
+         "xlab": "试了多少次 N（对数尺度）",
+         "ylab": "至少发生一次的概率"},
+    ]
+    # 参考线：N = 1/p 时，概率都到 0.63
+    layers.append({"geom": "line", "when": "k >= 2",
+                   "data": [[X0, _v("e_inv_complement")], [X1, _v("e_inv_complement")]],
+                   "stroke": GOOD, "width": 1.2, "dash": True})
+    layers.append({"geom": "text", "when": "k >= 2", "x": X0, "y": _v("e_inv_complement"),
+                   "text": "0.63：试 1/p 次时的概率（与 p 无关）", "align": "left",
+                   "size": 9.5, "color": GOOD, "dy": -8})
+    for i, (name, p, color, w) in enumerate(series):
+        layers.append({"geom": "line", "when": f"k >= {i + 1}",
+                       "data": _at_least_once_curve(p),
+                       "stroke": color, "width": w})
+        # 每条曲线在 N = 1/p 处的点（都落在同一条水平线上）
+        layers.append({"geom": "point", "when": f"k >= {i + 1}",
+                       "data": [{"x": 1.0 / p, "y": _v("e_inv_complement")}],
+                       "r": 4.0, "fill": color})
+    steps = [
+        {"k": 1, "note": "先看最低的一条：p = 10⁻⁹。试一次几乎不可能；"
+                         "试十亿次，至少一次的概率就到了一半以上。"},
+        {"k": 2, "note": f"橙色是双色球的头奖概率 {_v('jackpot_p'):.2e}（现算："
+                         f"1/{_v('ssq_tickets'):,.0f}）。它在图上与蓝色曲线**形状完全一样**，"
+                         f"只是往右平移了。"},
+        {"k": 3, "note": "再加两条：p = 10⁻⁶ 与 p = 10⁻³。四条曲线叠在一起看，"
+                         "结论很清楚：形状相同，位置不同。"},
+        {"k": 4, "note": f"所有圆点都落在同一条水平线上（0.63）—— 也就是说，"
+                         f"「有效尺度」不是 p，而是 N×p：试的次数乘以概率。"},
+    ]
+    return {"theme": PAPER,
+            "view": {"xRange": [X0, X1], "yRange": [0, 1.02], "xlog": True,
+                     "pad": {"l": 52, "r": 26, "b": 46, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
+FIGS["fig-prob"] = fig_probability
+
+
 def build(ids=None):
     return {k: FIGS[k]() for k in (ids or FIGS)}
