@@ -263,5 +263,66 @@ def fig_count():
 FIGS["fig-count"] = fig_count
 
 
+def fig_speed():
+    """第 4 章：速度的阶梯。这一章的要害不是「光速很快」，而是**它离我们并不远**。"""
+    X0, X1 = 1e-3, 1e9
+    rows = [
+        ("蜗牛", _v("snail_speed"), DIM),
+        ("步行", _v("walk_speed"), DIM),
+        ("民航客机", _v("airliner_speed"), DIM),
+        ("声速（空气）", _v("sound_speed"), DIM),
+        ("地球公转", _v("earth_orbit_speed"), GOOD),
+        ("光速", _v("c_light"), ACCENT),
+    ]
+    layers = [
+        {"geom": "axis", "xRange": [X0, X1], "yRange": [-0.7, 5.9],
+         "xticks": [1.0, 1e2, 1e4, 1e6, 1e8],
+         "xticklabels": ["1 米每秒", "100", "10⁴ 米每秒", "10⁶", "10⁸ 米每秒"],
+         "yticks": False,
+         "xlab": "速度（对数尺度：图上等距 = 相差 10 倍）"},
+        {"geom": "region", "when": "k >= 2", "x": [1.0, 1e3], "y": [-0.6, 5.8],
+         "fill": "#eef7f0", "outline": False},
+        {"geom": "text", "when": "k >= 2", "x": 1.0, "y": 5.55,
+         "text": "← 人日常经历的速度", "align": "left", "size": 9.5, "color": GOOD},
+    ]
+    steps_k = [1, 2, 2, 3, 4, 5]
+    for i, (name, val, color) in enumerate(rows):
+        y = float(i)
+        k = steps_k[i]
+        layers += [
+            {"geom": "line", "when": f"k >= {k}", "data": [[X0, y], [val, y]],
+             "stroke": color, "width": 6},
+            {"geom": "point", "when": f"k >= {k}", "data": [{"x": val, "y": y}],
+             "r": 3.6, "fill": color},
+            {"geom": "text", "when": f"k >= {k}", "x": val, "y": y,
+             "text": f"{name}  {val:,.0f} 米每秒",
+             "align": "right" if math.log10(val) > 7 else "left",
+             "size": 10, "color": color, "dy": -11},
+        ]
+    # 关键读数：光速与公转速度之间只差四个数量级
+    layers.append({"geom": "text", "when": "k >= 5",
+                   "x": math.sqrt(_v("earth_orbit_speed") * _v("c_light")), "y": 4.6,
+                   "text": f"两者只差 {_v('speed_gap_c_earth'):.1f} 个数量级",
+                   "align": "center", "size": 9.5, "color": ACCENT})
+    steps = [
+        {"k": 1, "note": f"蜗牛约 {_v('snail_speed'):g} 米每秒。这一章的下界就定在这里。"},
+        {"k": 2, "note": f"人的速度挤在很窄一条带子里：步行 {_v('walk_speed'):g}、"
+                         f"客机 {_v('airliner_speed'):g} 米每秒。"},
+        {"k": 3, "note": f"声速 {_v('sound_speed'):g} 米每秒 —— 它不算「快」，"
+                         f"只是我们日常能遇到的第一个硬上限。"},
+        {"k": 4, "note": f"地球公转 {_v('orbit_km_s'):.1f} 公里每秒 —— 由天文单位与儒略年"
+                         f"现算，比任何交通工具都快得多，但仍在同一个「万」的量级里。"},
+        {"k": 5, "note": f"光速 {_v('c_wan_km_s'):.2f} 万公里每秒。从蜗牛到这里，一共只有 "
+                         f"{_v('speed_span_decades'):.1f} 个数量级 —— 比时间那章的零头还小。"},
+    ]
+    return {"theme": PAPER,
+            "view": {"xRange": [X0, X1], "yRange": [-0.7, 5.9], "xlog": True,
+                     "pad": {"l": 30, "r": 26, "b": 46, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
+FIGS["fig-speed"] = fig_speed
+
+
 def build(ids=None):
     return {k: FIGS[k]() for k in (ids or FIGS)}

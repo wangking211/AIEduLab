@@ -28,6 +28,14 @@
       "file": "ch03.html",
       "subtitle": "从一生的心跳到宇宙的原子：中间那一段没有直觉可用",
       "figs": ["fig-count"]
+    },
+    {
+      "id": "ch04",
+      "num": "04",
+      "title": "速度：宇宙里最窄的一个量",
+      "file": "ch04.html",
+      "subtitle": "从蜗牛到光速，只隔着十一个数量级",
+      "figs": ["fig-speed"]
     }
   ]
 }

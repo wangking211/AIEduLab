@@ -19,5 +19,13 @@
   "gap_cup_to_universe:0": "55",
   "neurons_e10:1": "8.6",
   "stars_e11:1": "1.0"
+ },
+ "ch04": {
+  "energy_1kg_90c_e17:2": "1.16",
+  "gamma_90c:2": "2.29",
+  "orbit_km_s:1": "29.8",
+  "sound_speed:0": "343",
+  "speed_gap_c_earth:1": "4.0",
+  "speed_span_decades:1": "11.5"
  }
 }

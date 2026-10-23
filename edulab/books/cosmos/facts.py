@@ -309,3 +309,63 @@ REGISTRY.add(claim("avogadro_e23", V("n_avogadro") / 1e23, "", grade="现算",
                    recompute=lambda: V("n_avogadro") / 1e23, texts=["10²³"]))
 REGISTRY.add(claim("atoms_e80", V("atoms_universe") / 1e80, "", grade="现算",
                    recompute=lambda: V("atoms_universe") / 1e80, texts=["10⁸⁰"]))
+# =====================================================================
+# 第 4 章：速度（这一章的结论是「窄」）
+# =====================================================================
+REGISTRY.add(claim(
+    "snail_speed", 1.0e-3, "m/s", grade="约定",
+    note="蜗牛速度按 1 毫米每秒取整（量级示意）",
+))
+REGISTRY.add(claim(
+    "walk_speed", 1.4, "m/s", grade="约定",
+    note="步行速度按 1.4 米每秒（演示值）",
+))
+REGISTRY.add(claim(
+    "airliner_speed", 250.0, "m/s", grade="约定",
+    note="民航巡航速度按 250 米每秒（约 900 公里每小时，演示值）",
+))
+REGISTRY.add(claim(
+    "sound_speed", 343.0, "m/s", grade="约定",
+    note="声速取 20°C 干空气中的约 343 米每秒；它随温度变化，所以这里只作量级",
+))
+REGISTRY.add(claim(
+    "earth_orbit_speed",
+    2.0 * math.pi * V("au_m") / V("year_sec"), "m/s", grade="现算",
+    recompute=lambda: 2.0 * math.pi * V("au_m") / V("year_sec"),
+    note="公转速度 = 周长 ÷ 周期：两个登记值（天文单位、儒略年）算出来，"
+         "不需要另查一个「地球公转速度」",
+))
+REGISTRY.add(claim(
+    "c_wan_km_s", V("c_light") / 1e4, "万公里/秒", grade="现算",
+    recompute=lambda: V("c_light") / 1e4,
+    texts=["万公里每秒"],
+))
+REGISTRY.add(claim(
+    "orbit_km_s", V("earth_orbit_speed") / 1e3, "公里/秒", grade="现算",
+    recompute=lambda: V("earth_orbit_speed") / 1e3,
+))
+REGISTRY.add(claim(
+    "speed_span_decades",
+    math.log10(V("c_light")) - math.log10(V("snail_speed")), "个数量级", grade="现算",
+    recompute=lambda: math.log10(V("c_light")) - math.log10(V("snail_speed")),
+))
+REGISTRY.add(claim(
+    "energy_1kg_90c_j",
+    (1.0 / math.sqrt(1.0 - 0.9 ** 2) - 1.0) * V("c_light") ** 2, "J", grade="现算",
+    recompute=lambda: (1.0 / math.sqrt(1.0 - 0.9 ** 2) - 1.0) * V("c_light") ** 2,
+    note="把 1 千克加速到 0.9c 所需的动能 =(γ−1)mc²：γ = 1/√(1−0.81) ≈ 2.294",
+))
+REGISTRY.add(claim(
+    "energy_1kg_90c_e17", V("energy_1kg_90c_j") / 1e17, "×10¹⁷ 焦耳", grade="现算",
+    recompute=lambda: V("energy_1kg_90c_j") / 1e17, texts=["10¹⁷"],
+))
+REGISTRY.add(claim(
+    "gamma_90c", 1.0 / math.sqrt(1.0 - 0.9 ** 2), "", grade="现算",
+    recompute=lambda: 1.0 / math.sqrt(1.0 - 0.9 ** 2),
+))
+REGISTRY.add(claim(
+    "speed_gap_c_earth",
+    math.log10(V("c_light") / V("earth_orbit_speed")), "个数量级", grade="现算",
+    recompute=lambda: math.log10(V("c_light") / V("earth_orbit_speed")),
+    note="光速与地球公转速度的比值取对数：这一章的核心读数",
+))
