@@ -21,6 +21,7 @@ DIM = "#7d756a"
 ACCENT = "#b45309"       # 实测
 ACCENT2 = "#6d28d9"      # 文献
 GOOD = "#15803d"         # 现算
+BAD = "#b91c1c"          # 强调 / 边界警示
 PAPER = "paper"
 
 
@@ -343,6 +344,79 @@ def fig_speed():
 
 
 FIGS["fig-speed"] = fig_speed
+
+
+def _temp(v):
+    """温度标签：小量保一位小数，中量用「万 K」，大量用尾数×10^n。"""
+    if v < 1e4:
+        return f"{v:,.1f} K"
+    if v < 1e8:
+        return f"{v / 1e4:,.0f} 万 K"
+    return f"{_mant(v)} K"
+
+
+def fig_temperature():
+    """第 5 章：温度的阶梯。这一章的要害是**两端都有墙**。
+
+    下端那堵墙（0 K）在这张图上根本画不出来 —— 对数轴没有 0。
+    所以它只能用一支指向轴外的箭头表示：最硬的边界，恰恰无法落在图上。
+    """
+    X0, X1 = 1.0, 1e33
+    rows = [
+        ("宇宙微波背景", _v("cmb_temperature"), ACCENT),
+        ("人体", _v("human_temp_k"), DIM),
+        ("水的沸点", _v("water_boil_k"), DIM),
+        ("太阳表面", _v("sun_surface_k"), DIM),
+        ("太阳核心", _v("sun_core_k"), ACCENT2),
+        ("普朗克温度", _v("planck_temp_k"), GOOD),
+    ]
+    layers = [
+        {"geom": "axis", "xRange": [X0, X1], "yRange": [-0.9, 5.9],
+         "xticks": [1.0, 1e2, 1e4, 1e8, 1e16, 1e32],
+         "xticklabels": ["1 K", "100 K", "1 万 K", "1 亿 K", "1 亿亿 K", "1 亿亿亿亿 K"],
+         "yticks": False,
+         "xlab": "温度（对数尺度：图上等距 = 相差 10 倍）"},
+        # 左墙：绝对零度。0 在对数轴上是 −∞，所以画不出来，只能标一支箭头
+        {"geom": "text", "when": "k >= 1", "x": 1.05, "y": 5.55,
+         "text": "← 0 K：最硬的边界，但对数轴画不出 0", "align": "left",
+         "size": 9.5, "color": BAD},
+    ]
+    steps_k = [1, 2, 2, 3, 4, 5]
+    for i, (name, val, color) in enumerate(rows):
+        y = float(i)
+        k = steps_k[i]
+        layers += [
+            {"geom": "line", "when": f"k >= {k}", "data": [[X0, y], [val, y]],
+             "stroke": color, "width": 6},
+            {"geom": "point", "when": f"k >= {k}", "data": [{"x": val, "y": y}],
+             "r": 3.6, "fill": color},
+            {"geom": "text", "when": f"k >= {k}", "x": val, "y": y,
+             "text": f"{name}  {_temp(val)}",
+             "align": "right" if math.log10(val) > 30 else "left",
+             "size": 10, "color": color, "dy": -11},
+        ]
+    layers.append({"geom": "text", "when": "k >= 5", "x": 1e33, "y": 4.55,
+                   "text": "现有物理在这里失效 →", "align": "right", "size": 9.5,
+                   "color": GOOD})
+    steps = [
+        {"k": 1, "note": f"左边那堵墙是绝对零度。它不在轴上 —— 对数轴没有 0，"
+                         f"所以只能画一支指向轴外的箭头。最硬的边界，恰恰落在图外。"},
+        {"k": 2, "note": f"人活着的地方挤在最左边：人体 {_temp(_v('human_temp_k'))}、"
+                         f"水的沸点 {_temp(_v('water_boil_k'))}。这一小段就是「液态水能存在」的窗口。"},
+        {"k": 3, "note": f"太阳表面 {_temp(_v('sun_surface_k'))} —— 这只是表面，"
+                         f"真正的反应发生在更里面。"},
+        {"k": 4, "note": f"太阳核心 {_temp(_v('sun_core_k'))}：聚变需要这个温度，"
+                         f"而它来自引力压缩，不是「烧」出来的。"},
+        {"k": 5, "note": f"右端是普朗克温度 {_temp(_v('planck_temp_k'))}。超过它，"
+                         f"现有的物理理论本身失效。整条轴 {_v('temp_span'):.1f} 个数量级。"},
+    ]
+    return {"theme": PAPER,
+            "view": {"xRange": [X0, X1], "yRange": [-0.9, 5.9], "xlog": True,
+                     "pad": {"l": 30, "r": 26, "b": 46, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
+FIGS["fig-temp"] = fig_temperature
 
 
 def build(ids=None):

@@ -369,3 +369,58 @@ REGISTRY.add(claim(
     recompute=lambda: math.log10(V("c_light") / V("earth_orbit_speed")),
     note="光速与地球公转速度的比值取对数：这一章的核心读数",
 ))
+# =====================================================================
+# 第 5 章：温度（唯一两端都有墙的量）
+# =====================================================================
+REGISTRY.add(claim(
+    "k_boltzmann", 1.380649e-23, "J/K", grade="约定",
+    note="2019 年 SI 修订把玻尔兹曼常数**定义**为这个值（开尔文由此定出）",
+))
+
+REGISTRY.add(claim(
+    "cmb_temperature", 2.72548, "K", grade="实测",
+    source="Fixsen 2009, ApJ 707, 916（COBE FIRAS 的宇宙微波背景温度）",
+    url="https://doi.org/10.1088/0004-637X/707/2/916",
+    uncertainty=0.00057,
+    texts=["2.725"],
+))
+REGISTRY.add(claim(
+    "human_temp_k", 310.15, "K", grade="约定",
+    note="人体温度按 37°C 折算成 310.15 K（演示值）",
+))
+REGISTRY.add(claim(
+    "water_boil_k", 373.15, "K", grade="约定",
+    note="水的沸点 100°C = 373.15 K：这是摄氏温标的定义点之一",
+))
+REGISTRY.add(claim(
+    "sun_surface_k", 5772.0, "K", grade="约定",
+    note="IAU 2015 把太阳名义有效温度**定义**为 5772 K（名义值）",
+))
+REGISTRY.add(claim(
+    "sun_core_k", 1.57e7, "K", grade="文献",
+    source="Bahcall, Pinsonneault & Basu 2001, ApJ 555, 990（标准太阳模型）",
+    url="https://doi.org/10.1086/321493",
+    locator="标准太阳模型的中心温度约 1.57×10⁷ K",
+))
+REGISTRY.add(claim(
+    "planck_temp_k",
+    math.sqrt(V("hbar") * V("c_light") ** 5 / (V("g_newton") * V("k_boltzmann") ** 2)),
+    "K", grade="现算",
+    recompute=lambda: math.sqrt(V("hbar") * V("c_light") ** 5
+                                / (V("g_newton") * V("k_boltzmann") ** 2)),
+    note="普朗克温度 = √(ħc⁵/(Gk_B²))：由四条登记（ħ 与 k_B 是定义、G 是实测）推出来",
+))
+REGISTRY.add(claim(
+    "temp_span",
+    math.log10(V("planck_temp_k")) - math.log10(V("cmb_temperature")),
+    "个数量级", grade="现算",
+    recompute=lambda: math.log10(V("planck_temp_k")) - math.log10(V("cmb_temperature")),
+))
+REGISTRY.add(claim(
+    "planck_temp_e32", V("planck_temp_k") / 1e32, "×10³² K", grade="现算",
+    recompute=lambda: V("planck_temp_k") / 1e32, texts=["10³²"],
+))
+REGISTRY.add(claim(
+    "sun_core_e7", V("sun_core_k") / 1e7, "×10⁷ K", grade="现算",
+    recompute=lambda: V("sun_core_k") / 1e7, texts=["10⁷"],
+))

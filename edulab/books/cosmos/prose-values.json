@@ -27,5 +27,12 @@
   "sound_speed:0": "343",
   "speed_gap_c_earth:1": "4.0",
   "speed_span_decades:1": "11.5"
+ },
+ "ch05": {
+  "human_temp_k:0": "310",
+  "planck_temp_e32:2": "1.42",
+  "sun_core_e7:2": "1.57",
+  "temp_span:1": "31.7",
+  "water_boil_k:2": "373.15"
  }
 }

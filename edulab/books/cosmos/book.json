@@ -36,6 +36,14 @@
       "file": "ch04.html",
       "subtitle": "从蜗牛到光速，只隔着十一个数量级",
       "figs": ["fig-speed"]
+    },
+    {
+      "id": "ch05",
+      "num": "05",
+      "title": "温度：两端都有墙",
+      "file": "ch05.html",
+      "subtitle": "从绝对零度到普朗克温度 —— 而其中一堵墙根本画不出来",
+      "figs": ["fig-temp"]
     }
   ]
 }
