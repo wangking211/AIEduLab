@@ -554,3 +554,78 @@ REGISTRY.add(claim(
     recompute=lambda: 1.0 - math.exp(-1.0),
     note="N = 1/p 时至少一次的概率 1 − 1/e ≈ 0.632：这张图的水平参考线",
 ))
+# =====================================================================
+# 第 8 章：位置（我们在这些轴上的相对位置）
+# =====================================================================
+REGISTRY.add(claim(
+    "daily_energy_j", 2000.0 * 4184.0, "J", grade="现算",
+    recompute=lambda: 2000.0 * 4184.0,
+    note="每天 2000 千卡 × 4.184 千焦/千卡（后者是约定）；这是「一个人一天的能量吞吐」",
+))
+REGISTRY.add(claim(
+    "cells_human", 3.7e13, "个", grade="文献",
+    source="Bianconi et al. 2013, Ann. Hum. Biol. 40, 463–471（人体细胞数估算）",
+    url="https://doi.org/10.3109/03014460.2013.807878",
+    locator="摘要：成年男性约 3.72×10¹³ 个细胞（取 3.7×10¹³）",
+))
+# ---- 六个相对位置：全部现算，但**分母是本书选定的轴端点** ----
+REGISTRY.add(claim(
+    "pos_time",
+    (math.log10(V("lifespan_sec")) - math.log10(V("planck_time_s")))
+    / (math.log10(V("universe_age_sec")) - math.log10(V("planck_time_s"))),
+    "0~1", grade="现算",
+    recompute=lambda: (math.log10(V("lifespan_sec")) - math.log10(V("planck_time_s")))
+                      / (math.log10(V("universe_age_sec")) - math.log10(V("planck_time_s"))),
+    note="轴 = 第 1 章那条（普朗克时间 → 宇宙年龄）。换成「1 秒 → 今天」，这个数就会变",
+))
+REGISTRY.add(claim(
+    "pos_length",
+    (math.log10(V("human_h_m")) - math.log10(V("bohr_radius_m")))
+    / (math.log10(V("universe_diameter_m")) - math.log10(V("bohr_radius_m"))),
+    "0~1", grade="现算",
+    recompute=lambda: (math.log10(V("human_h_m")) - math.log10(V("bohr_radius_m")))
+                      / (math.log10(V("universe_diameter_m")) - math.log10(V("bohr_radius_m"))),
+    note="轴 = 第 2 章那条（玻尔半径 → 可观测宇宙）",
+))
+REGISTRY.add(claim(
+    "pos_count", math.log10(V("cells_human")) / 81.0, "0~1", grade="现算",
+    recompute=lambda: math.log10(V("cells_human")) / 81.0,
+    note="轴 = 第 3 章那条（1 → 10⁸¹）。分母 81 是这本书选的范围，不是自然常数",
+))
+REGISTRY.add(claim(
+    "pos_speed",
+    (math.log10(V("walk_speed")) - math.log10(V("snail_speed")))
+    / (math.log10(V("c_light")) - math.log10(V("snail_speed"))),
+    "0~1", grade="现算",
+    recompute=lambda: (math.log10(V("walk_speed")) - math.log10(V("snail_speed")))
+                      / (math.log10(V("c_light")) - math.log10(V("snail_speed"))),
+    note="轴 = 第 4 章那条（蜗牛 → 光速）",
+))
+REGISTRY.add(claim(
+    "pos_temp",
+    (math.log10(V("human_temp_k")) - math.log10(V("cmb_temperature")))
+    / (math.log10(V("planck_temp_k")) - math.log10(V("cmb_temperature"))),
+    "0~1", grade="现算",
+    recompute=lambda: (math.log10(V("human_temp_k")) - math.log10(V("cmb_temperature")))
+                      / (math.log10(V("planck_temp_k")) - math.log10(V("cmb_temperature"))),
+    note="轴 = 第 5 章那条（微波背景 → 普朗克温度）",
+))
+REGISTRY.add(claim(
+    "pos_energy", math.log10(V("daily_energy_j")) / 44.0, "0~1", grade="现算",
+    recompute=lambda: math.log10(V("daily_energy_j")) / 44.0,
+    note="轴 = 第 6 章那条（1 焦耳 → 10⁴⁴ 焦耳）",
+))
+REGISTRY.add(claim(
+    "pos_mean_wo_time",
+    (V("pos_length") + V("pos_count") + V("pos_speed") + V("pos_temp") + V("pos_energy")) / 5.0,
+    "0~1", grade="现算",
+    recompute=lambda: (V("pos_length") + V("pos_count") + V("pos_speed")
+                       + V("pos_temp") + V("pos_energy")) / 5.0,
+    note="除时间外五个量的平均相对位置 —— 这一章的核心读数",
+))
+REGISTRY.add(claim(
+    "pos_time_from_1s",
+    math.log10(V("lifespan_sec")) / math.log10(V("universe_age_sec")), "0~1", grade="现算",
+    recompute=lambda: math.log10(V("lifespan_sec")) / math.log10(V("universe_age_sec")),
+    note="如果把时间轴的小端从普朗克时间改到 1 秒，人的一生就落到这个位置（0.53）",
+))

@@ -561,5 +561,62 @@ def fig_probability():
 FIGS["fig-prob"] = fig_probability
 
 
+def fig_position():
+    """第 8 章：把前六章压成一张「我们在哪」的图。
+
+    横轴是**归一化的相对位置**（0 = 轴的小端，1 = 轴的大端）。
+    每一行的分母都是本书选定的轴端点 —— 换句话说，这张图画的是
+    「在我们选的坐标系里我们站在哪」，不是「宇宙给我们的位置」。
+    """
+    rows = [
+        ("时间（普朗克时间 → 宇宙年龄）", _v("pos_time")),
+        ("长度（玻尔半径 → 可观测宇宙）", _v("pos_length")),
+        ("数量（1 → 10⁸¹）", _v("pos_count")),
+        ("速度（蜗牛 → 光速）", _v("pos_speed")),
+        ("温度（微波背景 → 普朗克温度）", _v("pos_temp")),
+        ("能量（1 焦耳 → 10⁴⁴ 焦耳）", _v("pos_energy")),
+    ]
+    layers = [
+        {"geom": "axis", "xRange": [0, 1], "yRange": [-0.4, 5.9],
+         "xticks": [0, 0.25, 0.5, 0.75, 1],
+         "xticklabels": ["0", "¼", "中点", "¾", "1"],
+         "yticks": False,
+         "xlab": "相对位置（0 = 轴的小端，1 = 轴的大端）"},
+        {"geom": "line", "data": [[0.5, -0.3], [0.5, 5.7]],
+         "stroke": DIM, "width": 1.0, "dash": True},
+    ]
+    for i, (name, pos) in enumerate(rows):
+        y = float(i)
+        color = ACCENT if name.startswith("时间") else GOOD
+        layers += [
+            {"geom": "text", "when": "k >= 1", "x": 0, "y": y + 0.34, "text": name,
+             "align": "left", "size": 9.5, "color": DIM},
+            {"geom": "line", "when": "k >= 1", "data": [[0, y], [1, y]],
+             "stroke": "#e7e0d5", "width": 6},
+            {"geom": "point", "when": "k >= 1", "data": [{"x": pos, "y": y}],
+             "r": 5.0, "fill": color},
+            {"geom": "text", "when": "k >= 1", "x": pos, "y": y, "text": f"{pos:.2f}",
+             "align": "left", "size": 9.5, "color": color, "dy": -13},
+        ]
+    layers.append({"geom": "text", "when": "k >= 2", "x": 0.02, "y": -0.3,
+                   "text": f"除时间外，其余五个量平均只有 {_v('pos_mean_wo_time'):.2f}",
+                   "align": "left", "size": 9.5, "color": GOOD})
+    steps = [
+        {"k": 1, "note": "每一行是一条轴，圆点是我们在这条轴上的相对位置（0 = 小端，1 = 大端）。"},
+        {"k": 2, "note": f"除时间外，五个量都挤在前三成：平均 {_v('pos_mean_wo_time'):.2f}。"
+                         f"也就是说，在中点（虚线）左边的这五个量上，我们都偏小。"},
+        {"k": 3, "note": f"但时间那一行是 {_v('pos_time'):.2f}，几乎贴着大端。这不是矛盾 —— "
+                         f"两条轴的小端不一样：时间的轴从普朗克时间起算，而我们的寿命"
+                         f"离今天比离那个起点近得多。"},
+    ]
+    return {"theme": PAPER,
+            "view": {"xRange": [0, 1], "yRange": [-0.4, 5.9],
+                     "pad": {"l": 22, "r": 22, "b": 46, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
+FIGS["fig-position"] = fig_position
+
+
 def build(ids=None):
     return {k: FIGS[k]() for k in (ids or FIGS)}

@@ -54,5 +54,11 @@
   "p_2600_e4:1": "1.5",
   "tickets_50y": "2600",
   "tickets_for_63": "17,721,088"
+ },
+ "ch08": {
+  "planck_time_e44:3": "5.391",
+  "pos_mean_wo_time:2": "0.19",
+  "pos_time:2": "0.86",
+  "pos_time_from_1s:2": "0.53"
  }
 }

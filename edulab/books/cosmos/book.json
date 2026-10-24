@@ -60,6 +60,14 @@
       "file": "ch07.html",
       "subtitle": "同一个 10⁻⁶，在不同场景里分量完全不同",
       "figs": ["fig-prob"]
+    },
+    {
+      "id": "ch08",
+      "num": "08",
+      "title": "位置：我们在这些轴上站在哪",
+      "file": "ch08.html",
+      "subtitle": "一个反转的结论：「我们的位置」不是事实，是坐标系的产物",
+      "figs": ["fig-position"]
     }
   ]
 }
