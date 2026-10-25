@@ -83,6 +83,24 @@ python edulab/tools/sync_video_assets.py      # 补上视频技能的字体副�
 克隆下来是空的，必须从 `edulab/shared/video/` 真源同步一份。缺了它，
 渲染时会**静默退回系统字体**——不报错，只是成片风格不对。
 
+### 干净克隆自检（改完共享模块后跑一次）
+
+```powershell
+git clone <repo> $env:TEMP\cc; cd $env:TEMP\cc
+python edulab/tools/sync_video_assets.py        # 视频技能字体副本
+python edulab/tools/compose_templates.py        # 模板与素材重新组装
+cd edulab\books\math-thought; python build.py   # 出书（校验不过会中止）
+cd ..\cosmos; python build.py
+cd ..\..; python tools/check_facts.py; python tools/check_licenses.py
+python tools/check_output.py; python tools/check_geometry.py
+python tools/check_skills.py
+```
+
+这条流程不是仪式：它抓到过一个**只在克隆里才出现**的真 bug —— `core.autocrlf`
+会在 checkout 时把数据集的 CSV 换成 CRLF，于是 `local_sha256` 全部对不上，
+数据许可闸门在任何新机器上都红，而本机永远是绿的。修法见 `.gitattributes`
+（`*.csv -text`）：指纹按字节算，数据文件就不许被 git 改写。
+
 `skills-lock.json` 记录已安装技能的内容哈希。注意：现有条目是**安装当时的快照**，
 若之后修改过技能源码，哈希不会再对得上 —— 它只作记录，不参与技能加载。
 
