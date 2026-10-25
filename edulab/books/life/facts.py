@@ -214,3 +214,56 @@ REGISTRY.add(claim("ratio", V("bacteria_to_human"), ": 1", grade="现算",
                    recompute=lambda: V("bacteria_to_human")))
 REGISTRY.add(claim("myth_over", V("myth_overestimate"), "倍", grade="现算",
                    recompute=lambda: V("myth_overestimate")))
+# =====================================================================
+# 第 4 章：深时（同一段历史，两种轴上的两种占比）
+# =====================================================================
+REGISTRY.add(claim(
+    "life_origin_year", 3.5e9, "年前", grade="文献",
+    source="最早生命证据（叠层石与碳同位素）的通行量级",
+    url="https://doi.org/10.1038/nature08788",
+    locator="约 35 亿年前（不同证据给出 34–38 亿年）",
+))
+REGISTRY.add(claim(
+    "cambrian_year", 5.39e8, "年前", grade="文献",
+    source="国际年代地层表：显生宙/寒武纪的底界（ICS 国际地层委员会）",
+    url="https://stratigraphy.org/chart",
+    locator="Cambrian 底界约 538.8 ± 0.2 Ma",
+))
+REGISTRY.add(claim(
+    "window_low_year", 1.0e3, "年前", grade="约定",
+    note="本章时间轴的下端取「一千年前」—— 对数轴没有零，取不到「现在」",
+))
+REGISTRY.add(claim(
+    "frac_linear",
+    (V("cambrian_year") - V("window_low_year")) / (V("life_origin_year") - V("window_low_year")),
+    "", grade="现算",
+    recompute=lambda: (V("cambrian_year") - V("window_low_year"))
+                      / (V("life_origin_year") - V("window_low_year")),
+    note="在线性时间轴上，显生宙占整条轴的比例",
+))
+REGISTRY.add(claim(
+    "frac_log",
+    (math.log10(V("cambrian_year")) - math.log10(V("window_low_year")))
+    / (math.log10(V("life_origin_year")) - math.log10(V("window_low_year"))),
+    "", grade="现算",
+    recompute=lambda: (math.log10(V("cambrian_year")) - math.log10(V("window_low_year")))
+                      / (math.log10(V("life_origin_year")) - math.log10(V("window_low_year"))),
+    note="在对数时间轴上，同一段显生宙占整条轴的比例 —— 与线性轴差了近六倍",
+))
+REGISTRY.add(claim(
+    "frac_ratio", V("frac_log") / V("frac_linear"), "倍", grade="现算",
+    recompute=lambda: V("frac_log") / V("frac_linear"),
+    note="换一条轴，同一段历史「变长」了多少倍",
+))
+REGISTRY.add(claim(
+    "frac_linear_pct", V("frac_linear") * 100.0, "%", grade="现算",
+    recompute=lambda: V("frac_linear") * 100.0,
+))
+REGISTRY.add(claim(
+    "frac_log_pct", V("frac_log") * 100.0, "%", grade="现算",
+    recompute=lambda: V("frac_log") * 100.0,
+))
+REGISTRY.add(claim("cambrian_ma", V("cambrian_year") / 1e6, "百万年", grade="现算",
+                   recompute=lambda: V("cambrian_year") / 1e6))
+REGISTRY.add(claim("life_origin_ga", V("life_origin_year") / 1e9, "十亿年", grade="现算",
+                   recompute=lambda: V("life_origin_year") / 1e9))

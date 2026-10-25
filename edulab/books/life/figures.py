@@ -236,5 +236,53 @@ def fig_cells():
 FIGS["fig-cells"] = fig_cells
 
 
+def fig_deeptime():
+    """第 4 章：同一段历史（显生宙）在两种轴上的占比。
+
+    横轴是「占整条轴的比例」，三行：线性轴、对数轴、以及两者之比。
+    这张图想说的不是历史，而是**读数方式本身带来的偏置**。
+    """
+    X0, X1 = 0.0, 1.0
+    rows = [
+        ("线性时间轴上的显生宙", _v("frac_linear"), GOOD),
+        ("对数时间轴上的显生宙", _v("frac_log"), ACCENT),
+    ]
+    layers = [
+        {"geom": "axis", "xRange": [X0, X1], "yRange": [-0.7, 2.2],
+         "xticks": [0, 0.25, 0.5, 0.75, 1],
+         "xticklabels": ["0%", "25%", "50%", "75%", "100%"],
+         "yticks": False,
+         "xlab": "占整条轴的宽度比例"},
+    ]
+    for i, (name, frac, color) in enumerate(rows):
+        y = float(i) * 1.4
+        gate = "k >= 1" if i == 0 else "k >= 2"     # 第 2 步才加上对数轴那一行
+        layers += [
+            {"geom": "text", "when": gate, "x": 0.0, "y": y + 0.42, "text": name,
+             "align": "left", "size": 9.5, "color": DIM},
+            {"geom": "region", "when": gate, "x": [0.0, frac], "y": [y - 0.16, y + 0.16],
+             "fill": color, "outline": False},
+            {"geom": "text", "when": gate, "x": frac, "y": y, "text": f"{frac * 100:.1f}%",
+             "align": "left", "size": 11, "color": color, "dy": 0},
+        ]
+    layers.append({"geom": "text", "when": "k >= 2", "x": 0.02, "y": -0.45,
+                   "text": f"同一段历史，换一条轴，宽度变成 {_v('frac_ratio'):.1f} 倍",
+                   "align": "left", "size": 9.5, "color": BAD})
+    steps = [
+        {"k": 1, "note": f"显生宙（寒武纪以来）约 {_v('cambrian_year'):.2e} 年。"
+                         f"在线性轴上，它只占整条轴的 {_v('frac_linear_pct'):.0f}% —— "
+                         f"一小截，符合直觉。"},
+        {"k": 2, "note": f"换成对数轴，同一段历史占 {_v('frac_log_pct'):.0f}% —— "
+                         f"接近整条轴。**轴的选择改变了「哪段时间看起来重要」**。"},
+    ]
+    return {"theme": PAPER,
+            "view": {"xRange": [X0, X1], "yRange": [-0.7, 2.2],
+                     "pad": {"l": 30, "r": 30, "b": 46, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
+FIGS["fig-deeptime"] = fig_deeptime
+
+
 def build(ids=None):
     return {k: FIGS[k]() for k in (ids or FIGS)}

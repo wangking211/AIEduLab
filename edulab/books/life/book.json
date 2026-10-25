@@ -35,6 +35,14 @@
       "file": "ch03.html",
       "subtitle": "「细菌是人细胞的十倍」错在哪里，以及它为什么活了那么久",
       "figs": ["fig-cells"]
+    },
+    {
+      "id": "ch04",
+      "num": "04",
+      "title": "深时：换一条轴，历史就变长",
+      "file": "ch04.html",
+      "subtitle": "同一段显生宙，在线性轴上占一成半，在对数轴上占九成",
+      "figs": ["fig-deeptime"]
     }
   ]
 }

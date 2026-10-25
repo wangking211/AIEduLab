@@ -19,5 +19,15 @@
   "human_e13:1": "3.0",
   "myth_over:1": "7.9",
   "ratio:1": "1.3"
+ },
+ "ch04": {
+  "cambrian_ma": "539",
+  "frac_linear_pct:0": "15",
+  "frac_linear_pct:1": "15.4",
+  "frac_log_pct:0": "88",
+  "frac_log_pct:1": "87.6",
+  "frac_ratio:1": "5.7",
+  "life_origin_ga:1": "3.5",
+  "metabolic_slope_quarter": "3/4"
  }
 }
