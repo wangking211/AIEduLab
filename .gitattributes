@@ -1,0 +1,6 @@
+# 数据集指纹按**字节**算（shared/datasets.py 的 local_sha256）。
+# git 的换行转换（core.autocrlf）会在 checkout 时把 LF 改成 CRLF，
+# 于是同一份数据在不同机器上算出不同的 sha256 —— 指纹判据当场失效。
+# 所以数据文件必须原样进出：-text 关掉换行转换。
+*.csv  -text
+*.tsv  -text
