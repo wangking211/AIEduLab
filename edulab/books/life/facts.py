@@ -160,3 +160,57 @@ REGISTRY.add(claim("bmr_ratio", V("metabolic_ratio_elephant_mouse"), "", grade="
                    recompute=lambda: V("metabolic_ratio_elephant_mouse")))
 REGISTRY.add(claim("per_kg_pct", V("per_kg_elephant_vs_mouse") * 100.0, "%", grade="现算",
                    recompute=lambda: V("per_kg_elephant_vs_mouse") * 100.0))
+# =====================================================================
+# 第 3 章：数量（一个广为流传的数字是怎么被更正的）
+# =====================================================================
+REGISTRY.add(claim(
+    "human_cells", 3.0e13, "个", grade="文献",
+    source="Sender, Fuchs & Milo 2016, PLoS Biol. 14(8): e1002533"
+           "（Revised Estimates for the Number of Human and Bacteria Cells in the Body）",
+    url="https://doi.org/10.1371/journal.pbio.1002533",
+    locator="摘要与表 1：70 kg 成年男性约 3.0×10¹³ 个人体细胞",
+    note="这本书采用这一版的估计；它逐项重算了各类细胞，而不是从一个总量倒推",
+))
+REGISTRY.add(claim(
+    "bacteria_cells", 3.8e13, "个", grade="文献",
+    source="同上（Sender, Fuchs & Milo 2016）",
+    url="https://doi.org/10.1371/journal.pbio.1002533",
+    locator="摘要：结肠细菌约 3.8×10¹³ 个",
+))
+REGISTRY.add(claim(
+    "bacteria_to_human", V("bacteria_cells") / V("human_cells"), ": 1", grade="现算",
+    recompute=lambda: V("bacteria_cells") / V("human_cells"),
+    note="细菌与人体细胞的数量比：约 1.3 : 1，而不是流传已久的 10 : 1",
+))
+REGISTRY.add(claim(
+    "myth_ratio", 10.0, ": 1", grade="文献",
+    source="2016 年之前广为流传的估计（常见于综述与科普，常被简写为「十倍」）",
+    url="https://doi.org/10.1371/journal.pbio.1002533",
+    locator="Sender 等人在引言中明确指出：10 : 1 的说法缺乏逐项依据",
+    note="**这是一个已被修正的说法**。本书仍登记它，因为要讲清「更正」这件事，"
+         "必须先把它摆在旁边 —— 但它的等级不是「事实」，而是「旧估计」",
+))
+REGISTRY.add(claim(
+    "myth_bacteria", V("human_cells") * V("myth_ratio"), "个", grade="现算",
+    recompute=lambda: V("human_cells") * V("myth_ratio"),
+    note="按旧说法（10 : 1）反推的细菌数 —— 与 2016 年的估计差多少，图上看得见",
+))
+REGISTRY.add(claim(
+    "genome_bp", 3.1e9, "碱基对", grade="文献",
+    source="人类基因组计划与后续组装（GRCh38）的常用值",
+    url="https://www.ncbi.nlm.nih.gov/grc/human",
+    locator="单倍体基因组约 3.1×10⁹ 碱基对（取量级）",
+))
+REGISTRY.add(claim(
+    "myth_overestimate", V("myth_bacteria") / V("bacteria_cells"), "倍", grade="现算",
+    recompute=lambda: V("myth_bacteria") / V("bacteria_cells"),
+    note="旧说法把细菌数高估了多少倍",
+))
+REGISTRY.add(claim("bacteria_e13", V("bacteria_cells") / 1e13, "×10¹³ 个", grade="现算",
+                   recompute=lambda: V("bacteria_cells") / 1e13, texts=["10¹³"]))
+REGISTRY.add(claim("human_e13", V("human_cells") / 1e13, "×10¹³ 个", grade="现算",
+                   recompute=lambda: V("human_cells") / 1e13, texts=["10¹³"]))
+REGISTRY.add(claim("ratio", V("bacteria_to_human"), ": 1", grade="现算",
+                   recompute=lambda: V("bacteria_to_human")))
+REGISTRY.add(claim("myth_over", V("myth_overestimate"), "倍", grade="现算",
+                   recompute=lambda: V("myth_overestimate")))

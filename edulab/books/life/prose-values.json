@@ -13,5 +13,11 @@
   "metabolic_slope_quarter": "3/4",
   "metabolic_slope_two_thirds": "2/3",
   "per_kg_pct": "5"
+ },
+ "ch03": {
+  "bacteria_e13:1": "3.8",
+  "human_e13:1": "3.0",
+  "myth_over:1": "7.9",
+  "ratio:1": "1.3"
  }
 }

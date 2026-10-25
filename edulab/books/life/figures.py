@@ -175,5 +175,66 @@ def fig_kleiber():
 FIGS["fig-kleiber"] = fig_kleiber
 
 
+def _count(v):
+    """数量标签：用「万/亿/亿亿」叠字，避免把 10^13 写成 10000000000000。"""
+    if v < 1e4:
+        return f"{v:,.0f}"
+    if v < 1e8:
+        return f"{v / 1e4:,.0f} 万"
+    if v < 1e12:
+        return f"{v / 1e8:,.1f} 亿".replace(".0 亿", " 亿")
+    return f"{v / 1e8:,.0f} 亿"
+
+
+def fig_cells():
+    """第 3 章：四个数放在一条对数轴上 —— 其中一个是错的。"""
+    X0, X1 = 1e9, 1e15
+    rows = [
+        ("一个人身上的细菌（旧说法推出来）", _v("myth_bacteria"), BAD),
+        ("一个人身上的细菌（2016 年重算）", _v("bacteria_cells"), ACCENT2),
+        ("一个人自己的细胞", _v("human_cells"), GOOD),
+        ("一个人的基因组（碱基对，另一回事）", _v("genome_bp"), DIM),
+    ]
+    layers = [
+        {"geom": "axis", "xRange": [X0, X1], "yRange": [-0.6, 3.9],
+         "xticks": [1e9, 1e11, 1e13, 1e15],
+         "xticklabels": ["10 亿", "1000 亿", "10 万亿", "1000 万亿"],
+         "yticks": False,
+         "xlab": "个数（对数尺度：图上等距 = 相差 10 倍）"},
+    ]
+    for i, (name, val, color) in enumerate(rows):
+        y = float(i)
+        layers += [
+            {"geom": "line", "when": "k >= 1", "data": [[X0, y], [val, y]],
+             "stroke": color, "width": 6},
+            {"geom": "point", "when": "k >= 1", "data": [{"x": val, "y": y}],
+             "r": 3.6, "fill": color},
+            {"geom": "text", "when": "k >= 1", "x": X0, "y": y + 0.32, "text": name,
+             "align": "left", "size": 9.5,
+             "color": BAD if color == BAD else DIM},
+        ]
+    layers.append({"geom": "text", "when": "k >= 2", "x": _v("bacteria_cells"), "y": 2.55,
+                   "text": f"≈ {_v('bacteria_to_human'):.1f} : 1", "align": "left",
+                   "size": 10, "color": ACCENT2, "dy": 0})
+    layers.append({"geom": "text", "when": "k >= 2", "x": _v("myth_bacteria"), "y": 0.55,
+                   "text": f"旧说法多算了 {_v('myth_overestimate'):.1f} 倍", "align": "right",
+                   "size": 9.5, "color": BAD, "dy": 0})
+    steps = [
+        {"k": 1, "note": "一条对数轴，四个数。最上面那行是**旧说法**（按 10 : 1 反推），"
+                         "它比下面两行高出一截。"},
+        {"k": 2, "note": f"2016 年的重算把比例拉到 {_v('bacteria_to_human'):.1f} : 1 —— "
+                         f"细菌和人体细胞的数量几乎是 1 : 1，而不是 10 : 1。"},
+        {"k": 3, "note": f"最下面那行是另一个量：基因组碱基对数。把它放进来是为了提醒 —— "
+                         f"「个数」这个词在这张图上指的是三种完全不同的东西。"},
+    ]
+    return {"theme": PAPER,
+            "view": {"xRange": [X0, X1], "yRange": [-0.6, 3.9], "xlog": True,
+                     "pad": {"l": 30, "r": 26, "b": 46, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
+FIGS["fig-cells"] = fig_cells
+
+
 def build(ids=None):
     return {k: FIGS[k]() for k in (ids or FIGS)}

@@ -27,6 +27,14 @@
       "file": "ch02.html",
       "subtitle": "五个物种、一条斜率 3/4 的线，以及它为什么不是 2/3",
       "figs": ["fig-kleiber"]
+    },
+    {
+      "id": "ch03",
+      "num": "03",
+      "title": "数量：一个广为流传的数字是怎么被更正的",
+      "file": "ch03.html",
+      "subtitle": "「细菌是人细胞的十倍」错在哪里，以及它为什么活了那么久",
+      "figs": ["fig-cells"]
     }
   ]
 }
