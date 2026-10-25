@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 check_facts.py — 事实核查闸门（退出码可入 CI）。
 
@@ -27,16 +27,19 @@ ROOT = HERE.parent
 sys.path.insert(0, str(ROOT / "shared"))
 
 import factreg as F                                    # noqa: E402
+from bookbuild import load_book_module                  # noqa: E402
 
 TOKEN = re.compile(r"@@([a-z_][a-z0-9_]*)(?::\d+)?@@")
 
 
 def load_registry(path):
-    """把一本书的 facts.py 作为模块加载，取它导出的 REGISTRY。"""
-    spec = importlib.util.spec_from_file_location(f"facts_{path.parent.name}", path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    reg = getattr(mod, "REGISTRY", None)
+    """加载一本书的 facts.py，取它导出的 REGISTRY。
+
+    走 bookbuild 的加载器（而不是自己 importlib）：插图也用同一个加载器，
+    两边才会拿到**同一个模块实例**与同一个 Registry —— F3 的「被读过」才成立。
+    """
+    mod = load_book_module(path.parent, "facts")
+    reg = getattr(mod, "REGISTRY", None) if mod else None
     if not isinstance(reg, F.Registry):
         raise SystemExit(f"{path}：必须导出 REGISTRY = Registry(...)")
     return reg
@@ -86,12 +89,14 @@ def main(argv=None):
     bad = 0
     for book in books:
         reg = load_registry(book / "facts.py")
-        # 插图、上游登记（facts.py 内部互相引用）都算「在用」
-        code_text = "\n".join(
-            p.read_text(encoding="utf-8-sig", errors="replace")
-            for p in sorted(book.glob("*.py")))
-        rep = reg.check(referenced=referenced_tokens(book), chapters=chapter_blobs(book),
-                        code_text=code_text)
+        # 让插图真的跑一遍：谁被读过，谁就算「在用」（F3 的死条目判据靠这个）
+        figs_mod = load_book_module(book, "figures")
+        if figs_mod is not None:
+            try:
+                figs_mod.build()
+            except Exception as exc:                    # noqa: BLE001
+                print(f"  （{book.name}：插图构建失败，F3 只用正文引用判定：{exc!r}）")
+        rep = reg.check(referenced=referenced_tokens(book), chapters=chapter_blobs(book))
         tag = "OK  " if rep.ok else "FAIL"
         print(f"[{tag}] {book.name:20s} 登记 {len(reg.items)} 条  "
               f"错误 {len(rep.errors)}  警告 {len(rep.warnings)}")
@@ -151,6 +156,26 @@ def selftest():
         return r.check(referenced={"ok_one", "never_registered"})
     case("正文引用未登记记号", f3, "F3")
 
+    # F3 死条目：登记了但正文与插图都没读 —— 必须出**警告**（不是错误）
+    def f3_dead():
+        r = F.Registry("t")
+        r.add(F.claim("orphan", 1.0, grade="现算", recompute=lambda: 1.0))
+        return r.check(referenced=set())
+    rep_dead = f3_dead()
+    cases.append((any(w["code"] == "F3" for w in rep_dead.warnings),
+                  "死条目必须出 F3 警告", "F3(warn)",
+                  sorted(w["code"] for w in rep_dead.warnings)))
+
+    # 反向：被插图真读过（items[...]）的登记，不许再报死条目
+    def f3_accessed():
+        r = F.Registry("t")
+        r.add(F.claim("used", 1.0, grade="现算", recompute=lambda: 1.0))
+        _ = r.items["used"]["value"]          # 模拟插图读取
+        return r.check(referenced=set())
+    rep_acc = f3_accessed()
+    cases.append((not any(w["code"] == "F3" for w in rep_acc.warnings),
+                  "被读过的登记不算死条目", "无 F3(warn)",
+                  sorted(w["code"] for w in rep_acc.warnings)))
     # F4 正文里有未登记的数字（含年份 —— 年份也是事实）
     def f4():
         r = _reg()

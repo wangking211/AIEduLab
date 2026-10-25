@@ -26,15 +26,15 @@ PAPER = "paper"
 
 
 def _load_facts():
-    """按路径加载同目录的 facts.py。
+    """按路径加载同目录的 facts.py（与 bookbuild 共用同一份模块实例）。
 
     不走 `import facts`：那个名字太通用，若同进程里已经加载过别的书的 facts，
-    `import` 会**悄悄拿到另一本书的登记表**。按路径 + 唯一模块名才确定。
+    `import` 会**悄悄拿到另一本书的登记表**。
+    走 bookbuild 的加载器还有一个好处：闸门与插图拿到的是**同一个 Registry**，
+    否则 F3 的「这条登记有没有被读过」永远对不上。
     """
-    spec = importlib.util.spec_from_file_location("cosmos_facts", _HERE / "facts.py")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    from bookbuild import load_book_module
+    return load_book_module(_HERE, "facts")
 
 
 REG = _load_facts().REGISTRY

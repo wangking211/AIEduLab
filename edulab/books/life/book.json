@@ -1,0 +1,24 @@
+{
+  "title": "生命的尺度：从大肠杆菌到红杉",
+  "subtitle": "同一个问题问三遍：生命在时间与空间上占多大一块",
+  "author": "图解科学尺度 · 第三册（样章）",
+  "edition": "v0.1",
+  "siblings": [
+    {"title": "数学思想：从计数到无穷", "href": "../../math-thought/output/index.html"},
+    {"title": "万物尺度：从普朗克时间到宇宙年龄", "href": "../../cosmos/output/index.html"}
+  ],
+  "index_note": "这是第三本书的样章。它要回答的问题和前两本一样：这个领域的「尺度」是什么？答案在这一章里是一条斜带 —— 生命不是一个量，而是两个量之间的一条关系。",
+  "front": [
+    {"id": "howto", "title": "读法", "file": "howto.html"}
+  ],
+  "chapters": [
+    {
+      "id": "ch01",
+      "num": "01",
+      "title": "尺寸与时间：生命占了一条斜带",
+      "file": "ch01.html",
+      "subtitle": "体长跨七个数量级，而「体长 ÷ 世代时间」只跨一个半",
+      "figs": ["fig-band"]
+    }
+  ]
+}

@@ -121,12 +121,36 @@ def _prose_texts(node, key=None, path="章节"):
             yield from _prose_texts(v, k, f"{path}.{k}")
 
 
+class _Tracked(dict):
+    """记录「哪些登记被真的读过」。
+
+    F3 的「死条目」判定原来是 grep 源码：把 id 的引号串数一遍，≥2 次就算用到。
+    这在动态拼 id 时全线误报（`V(f"{cid}_size")` 里没有任何 id 字面量）。
+    改成**运行时观测**：谁被 `items[...]` 读过，谁就算用到 —— 这比 grep 可靠得多，
+    也不需要为了讨好判据把代码写得更啰嗦。
+    """
+
+    def __init__(self, owner):
+        super().__init__()
+        self._owner = owner
+
+    def __getitem__(self, key):
+        self._owner.accessed.add(key)
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        if dict.__contains__(self, key):
+            self._owner.accessed.add(key)
+        return dict.get(self, key, default)
+
+
 class Registry:
     """一个（书 / 章）的事实登记表。"""
 
     def __init__(self, name=""):
         self.name = name
-        self.items = {}
+        self.accessed = set()
+        self.items = _Tracked(self)
         self.allow = []                       # [(compiled, 理由)]
 
     def add(self, c):
@@ -150,7 +174,7 @@ class Registry:
         return [(c["id"], t) for c in self.items.values() for t in c["texts"]]
 
     # ---------------- 判据 ----------------
-    def check(self, referenced=None, chapters=None, code_text=None):
+    def check(self, referenced=None, chapters=None):
         r = Report()
         # F1 等级必填项（构造时已挡；这里兜底防「手改 dict 绕过构造」）
         for cid, c in self.items.items():
@@ -176,21 +200,17 @@ class Registry:
                 r.err("F2", f"claim[{cid}]",
                       f"复算得 {got!r}，登记的是 {c['value']!r}（容差 {c.get('tol')}）",
                       "要么改登记值，要么改内核 —— 两者必须同源")
-        # F3 正文引用的记号必须登记；登记的必须被引用
+        # F3 正文引用的记号必须登记；登记的必须被引用（或被插图读过）
         if referenced is not None:
+            used = set(referenced) | set(self.accessed)
             for cid in sorted(set(referenced) - set(self.items)):
                 r.err("F3", "正文", f"引用了未登记的记号 @@{cid}@@",
                       "在 facts 里登记它，或改用别处已登记的记号")
-            for cid in sorted(set(self.items) - set(referenced)):
-                # 正文没引用 ≠ 死条目：插图与「上游登记」都可以直接读它。
-                # 判据用「出现次数 ≥ 2」：定义处一次 + 至少被别处引用一次。
-                # （只数一次就够，但必须**数到定义之外的那一次**，否则每条登记都算被用。）
-                if code_text:
-                    n = code_text.count(f'"{cid}"') + code_text.count(f"'{cid}'")
-                    if n >= 2:
-                        continue
+            for cid in sorted(set(self.items) - used):
+                # 正文没引用 ≠ 死条目：插图与「上游登记」都可以在运行时读它。
+                # 判据是**它有没有被读过**（Registry.accessed），不是源码里出现几次。
                 r.warn("F3", f"claim[{cid}]",
-                       "登记了但正文、插图与上游登记都没用到（死条目）",
+                       "登记了但正文与插图都没有读它（死条目）",
                        "删掉它，或在正文/插图里引用")
         # F4 正文里的未登记数字
         if chapters is not None:

@@ -35,6 +35,7 @@ AIEduLab/
 │   │   └── audit_diagramability.py 「图解能覆盖多少知识」的可行性审计（见 coverage-audit.md）
 │   ├── books/math-thought/ 第一本书《数学思想：从计数到无穷》（10 章 43 图）
 │   ├── books/cosmos/       第二本书《万物尺度》（8 章 8 图，全部对数尺度 + 事实登记表）
+│   ├── books/life/         第三本书《生命的尺度》（样章：双对数图，时间 × 空间）
 │   ├── skills/             32 个学科技能（数理化生 + 初高中 + 大学 + 视频 + CS）
 │   ├── coverage-audit.md   「图解能覆盖多少知识」的可行性审计（现算，可重跑）
 │   └── demos/ out/         手写 HTML 演示
@@ -109,6 +110,7 @@ python tools/check_skills.py
 ```bash
 python edulab/tools/check_skills.py            # 差异即失败
 python edulab/tools/check_skills.py --update   # 确认新产物正确后刷新基线
+python edulab/tools/build_books.py             # 重建全部书稿（改了共享模块后必跑）
 python edulab/tools/check_facts.py --selftest  # 事实核查闸门的负向测试（每条判据都要能红）
 python edulab/tools/check_facts.py             # 核查所有带 facts.py 的书稿（未接入的会点名）
 python edulab/tools/check_licenses.py --selftest  # 数据许可闸门的负向测试

@@ -57,6 +57,8 @@ def load_book_module(book_dir, name):
     if not p.exists():
         return None
     mod_name = f"{name}_{Path(book_dir).name}"
+    if mod_name in sys.modules:                  # 同一进程里重复加载 → 返回同一份实例
+        return sys.modules[mod_name]             # （否则 Registery 会有两份，F3 的读取记录对不上）
     spec = importlib.util.spec_from_file_location(mod_name, p)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[mod_name] = mod              # 让 dataclass / 相对引用也能正常工作
