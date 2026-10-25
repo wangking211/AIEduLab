@@ -143,6 +143,13 @@ def build_chapter(book, ch, fig_specs, out_dir, figs_mod, facts_mod):
 
 
 def build_index(book, fig_specs, out_dir, has_sources=False):
+    front = book.get("front") or []
+    front_html = ""
+    if front:
+        items = " · ".join(
+            f'<a href="{esc(f["file"])}" class="text-[#b45309] hover:underline">'
+            f'{esc(f["title"])} →</a>' for f in front)
+        front_html = f'<div class="mb-6 text-[13px]">{items}</div>'
     cards = []
     for c in book["chapters"]:
         figs = [k for k in c.get("figs", []) if k in fig_specs]
@@ -193,6 +200,7 @@ def build_index(book, fig_specs, out_dir, has_sources=False):
     </div>
   </div>
   <div class="text-[11px] uppercase tracking-[0.2em] text-[#7d756a] font-bold mb-5">目录</div>
+  {front_html}
   <div class="grid gap-4">{''.join(cards)}</div>
   {('<div class="mt-8"><a href="sources.html" class="text-[13px] text-[#b45309] '
     'hover:underline">附录：全部数字的出处 →</a></div>') if has_sources else ''}
@@ -339,6 +347,21 @@ def build(book_dir, argv):
 
     written, all_seen = [], {}
     used_by = {}
+    # 前置页（读法 / 前言）：没有章号，但走同一条装配路径，因此也能用 @@记号@@
+    for f in (book.get("front") or []):
+        fp = book_dir / "chapters" / f"{f['id']}.json"
+        if not fp.exists():
+            print(f"  跳过（缺少前置页）：{f['id']}")
+            continue
+        fdata = json.loads(fp.read_text(encoding="utf-8-sig"))
+        fdata.setdefault("num", "")
+        fdata.setdefault("figs", f.get("figs", []))
+        pg, seen = build_chapter(book, fdata, all_figs, out_dir, figs_mod, facts_mod)
+        written.append(pg)
+        if seen:
+            all_seen[fdata["id"]] = seen
+            for key in seen:
+                used_by.setdefault(key.split(":")[0], set()).add(fdata["id"])
     for ch in book["chapters"]:
         ch_path = book_dir / "chapters" / f"{ch['id']}.json"
         if not ch_path.exists():

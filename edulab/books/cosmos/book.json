@@ -7,6 +7,9 @@
     {"title": "数学思想：从计数到无穷", "href": "../../math-thought/output/index.html"}
   ],
   "index_note": "这是《万物尺度》的样章：它的目的不是好看，而是压测三件事 —— 对数轴能不能画、事实核查闸门会不会被真实写作逼疯、外部数据许可登记够不够用。样章里的每个数字都登记在 books/cosmos/facts.py 里，闸门会逐条核对等级与出处。",
+  "front": [
+    {"id": "howto", "title": "读法：这本书的四件事", "file": "howto.html"}
+  ],
   "chapters": [
     {
       "id": "ch01",
