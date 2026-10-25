@@ -11,6 +11,7 @@
 """
 import math
 import sys
+from fractions import Fraction
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[2]          # edulab/
@@ -86,3 +87,76 @@ REGISTRY.add(claim("ecoli_rate_e9", V("ecoli_rate") * 1e9, "×10⁻⁹ 米每秒
                    recompute=lambda: V("ecoli_rate") * 1e9, texts=["10⁻⁹"]))
 REGISTRY.add(claim("human_rate_e9", V("human_rate") * 1e9, "×10⁻⁹ 米每秒", grade="现算",
                    recompute=lambda: V("human_rate") * 1e9, texts=["10⁻⁹"]))
+# =====================================================================
+# 第 2 章：代谢（标度律：用五个物种回归一个指数）
+# =====================================================================
+def _animal(cid, name, mass_kg, bmr_kcal_d):
+    """登记一个物种的体重与基础代谢率（文献值，取量级）。"""
+    REGISTRY.add(claim(f"{cid}_mass", mass_kg, "kg", grade="文献",
+                       source="生理学常用表格（基础代谢率）与 Kleiber 定律的原始数据族",
+                       url="https://doi.org/10.1017/CBO9780511790614",
+                       locator=f"{name}：体重与基础代谢率的常用量级值"))
+    REGISTRY.add(claim(f"{cid}_bmr", bmr_kcal_d, "千卡/天", grade="文献",
+                       source="同上",
+                       url="https://doi.org/10.1017/CBO9780511790614",
+                       locator=f"{name}：基础代谢率量级"))
+
+
+_animal("mouse", "小鼠", 0.025, 4.0)
+_animal("rat", "大鼠", 0.30, 22.0)
+_animal("human_m", "人", 70.0, 1700.0)
+_animal("horse", "马", 600.0, 7000.0)
+_animal("elephant", "大象", 3000.0, 24000.0)
+
+ANIMALS = ("mouse", "rat", "human_m", "horse", "elephant")
+
+
+def _fit_slope():
+    """对数—对数最小二乘的斜率：log10(代谢) 对 log10(体重)。"""
+    xs = [math.log10(V(f"{a}_mass")) for a in ANIMALS]
+    ys = [math.log10(V(f"{a}_bmr")) for a in ANIMALS]
+    mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    den = sum((x - mx) ** 2 for x in xs)
+    return num / den
+
+
+REGISTRY.add(claim(
+    "metabolic_exponent", _fit_slope(), "", grade="现算",
+    recompute=_fit_slope,
+    note="五个物种的 log-log 最小二乘斜率。Kleiber 的经典值是 3/4 = 0.75；"
+         "按表面积推算会得到 2/3 ≈ 0.667 —— 两者的差距就是这一章要讲的事",
+))
+REGISTRY.add(claim(
+    "metabolic_slope_quarter", Fraction(3, 4), "", grade="约定",
+    note="3/4 是 Kleiber 定律的经验指数（不是从第一原理推出来的）",
+))
+REGISTRY.add(claim(
+    "metabolic_slope_two_thirds", Fraction(2, 3), "", grade="现算",
+    recompute=lambda: Fraction(2, 3),
+    note="按「散热正比于表面积」推算的指数：面积 ∝ 质量^(2/3)",
+))
+REGISTRY.add(claim(
+    "metabolic_ratio_elephant_mouse", V("elephant_bmr") / V("mouse_bmr"), "", grade="现算",
+    recompute=lambda: V("elephant_bmr") / V("mouse_bmr"),
+    note="大象与小鼠的代谢率之比（约十万倍）",
+))
+REGISTRY.add(claim(
+    "mass_ratio_elephant_mouse", V("elephant_mass") / V("mouse_mass"), "", grade="现算",
+    recompute=lambda: V("elephant_mass") / V("mouse_mass"),
+    note="体重之比（约十万倍）—— 但代谢率之比比它小得多",
+))
+REGISTRY.add(claim(
+    "per_kg_elephant_vs_mouse",
+    (V("elephant_bmr") / V("elephant_mass")) / (V("mouse_bmr") / V("mouse_mass")),
+    "", grade="现算",
+    recompute=lambda: (V("elephant_bmr") / V("elephant_mass"))
+                      / (V("mouse_bmr") / V("mouse_mass")),
+    note="每千克代谢率之比：大象只有小鼠的这个比例 —— 「体型越大越省」的证据",
+))
+REGISTRY.add(claim("mass_ratio", V("mass_ratio_elephant_mouse"), "", grade="现算",
+                   recompute=lambda: V("mass_ratio_elephant_mouse")))
+REGISTRY.add(claim("bmr_ratio", V("metabolic_ratio_elephant_mouse"), "", grade="现算",
+                   recompute=lambda: V("metabolic_ratio_elephant_mouse")))
+REGISTRY.add(claim("per_kg_pct", V("per_kg_elephant_vs_mouse") * 100.0, "%", grade="现算",
+                   recompute=lambda: V("per_kg_elephant_vs_mouse") * 100.0))

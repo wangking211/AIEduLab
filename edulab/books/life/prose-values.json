@@ -5,5 +5,13 @@
   "human_rate_e9:1": "2.2",
   "rate_span:1": "1.9",
   "size_span:0": "8"
+ },
+ "ch02": {
+  "bmr_ratio": "6000",
+  "mass_ratio": "120,000",
+  "metabolic_exponent:3": "0.750",
+  "metabolic_slope_quarter": "3/4",
+  "metabolic_slope_two_thirds": "2/3",
+  "per_kg_pct": "5"
  }
 }

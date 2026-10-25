@@ -108,5 +108,72 @@ def fig_band():
 FIGS = {"fig-band": fig_band}
 
 
+def _centroid():
+    """五个物种在 log-log 平面上的质心 —— 两条参考斜线都过这一点。"""
+    xs = [math.log10(_v(f"{a}_mass")) for a in ("mouse", "rat", "human_m", "horse", "elephant")]
+    ys = [math.log10(_v(f"{a}_bmr")) for a in ("mouse", "rat", "human_m", "horse", "elephant")]
+    return sum(xs) / len(xs), sum(ys) / len(ys)
+
+
+def _line_through(mx, my, slope, x0, x1):
+    return [[10 ** x0, 10 ** (my + slope * (x0 - mx))],
+            [10 ** x1, 10 ** (my + slope * (x1 - mx))]]
+
+
+def fig_kleiber():
+    """第 2 章：代谢率对体重。两条参考线都过质心，只有斜率不同 —— 差别一眼可见。"""
+    X0, X1 = 1e-2, 1e4
+    Y0, Y1 = 1e0, 1e5
+    mx, my = _centroid()
+    e_fit = _v("metabolic_exponent")
+    layers = [
+        {"geom": "axis", "xRange": [X0, X1], "yRange": [Y0, Y1],
+         "xticks": [1e-2, 1e-1, 1, 10, 100, 1000],
+         "xticklabels": ["10 克", "100 克", "1 千克", "10 千克", "100 千克", "1 吨"],
+         "yticks": [1, 10, 100, 1000, 10000],
+         "yticklabels": ["1", "10", "100", "1000", "10000"],
+         "xlab": "体重（对数尺度）",
+         "ylab": "基础代谢率（千卡每天，对数尺度）"},
+        {"geom": "line", "when": "k >= 2",
+         "data": _line_through(mx, my, e_fit, -2, 4),
+         "stroke": ACCENT, "width": 2.2},
+        {"geom": "text", "when": "k >= 2", "x": 10 ** -1.9, "y": 10 ** (my + e_fit * (-1.9 - mx)),
+         "text": f"拟合斜率 {e_fit:.3f}", "align": "left", "size": 10, "color": ACCENT,
+         "dy": -12},
+        {"geom": "line", "when": "k >= 3",
+         "data": _line_through(mx, my, _v("metabolic_slope_two_thirds"), -2, 4),
+         "stroke": BAD, "width": 1.6, "dash": True},
+        {"geom": "text", "when": "k >= 3", "x": 10 ** 2.6,
+         "y": 10 ** (my + _v("metabolic_slope_two_thirds") * (2.6 - mx)),
+         "text": "按表面积推算的斜率 2/3", "align": "right", "size": 9.5, "color": BAD,
+         "dy": 14},
+    ]
+    for i, (cid, name) in enumerate((("mouse", "小鼠"), ("rat", "大鼠"),
+                                     ("human_m", "人"), ("horse", "马"),
+                                     ("elephant", "大象"))):
+        layers += [
+            {"geom": "point", "when": "k >= 1",
+             "data": [{"x": _v(f"{cid}_mass"), "y": _v(f"{cid}_bmr")}],
+             "r": 4.4, "fill": INK},
+            {"geom": "text", "when": "k >= 1", "x": _v(f"{cid}_mass"), "y": _v(f"{cid}_bmr"),
+             "text": name, "align": "left", "size": 9.5, "color": DIM, "dy": -12},
+        ]
+    steps = [
+        {"k": 1, "note": "五个物种，两列数字：体重、基础代谢率。都是文献量级值。"},
+        {"k": 2, "note": f"对数—对数最小二乘，斜率 {e_fit:.3f} —— 与 3/4 只差 0.001。"},
+        {"k": 3, "note": f"如果生命只是一块被动散热的石头，代谢该正比于表面积 ∝ 质量^(2/3)。"
+                         f"两条线从质心出发、越走越开：在大象的体重上，两种预测相差约 "
+                         f"{10 ** ((e_fit - 2 / 3) * (math.log10(_v('elephant_mass')) - mx)):.1f} 倍。"},
+    ]
+    return {"theme": PAPER,
+            "view": {"xRange": [X0, X1], "yRange": [Y0, Y1],
+                     "xlog": True, "ylog": True,
+                     "pad": {"l": 62, "r": 26, "b": 46, "t": 18}},
+            "layers": layers, "steps": steps}
+
+
+FIGS["fig-kleiber"] = fig_kleiber
+
+
 def build(ids=None):
     return {k: FIGS[k]() for k in (ids or FIGS)}

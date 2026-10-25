@@ -19,6 +19,14 @@
       "file": "ch01.html",
       "subtitle": "体长跨七个数量级，而「体长 ÷ 世代时间」只跨一个半",
       "figs": ["fig-band"]
+    },
+    {
+      "id": "ch02",
+      "num": "02",
+      "title": "代谢：为什么大象不是放大的老鼠",
+      "file": "ch02.html",
+      "subtitle": "五个物种、一条斜率 3/4 的线，以及它为什么不是 2/3",
+      "figs": ["fig-kleiber"]
     }
   ]
 }
