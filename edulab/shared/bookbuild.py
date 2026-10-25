@@ -142,7 +142,7 @@ def build_chapter(book, ch, fig_specs, out_dir, figs_mod, facts_mod):
     return out, seen
 
 
-def build_index(book, fig_specs, out_dir):
+def build_index(book, fig_specs, out_dir, has_sources=False):
     cards = []
     for c in book["chapters"]:
         figs = [k for k in c.get("figs", []) if k in fig_specs]
@@ -194,12 +194,111 @@ def build_index(book, fig_specs, out_dir):
   </div>
   <div class="text-[11px] uppercase tracking-[0.2em] text-[#7d756a] font-bold mb-5">目录</div>
   <div class="grid gap-4">{''.join(cards)}</div>
+  {('<div class="mt-8"><a href="sources.html" class="text-[13px] text-[#b45309] '
+    'hover:underline">附录：全部数字的出处 →</a></div>') if has_sources else ''}
   <div class="mt-16 pt-6 border-t border-[#e7e0d5] text-[12px] text-[#a89f92] leading-relaxed">
     {esc(note)}
   </div>
 </div>
 </body></html>"""
     out = out_dir / "index.html"
+    out.write_text(inline_assets(html), encoding="utf-8-sig")
+    return out
+
+
+def build_sources(book, facts_mod, used_by, out_dir):
+    """把事实登记表导出成一张给读者看的「出处总表」。
+
+    这张页是自动生成的：内容全部来自 facts.py 的登记项，没有一个字是手写的。
+    它让「每个数字都说得出出处」这句话从**内部判据**变成**读者可核的附录**。
+    """
+    reg = getattr(facts_mod, "REGISTRY", None) if facts_mod is not None else None
+    if reg is None or not reg.items:
+        return None
+    order = {"现算": 0, "实测": 1, "文献": 2, "约定": 3}
+    items = sorted(reg.items.values(), key=lambda c: (order.get(c["grade"], 9), c["id"]))
+
+    def fmt_val(c):
+        v = c.get("value")
+        try:
+            f = float(v)
+            if f == 0:
+                return "0"
+            if abs(f) >= 1e5 or abs(f) < 1e-3:
+                return f"{f:.4e}".replace("e", "×10^")
+            return f"{f:,.6g}"
+        except (TypeError, ValueError):
+            return esc(str(v))
+
+    rows = []
+    for c in items:
+        who = ", ".join(sorted(used_by.get(c["id"], []))) or "—"
+        src = esc(c.get("source") or "")
+        if c.get("url"):
+            src = f'<a class="text-[#b45309] hover:underline" href="{esc(c["url"])}">' \
+                  f'{src or esc(c["url"])}</a>'
+        loc = esc(c.get("locator") or "")
+        note = esc(c.get("note") or ("由本表其它登记算出" if c["grade"] == "现算" else ""))
+        unit = esc(c.get("unit") or "")
+        rows.append(f"""<tr class="border-t border-[#eee7dc] align-top">
+      <td class="py-2 pr-3 font-mono text-[11px] text-[#7d756a] whitespace-nowrap">{esc(c["id"])}</td>
+      <td class="py-2 pr-3 text-[13px] whitespace-nowrap">{fmt_val(c)} <span class="text-[11px] text-[#a89f92]">{unit}</span></td>
+      <td class="py-2 pr-3 text-[12px] whitespace-nowrap">{esc(c["grade"])}</td>
+      <td class="py-2 pr-3 text-[12px] text-[#4a423a]">{src}{('<br><span class="text-[11px] text-[#7d756a]">' + loc + '</span>') if loc else ''}</td>
+      <td class="py-2 pr-3 text-[11px] text-[#7d756a]">{who}</td>
+      <td class="py-2 text-[11px] text-[#7d756a]">{note}</td>
+    </tr>""")
+
+    grade_note = {
+        "现算": "由本表其它登记算出来 —— 出书时闸门会<b>重新算一遍</b>并比对",
+        "实测": "观测/实验值，附不确定度与可核链接",
+        "文献": "文献里的定值，附页码 / 表号 / DOI",
+        "约定": "单位定义或演示参数 —— 不是自然规律，必须写明为什么只能约定",
+    }
+    counts = "".join(
+        f'<span class="mr-4">{g} {sum(1 for c in items if c["grade"] == g)}</span>'
+        for g in ("现算", "实测", "文献", "约定")
+        if any(c["grade"] == g for c in items))
+    html = f"""<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数字的出处 · {esc(book['title'])}</title>
+<style>__TAILWIND_CSS__</style>
+<style>
+  body{{background:#faf7f2;color:#1f1b16;
+        font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;}}
+  .serif{{font-family:"Source Han Serif SC","Noto Serif CJK SC","Songti SC",Georgia,"SimSun",serif;}}
+</style></head>
+<body>
+<div class="max-w-[1000px] mx-auto px-6 py-16">
+  <div class="text-[11px] uppercase tracking-[0.2em] text-[#b45309] font-bold mb-3">
+    {esc(book['title'])} · 附录</div>
+  <h1 class="text-[2rem] font-bold leading-tight mb-4 serif">数字的出处</h1>
+  <p class="text-[14px] text-[#4a423a] leading-relaxed max-w-[46rem] mb-3">
+    本书正文里的每个数都在下面这张表里。这张表<b>自动生成</b>，直接读自书的登记表
+    <code class="text-[12px] bg-[#f2ece2] px-1 rounded">facts.py</code>。</p>
+  <p class="text-[13px] text-[#7d756a] mb-6">{counts}</p>
+  <div class="bg-white border border-[#e7e0d5] rounded-xl px-5 py-4 mb-8 text-[12px] text-[#4a423a] leading-relaxed">
+    <div class="mb-1"><b>四个等级，义务不同：</b></div>
+    <div>· <b>现算</b> —— {grade_note['现算']}</div>
+    <div>· <b>实测</b> —— {grade_note['实测']}</div>
+    <div>· <b>文献</b> —— {grade_note['文献']}</div>
+    <div>· <b>约定</b> —— {grade_note['约定']}</div>
+  </div>
+  <table class="w-full text-left">
+    <thead class="text-[11px] uppercase tracking-[0.12em] text-[#7d756a]">
+      <tr><th class="pb-2 pr-3">记号</th><th class="pb-2 pr-3">值</th>
+          <th class="pb-2 pr-3">等级</th><th class="pb-2 pr-3">出处</th>
+          <th class="pb-2 pr-3">用在</th><th class="pb-2">说明</th></tr>
+    </thead>
+    <tbody>{''.join(rows)}</tbody>
+  </table>
+  <div class="mt-10 pt-6 border-t border-[#e7e0d5] text-[12px] text-[#a89f92]">
+    <a href="index.html" class="text-[#b45309] hover:underline">← 回到目录</a>
+  </div>
+</div>
+</body></html>"""
+    out = out_dir / "sources.html"
     out.write_text(inline_assets(html), encoding="utf-8-sig")
     return out
 
@@ -239,6 +338,7 @@ def build(book_dir, argv):
     print(f"✓ 插图校验通过（{len(all_figs)} 张）")
 
     written, all_seen = [], {}
+    used_by = {}
     for ch in book["chapters"]:
         ch_path = book_dir / "chapters" / f"{ch['id']}.json"
         if not ch_path.exists():
@@ -251,7 +351,12 @@ def build(book_dir, argv):
         written.append(p)
         if seen:
             all_seen[cdata["id"]] = seen
-    written.append(build_index(book, all_figs, out_dir))
+            for key in seen:
+                used_by.setdefault(key.split(":")[0], set()).add(cdata["id"])
+    src = build_sources(book, facts_mod, used_by, out_dir)
+    if src is not None:
+        written.append(src)
+    written.append(build_index(book, all_figs, out_dir, has_sources=src is not None))
 
     # ---- 生成值基线：正文里每个 @@记号@@ 渲染成什么，必须与基线逐项一致 ----
     # 光有「值来自内核」不够 —— 呈现方式（精度）被悄悄改掉也会出错。
