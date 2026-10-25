@@ -3,6 +3,9 @@
   "subtitle": "从「1 加 1 等于 2」，到「有些问题永远没有算法」，再到「信息有精确的价格」，最后到「确定也会失去可预测性」",
   "author": "图解数学思想史 · 第一册",
   "edition": "v1",
+  "siblings": [
+    {"title": "万物尺度：从普朗克时间到宇宙年龄", "href": "../../cosmos/output/index.html"}
+  ],
   "chapters": [
     {
       "id": "ch01",

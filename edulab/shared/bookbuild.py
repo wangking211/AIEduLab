@@ -160,6 +160,13 @@ def build_index(book, fig_specs, out_dir):
     note = book.get("index_note") or (
         "本书为「用图解释思想」的实验样章：正文之外，每张插图都是可交互的——"
         "有的能拖滑块，有的能逐步展开（点插图下方的 ◀ ▶）。")
+    sibs = book.get("siblings") or []
+    sib_html = ""
+    if sibs:
+        links = " · ".join(
+            f'<a href="{esc(s["href"])}" class="text-[#b45309] hover:underline">'
+            f'{esc(s.get("title", ""))}</a>' for s in sibs)
+        sib_html = f'<div class="mt-6 text-[13px] text-[#7d756a]">另见：{links}</div>'
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -178,6 +185,7 @@ def build_index(book, fig_specs, out_dir):
     <h1 class="text-[2.6rem] font-bold leading-tight mb-5 serif">{esc(book['title'])}</h1>
     <p class="text-[1.1rem] text-[#4a423a] leading-relaxed max-w-[46rem] serif">
       {esc(book.get('subtitle',''))}</p>
+    {sib_html}
     <div class="mt-6 flex items-center gap-4 text-[12px] text-[#a89f92]">
       <span>{len(book['chapters'])} 章</span><span>·</span>
       <span>{sum(len([k for k in c.get('figs',[]) if k in fig_specs]) for c in book['chapters'])} 张图解</span><span>·</span>
