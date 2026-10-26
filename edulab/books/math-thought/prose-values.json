@@ -55,6 +55,7 @@
   "tower_q5_0": "2"
  },
  "ch08": {
+  "bb5_year": "2024",
   "bb_machines1": "64",
   "bb_machines2": "20,736",
   "bb_machines3": "16,777,216",
@@ -68,18 +69,32 @@
   "bb_t2": "6",
   "bb_t3_ones": "4",
   "bb_t3_steps": "21",
+  "clay_year": "2000",
+  "cook_year": "1971",
+  "edmonds_year": "1965",
+  "entscheidungsproblem_year": "1928",
+  "hilbert_year": "1900",
+  "karp_year": "1972",
+  "khwarizmi_year": "820",
+  "matiyasevich_year": "1970",
+  "rado_year": "1962",
+  "rice_year": "1953",
   "tm_rules": "16",
   "tm_steps": "20",
   "tm_syms": "4",
+  "turing_year": "1936",
   "uni_bits": "5"
  },
  "ch09": {
+  "h_skew:1": "1.6",
   "h_skew:2": "1.60",
   "h_uniform": "3",
+  "huffman_year": "1952",
   "info_avg:2": "2.33",
   "info_h:3": "2.278",
   "info_over_pct:1": "2.3",
-  "info_waste_pct:1": "31.7"
+  "info_waste_pct:1": "31.7",
+  "shannon_year": "1948"
  },
  "ch10": {
   "butterfly_year": "1972",
