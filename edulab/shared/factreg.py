@@ -152,6 +152,18 @@ class Registry:
         self.accessed = set()
         self.items = _Tracked(self)
         self.allow = []                       # [(compiled, 理由)]
+        self.enrolled = None                  # None = 全书所有章节；否则只查这几章
+
+    def enroll(self, *chapter_ids):
+        """按章接入：只核查这些章节的正文数字。
+
+        为什么需要它：老书有十章的正文早就写好了，一次给整本书加登记表，
+        F4 会把**历史包袱**全部报成红 —— 那等于逼着人先把旧账一次性还清，
+        否则连新章也进不来。按章接入让「新写的守规矩、旧的记账待补」成为可能，
+        而且未接入的章节会被**点名**（见 check_facts.py 的输出），不静默跳过。
+        """
+        self.enrolled = set(self.enrolled or ()) | set(chapter_ids)
+        return self
 
     def add(self, c):
         if c["id"] in self.items:
@@ -174,7 +186,7 @@ class Registry:
         return [(c["id"], t) for c in self.items.values() for t in c["texts"]]
 
     # ---------------- 判据 ----------------
-    def check(self, referenced=None, chapters=None):
+    def check(self, referenced=None, chapters=None, also_ok=None):
         r = Report()
         # F1 等级必填项（构造时已挡；这里兜底防「手改 dict 绕过构造」）
         for cid, c in self.items.items():
@@ -202,8 +214,9 @@ class Registry:
                       "要么改登记值，要么改内核 —— 两者必须同源")
         # F3 正文引用的记号必须登记；登记的必须被引用（或被插图读过）
         if referenced is not None:
+            also_ok = set(also_ok or ())       # 插图 PROSE 提供的记号（不算未登记）
             used = set(referenced) | set(self.accessed)
-            for cid in sorted(set(referenced) - set(self.items)):
+            for cid in sorted(set(referenced) - set(self.items) - also_ok):
                 r.err("F3", "正文", f"引用了未登记的记号 @@{cid}@@",
                       "在 facts 里登记它，或改用别处已登记的记号")
             for cid in sorted(set(self.items) - used):
@@ -212,12 +225,16 @@ class Registry:
                 r.warn("F3", f"claim[{cid}]",
                        "登记了但正文与插图都没有读它（死条目）",
                        "删掉它，或在正文/插图里引用")
-        # F4 正文里的未登记数字
+        # F4 正文里的未登记数字（只查接入的章节；未接入的由调用方点名）
         if chapters is not None:
-            for where, text in _prose_texts(chapters):
-                for tok, ctx in self.bare_numbers(text):
-                    r.err("F4", where, f"未登记的数字 {tok!r}（…{ctx}…）",
-                          "改成 @@记号@@（由内核现算），或在 facts 里登记并写进它的 texts")
+            scope = chapters
+            if self.enrolled is not None:
+                scope = {k: v for k, v in chapters.items() if k in self.enrolled}
+            for cid, blob in scope.items():
+                for where, text in _prose_texts(blob, path=cid):
+                    for tok, ctx in self.bare_numbers(text):
+                        r.err("F4", where, f"未登记的数字 {tok!r}（…{ctx}…）",
+                              "改成 @@记号@@（由内核现算），或在 facts 里登记并写进它的 texts")
         return r
 
     def bare_numbers(self, text):

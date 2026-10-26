@@ -82,20 +82,27 @@
   "info_waste_pct:1": "31.7"
  },
  "ch10": {
+  "butterfly_year": "1972",
   "cycle_a:4": "0.5130",
   "cycle_b:4": "0.7995",
   "delta_first:3": "4.751",
   "delta_last:3": "4.669",
   "doubling:2": "1.39",
+  "factor_28:1": "0.8",
   "fixed_28:4": "0.6429",
+  "li_yorke_year": "1975",
+  "lorenz_year": "1963",
   "lyap28:3": "-0.223",
   "lyap32:3": "-0.916",
   "lyap39:3": "0.498",
   "lyap4:3": "0.693",
   "p3_window:4": "3.8284",
+  "r_355:2": "3.55",
   "r_last:4": "3.5699",
   "r_second:4": "3.4495",
   "r_third:4": "3.5441",
-  "sep_01": "29"
+  "sep_01": "29",
+  "sharkovskii_year": "1964",
+  "verhulst_year": "1838"
  }
 }

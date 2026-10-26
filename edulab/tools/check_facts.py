@@ -45,20 +45,29 @@ def load_registry(path):
     return reg
 
 
-def referenced_tokens(book):
-    """正文里实际用到的 @@记号@@ 集合（扫章节 JSON）。"""
+def referenced_tokens(book, enrolled=None):
+    """正文里实际用到的 @@记号@@ 集合。
+
+    `enrolled` 不为 None 时只扫接入的章节 —— 否则其它章节的记号会被报成
+    「引用了未登记的记号」，而它们本来就没打算（也没能力）在这一轮登记。
+    """
     used = set()
     for p in sorted((book / "chapters").glob("*.json")):
         txt = p.read_text(encoding="utf-8-sig")
+        if enrolled is not None:
+            cid = json.loads(txt).get("id") or p.stem
+            if cid not in enrolled:
+                continue
         used |= {m.group(1) for m in TOKEN.finditer(txt)}
     return used
 
 
 def chapter_blobs(book):
-    """章节 JSON 的集合（F4 扫它们）。"""
+    """章节 JSON 的集合，按**章 id** 作键（F4 按章接入时要用它筛）。"""
     out = {}
     for p in sorted((book / "chapters").glob("*.json")):
-        out[p.name] = json.loads(p.read_text(encoding="utf-8-sig"))
+        data = json.loads(p.read_text(encoding="utf-8-sig"))
+        out[data.get("id") or p.stem] = data
     return out
 
 
@@ -96,9 +105,29 @@ def main(argv=None):
                 figs_mod.build()
             except Exception as exc:                    # noqa: BLE001
                 print(f"  （{book.name}：插图构建失败，F3 只用正文引用判定：{exc!r}）")
-        rep = reg.check(referenced=referenced_tokens(book), chapters=chapter_blobs(book))
+        blobs = chapter_blobs(book)
+        # 正文里的记号有两个来源：事实登记表，和插图现算的 PROSE —— 后者不算「未登记」
+        fig_tokens = set()
+        if figs_mod is not None and hasattr(figs_mod, "prose_values"):
+            bk = json.loads((book / "book.json").read_text(encoding="utf-8-sig"))
+            for ch in bk.get("chapters", []):
+                if reg.enrolled is not None and ch.get("id") not in reg.enrolled:
+                    continue
+                try:
+                    fig_tokens |= set(figs_mod.prose_values(ch.get("figs", [])))
+                except Exception:                       # noqa: BLE001
+                    pass
+        rep = reg.check(referenced=referenced_tokens(book, reg.enrolled),
+                        chapters=blobs, also_ok=fig_tokens)
         tag = "OK  " if rep.ok else "FAIL"
-        print(f"[{tag}] {book.name:20s} 登记 {len(reg.items)} 条  "
+        if reg.enrolled is None:
+            scope = f"全书 {len(blobs)} 章"
+        else:
+            missing = sorted(set(blobs) - set(reg.enrolled))
+            scope = f"接入 {len(set(blobs) & set(reg.enrolled))}/{len(blobs)} 章"
+            if missing:
+                scope += f"（未接入：{', '.join(missing)}）"
+        print(f"[{tag}] {book.name:20s} 登记 {len(reg.items)} 条 · {scope}  "
               f"错误 {len(rep.errors)}  警告 {len(rep.warnings)}")
         if rep.errors or rep.warnings:
             for line in rep.format().splitlines():
