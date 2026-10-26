@@ -1,12 +1,27 @@
 {
  "ch01": {
   "cplx_half": "180",
-  "cplx_quarter": "90"
+  "cplx_quarter": "90",
+  "gauss_complex_year": "1799",
+  "hamilton_year": "1843"
+ },
+ "ch02": {
+  "cantor_year": "1874"
+ },
+ "ch03": {
+  "godel_year": "1931",
+  "hilbert_year": "1900",
+  "turing_year": "1936"
  },
  "ch04": {
+  "berkeley_year": "1734",
   "exact:3": "3.750",
   "n1:3": "1.500",
-  "n8:3": "3.346"
+  "n8:3": "3.346",
+  "secant_dt_01": "0.10",
+  "secant_dt_09": "0.90",
+  "secant_slope_01:1": "2.1",
+  "secant_slope_09:1": "2.9"
  },
  "ch05": {
   "at7": "6",

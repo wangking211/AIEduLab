@@ -1,11 +1,17 @@
 # -*- coding: utf-8 -*-
 """《数学思想：从计数到无穷》的事实登记表。
 
-**按章接入**：目前只接入第 10 章（混沌）。其余九章是 2026 年之前写的，
-正文里的年份与常数从未登记 —— 它们是对外的欠账，不是「已经核查过」。
+**全书十章都已接入**（2026-10-27 补齐）。此前它只有第 10 章登记，其余九章是
+2026 年上半年写的，正文里的年份与常数从未登记 —— 那是对外的欠账，不是「已核查」。
 
-接入方式：`REGISTRY.enroll("ch10", "ch09", "ch08", "ch07", "ch06", "ch05")`。未接入的章节不会静默跳过 ——
-`check_facts.py` 会点名列出，账一直摆在那里。
+三条已经定型的分类规则（分错了会挨 F4）：
+  · 年份与人物  → 登记成「文献」+ 记号（@@year@@）
+  · 纯计算      → 行走内数学（$…$）：可当场验算，不需要出处
+  · 例子里的计数 → 汉字（三局、一半、二十三个问题）
+
+这里**不声明** `enroll()`：默认就是「所有章节都要登记」，新增一章会自动纳入核查。
+按章接入的能力仍保留在 factreg 里（给将来只有部分章节就绪的书用），
+但一旦声明了它，`check_facts.py` 会把未接入的章节**点名**列出来。
 """
 import math
 import sys
@@ -15,8 +21,17 @@ _REPO = Path(__file__).resolve().parents[2]          # edulab/
 sys.path.insert(0, str(_REPO / "shared"))
 from factreg import Registry, claim                  # noqa: E402
 
-REGISTRY = Registry("数学思想（第 10 章）")
-REGISTRY.enroll("ch10", "ch09", "ch08", "ch07", "ch06", "ch05")
+REGISTRY = Registry("数学思想")
+
+
+def V(cid):
+    return REGISTRY.items[cid]["value"]
+def V(cid):
+    return REGISTRY.items[cid]["value"]
+
+
+# 全书十章都已接入，所以**不再声明** enroll —— 默认就是「所有章节都要登记」，
+# 以后新增一章会自动纳入核查，不会静默漏掉。
 
 # ---- 文献：年份与原始论文 ----------------
 REGISTRY.add(claim(
@@ -248,3 +263,49 @@ _ref("einstein_gr_year", 1915,
      "Einstein, A. (1915)：广义相对论场方程（引力即时空曲率）",
      "https://doi.org/10.1002/andp.19163540702",
      "1915 年 11 月向普鲁士科学院提交")
+
+
+# ---- 第 1—4 章（数 / 无穷 / 证明 / 变化）----------------
+_ref("cantor_year", 1874,
+     "Cantor, G. (1874)：Über eine Eigenschaft des Inbegriffes aller reellen "
+     "algebraischen Zahlen（不可数性的第一个证明）",
+     "https://doi.org/10.1515/crll.1874.77.258",
+     "J. Reine Angew. Math. 77, 258–262")
+_ref("godel_year", 1931,
+     "Gödel, K. (1931)：Über formal unentscheidbare Sätze der Principia "
+     "Mathematica und verwandter Systeme I（不完备定理）",
+     "https://doi.org/10.1007/BF01700692",
+     "Monatsh. Math. Phys. 38, 173–198（哥德尔当年 25 岁）")
+_ref("berkeley_year", 1734,
+     "Berkeley, G. (1734)：The Analyst（对微积分基础的著名批评）",
+     "https://archive.org/details/analystoradis00berkgoog",
+     "副标题即「致一位不信神的数学家」，矛头直指牛顿的流数")
+
+# 第 4 章那个割线例子：s = t²，在 t = 1 处取不同的 Δt
+REGISTRY.add(claim("secant_dt_09", 0.9, "", grade="约定",
+                   note="割线例子里取的第一个 Δt（演示参数）"))
+REGISTRY.add(claim("secant_dt_01", 0.1, "", grade="约定",
+                   note="割线例子里取的第二个 Δt（演示参数）"))
+REGISTRY.add(claim(
+    "secant_slope_09",
+    ((1.0 + V("secant_dt_09")) ** 2 - 1.0) / V("secant_dt_09"), "", grade="现算",
+    recompute=lambda: ((1.0 + V("secant_dt_09")) ** 2 - 1.0) / V("secant_dt_09"),
+    note="s = t² 在 t = 1 处、Δt = 0.9 的割线斜率 = 2 + Δt",
+))
+REGISTRY.add(claim(
+    "secant_slope_01",
+    ((1.0 + V("secant_dt_01")) ** 2 - 1.0) / V("secant_dt_01"), "", grade="现算",
+    recompute=lambda: ((1.0 + V("secant_dt_01")) ** 2 - 1.0) / V("secant_dt_01"),
+    note="同理，Δt = 0.1 时的割线斜率 = 2.1；Δt → 0 时它趋于 2",
+))
+
+
+_ref("gauss_complex_year", 1799,
+     "Gauss, C. F. (1799)：博士学位论文，给出代数基本定理的第一个严格证明，"
+     "并把复数看作平面上的点",
+     "https://mathshistory.st-andrews.ac.uk/Biographies/Gauss/",
+     "Helmstedt 大学博士论文（1799）")
+_ref("hamilton_year", 1843,
+     "Hamilton, W. R. (1843)：四元数的发现（布鲁姆桥刻记）",
+     "https://mathshistory.st-andrews.ac.uk/Biographies/Hamilton/",
+     "1843 年 10 月 16 日；此后他把余生投入四元数")
