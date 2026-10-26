@@ -284,5 +284,70 @@ def fig_deeptime():
 FIGS["fig-deeptime"] = fig_deeptime
 
 
+def _sv(size_m):
+    """立方体近似的表面积/体积比（与 facts.py 里同一公式；只用于画那条参考线）。"""
+    return 6.0 / size_m
+
+
+def fig_limit():
+    """第 5 章：几何给的那条线（S/V = 6/L），以及三个蹲在线上、三个跳出线的点。
+
+    线是纯几何（现算）；点是真的生物。**线不解释谁大谁小，它只解释「为什么大起来更贵」。**
+    """
+    X0, X1 = 1e-7, 1e0
+    Y0, Y1 = 1e0, 1e8
+    pts = [
+        ("大肠杆菌", _v("ecoli_size_m"), INK, "up"),
+        ("酵母", _v("yeast_size_m"), INK, "down"),
+        ("草履虫", _v("paramecium_size_m"), INK, "up"),
+        ("变形虫", _v("amoeba_size_m"), INK, "down"),
+        ("鸵鸟蛋", _v("ostrich_egg_size_m"), ACCENT2, "down"),
+        ("巨型细菌", _v("thiomargarita_size_m"), BAD, "up"),
+    ]
+    layers = [
+        {"geom": "axis", "xRange": [X0, X1], "yRange": [Y0, Y1],
+         "xticks": [1e-6, 1e-4, 1e-2, 1e0],
+         "xticklabels": ["1 微米", "0.1 毫米", "1 厘米", "1 米"],
+         "yticks": [1e1, 1e3, 1e5, 1e7],
+         "yticklabels": ["10", "10³", "10⁵", "10⁷"],
+         "xlab": "体长（对数尺度）",
+         "ylab": "表面积 ÷ 体积（1/米，对数尺度）"},
+        {"geom": "line", "when": "k >= 1",
+         "data": [[1e-7, _sv(1e-7)], [1e0, _sv(1e0)]],
+         "stroke": GOOD, "width": 2.0},
+        {"geom": "text", "when": "k >= 1", "x": 3e-7, "y": _sv(3e-7),
+         "text": "S/V = 6/L（立方体近似）", "align": "left", "size": 9.5, "color": GOOD,
+         "dy": -12},
+    ]
+    for name, size, color, side in pts:
+        dy = -13 if side == "up" else 14
+        layers += [
+            {"geom": "point", "when": "k >= 2", "data": [{"x": size, "y": _sv(size)}],
+             "r": 4.2, "fill": color},
+            {"geom": "text", "when": "k >= 2", "x": size, "y": _sv(size), "text": name,
+             "align": "left", "size": 9.5, "color": color, "dy": dy},
+        ]
+    layers.append({"geom": "text", "when": "k >= 3", "x": _v("thiomargarita_size_m"),
+                   "y": _sv(_v("thiomargarita_size_m")) / 3, "text": "↑ 它靠「不按几何生活」跳出了这条线",
+                   "align": "right", "size": 9.5, "color": BAD})
+    steps = [
+        {"k": 1, "note": "先只有这条线：S/V = 6/L。它是纯几何 —— 体长每涨十倍，"
+                         "每单位体积能用的膜面积就掉到十分之一。"},
+        {"k": 2, "note": f"六个真实尺寸落上去。大肠杆菌的 S/V 约 {_v('sv_ecoli'):.1e} 每米；"
+                         f"鸵鸟蛋低得多 —— 它确实是一个细胞，但几乎不代谢。"},
+        {"k": 3, "note": f"2022 年发现的巨型细菌体长可到 1 厘米，S/V 掉到 "
+                         f"{_v('sv_thiomargarita'):.0f} 每米（大肠杆菌的 1/{_v('sv_drop'):.0f}）。"
+                         f"它没有推翻几何，而是**改了自己的内部分工**。"},
+    ]
+    return {"theme": PAPER,
+            "view": {"xRange": [X0, X1], "yRange": [Y0, Y1],
+                     "xlog": True, "ylog": True,
+                     "pad": {"l": 60, "r": 30, "b": 46, "t": 18}},
+            "layers": layers, "steps": steps}
+
+
+FIGS["fig-limit"] = fig_limit
+
+
 def build(ids=None):
     return {k: FIGS[k]() for k in (ids or FIGS)}

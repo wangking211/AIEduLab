@@ -267,3 +267,62 @@ REGISTRY.add(claim("cambrian_ma", V("cambrian_year") / 1e6, "百万年", grade="
                    recompute=lambda: V("cambrian_year") / 1e6))
 REGISTRY.add(claim("life_origin_ga", V("life_origin_year") / 1e9, "十亿年", grade="现算",
                    recompute=lambda: V("life_origin_year") / 1e9))
+# =====================================================================
+# 第 5 章：上限（几何给的那条线，以及绕过它的办法）
+# =====================================================================
+def _sv(size_m):
+    """把细胞按立方体近似：表面积/体积 = 6/L（纯几何，现算）。"""
+    return 6.0 / size_m
+
+
+REGISTRY.add(claim(
+    "ecoli_size_m", 2.0e-6, "m", grade="约定",
+    note="大肠杆菌体长取 2 微米（量级示意）",
+))
+REGISTRY.add(claim(
+    "yeast_size_m", 5.0e-6, "m", grade="约定", note="酵母直径取 5 微米（量级示意）",
+))
+REGISTRY.add(claim(
+    "paramecium_size_m", 2.0e-4, "m", grade="约定", note="草履虫体长取 0.2 毫米（量级示意）",
+))
+REGISTRY.add(claim(
+    "amoeba_size_m", 5.0e-4, "m", grade="约定", note="变形虫体长取 0.5 毫米（量级示意）",
+))
+REGISTRY.add(claim(
+    "ostrich_egg_size_m", 1.5e-1, "m", grade="文献",
+    source="鸵鸟蛋的常见尺寸（长约 15 厘米）",
+    url="https://www.britannica.com/animal/ostrich",
+    locator="Ostrich egg：长约 15 cm、重约 1.4 kg",
+    note="它确实是**一个细胞**（未受精卵），但几乎不进行代谢活动",
+))
+REGISTRY.add(claim(
+    "thiomargarita_size_m", 1.0e-2, "m", grade="文献",
+    source="Volland et al. 2022, Science 376, 1001–1006"
+           "（A centimeter-long bacterium with DNA contained in metabolically active membrane-bound organelles）",
+    url="https://doi.org/10.1126/science.abb3634",
+    locator="摘要与图 1：最长可达 2 厘米；本文取 1 厘米作代表值",
+    note="2022 年发现，把「细菌不能太大」的经验上限推高了两三个数量级",
+))
+REGISTRY.add(claim(
+    "sv_ecoli", _sv(V("ecoli_size_m")), "1/m", grade="现算",
+    recompute=lambda: _sv(V("ecoli_size_m")),
+))
+REGISTRY.add(claim(
+    "sv_thiomargarita", _sv(V("thiomargarita_size_m")), "1/m", grade="现算",
+    recompute=lambda: _sv(V("thiomargarita_size_m")),
+))
+REGISTRY.add(claim(
+    "sv_drop", V("sv_ecoli") / V("sv_thiomargarita"), "倍", grade="现算",
+    recompute=lambda: V("sv_ecoli") / V("sv_thiomargarita"),
+    note="体长放大五千倍，表面积/体积比就掉到五千分之一 —— 供给效率同步下滑",
+))
+REGISTRY.add(claim(
+    "big_cell_margin", V("ostrich_egg_size_m") / V("paramecium_size_m"), "倍", grade="现算",
+    recompute=lambda: V("ostrich_egg_size_m") / V("paramecium_size_m"),
+))
+REGISTRY.add(claim("sv_ecoli_e6", V("sv_ecoli") / 1e6, "×10⁶ 每米", grade="现算",
+                   recompute=lambda: V("sv_ecoli") / 1e6, texts=["10⁶"]))
+REGISTRY.add(claim("egg_margin", V("big_cell_margin"), "倍", grade="现算",
+                   recompute=lambda: V("big_cell_margin")))
+REGISTRY.add(claim("thiomargarita_mm", V("thiomargarita_size_m") * 1e3, "毫米", grade="现算",
+                   recompute=lambda: V("thiomargarita_size_m") * 1e3))
