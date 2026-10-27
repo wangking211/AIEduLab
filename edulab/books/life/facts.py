@@ -326,3 +326,38 @@ REGISTRY.add(claim("egg_margin", V("big_cell_margin"), "倍", grade="现算",
                    recompute=lambda: V("big_cell_margin")))
 REGISTRY.add(claim("thiomargarita_mm", V("thiomargarita_size_m") * 1e3, "毫米", grade="现算",
                    recompute=lambda: V("thiomargarita_size_m") * 1e3))
+# =====================================================================
+# 第 6 章：营养级（十分之一，以及为什么食物链只有四级）
+# =====================================================================
+REGISTRY.add(claim(
+    "transfer_efficiency", 0.10, "", grade="文献",
+    source="生态学通行的「十分之一定律」（营养级间能量传递效率的经验平均值）",
+    url="https://doi.org/10.2307/1933451",
+    locator="Lindeman 1942, Ecology 23, 399–418（能量在营养级间的传递）；"
+            "后世综述给出的范围约 5%–20%，常用平均值 10%",
+    note="这是**经验平均**，不是物理定律：不同生态系统、不同类群差得很远（2%–24%）",
+))
+REGISTRY.add(claim(
+    "base_pct", 100.0, "%", grade="约定",
+    note="把生产者的能量记作 100%，其余各级按传递效率逐级相乘",
+))
+for _i in range(2, 6):
+    REGISTRY.add(claim(
+        f"level{_i}_pct",
+        V("base_pct") * V("transfer_efficiency") ** (_i - 1), "%", grade="现算",
+        recompute=lambda i=_i: V("base_pct") * V("transfer_efficiency") ** (i - 1),
+        note=f"第 {_i} 营养级：每往上一级乘一次传递效率",
+    ))
+REGISTRY.add(claim(
+    "level5_ratio", V("level5_pct") / V("base_pct"), "", grade="现算",
+    recompute=lambda: V("level5_pct") / V("base_pct"),
+    note="第五级只剩生产者的万分之一 —— 这就是食物链长度的上限所在",
+))
+REGISTRY.add(claim(
+    "levels_to_drop", math.log(V("level5_ratio")) / math.log(V("transfer_efficiency")),
+    "级", grade="现算",
+    recompute=lambda: math.log(V("level5_ratio")) / math.log(V("transfer_efficiency")),
+    note="从 100% 掉到第五级的比例，需要乘几次传递效率 —— 这个数直接决定食物链长度",
+))
+REGISTRY.add(claim("transfer_eff_pct", V("transfer_efficiency") * 100.0, "%", grade="现算",
+                   recompute=lambda: V("transfer_efficiency") * 100.0))

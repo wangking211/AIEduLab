@@ -349,5 +349,55 @@ def fig_limit():
 FIGS["fig-limit"] = fig_limit
 
 
+def fig_trophic():
+    """第 6 章：能量沿营养级逐级衰减（每级约十分之一）。
+
+    这一章想说两件事：① 四级之后就没有足够的能量再养一个捕食者；
+    ② 能量金字塔**永远不会倒**，但生物量金字塔可以 —— 那是储量，不是流量。
+    """
+    X0, X1 = 5e-3, 2e2
+    labels = ["生产者", "初级消费者", "二级消费者", "三级消费者", "四级消费者"]
+    vals = [_v("base_pct"), _v("level2_pct"), _v("level3_pct"),
+            _v("level4_pct"), _v("level5_pct")]
+    layers = [
+        {"geom": "axis", "xRange": [X0, X1], "yRange": [-0.7, 4.9],
+         "xticks": [1e-2, 1.0, 100.0],
+         "xticklabels": ["0.01%", "1%", "100%"],
+         "yticks": False,
+         "xlab": "相对生产者的能量（对数尺度，%）"},
+    ]
+    for i, (name, val) in enumerate(zip(labels, vals)):
+        y = float(4 - i)
+        color = GOOD if i == 0 else (DIM if i < 4 else BAD)
+        layers += [
+            {"geom": "line", "data": [[X0, y], [val, y]], "stroke": color, "width": 7},
+            {"geom": "text", "x": X0, "y": y + 0.34, "text": name, "align": "left",
+             "size": 9.5, "color": DIM},
+            {"geom": "text", "x": val, "y": y, "text": f"{val:g}%", "align": "left",
+             "size": 10, "color": color, "dy": -11},
+        ]
+        if i < 4:
+            layers.append({"geom": "text", "x": X0 * 1.6, "y": y - 0.5,
+                           "text": f"↓ 只剩约 {_v('transfer_efficiency') * 100:.0f}%",
+                           "align": "left", "size": 9, "color": DIM})
+    layers.append({"geom": "text", "when": "k >= 2", "x": _v("level5_pct"), "y": -0.35,
+                   "text": "再往上：能量不够再养一级", "align": "left", "size": 9.5,
+                   "color": BAD, "dy": 0})
+    steps = [
+        {"k": 1, "note": f"生产者记 100%。每往上一级，只剩约 "
+                         f"{_v('transfer_efficiency') * 100:.0f}% —— 其余都变成了热、"
+                         f"呼吸与排泄。"},
+        {"k": 2, "note": f"到第四级消费者只剩 {_v('level5_pct'):g}%，也就是万分之一。"
+                         f"从 100% 掉到这里，正好要乘 {_v('levels_to_drop'):.0f} 次十分之一。"},
+    ]
+    return {"theme": PAPER,
+            "view": {"xRange": [X0, X1], "yRange": [-0.7, 4.9], "xlog": True,
+                     "pad": {"l": 28, "r": 34, "b": 46, "t": 16}},
+            "layers": layers, "steps": steps}
+
+
+FIGS["fig-trophic"] = fig_trophic
+
+
 def build(ids=None):
     return {k: FIGS[k]() for k in (ids or FIGS)}

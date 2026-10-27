@@ -36,5 +36,10 @@
   "sv_drop:0": "5000",
   "sv_ecoli_e6:0": "3",
   "thiomargarita_mm:0": "10"
+ },
+ "ch06": {
+  "base_pct:0": "100",
+  "level5_pct": "0.01",
+  "transfer_eff_pct:0": "10"
  }
 }
